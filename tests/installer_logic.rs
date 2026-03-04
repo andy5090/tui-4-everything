@@ -75,3 +75,18 @@ fn high_risk_tools_require_confirmation_even_for_pkg_manager() {
     assert!(task.requires_confirmation);
     assert_eq!(task.command, "brew install codex");
 }
+
+#[test]
+fn apt_command_is_noninteractive_and_without_sudo() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Apt,
+        package_hints: vec!["ripgrep".to_string()],
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task = build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(task.command, "DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep");
+}

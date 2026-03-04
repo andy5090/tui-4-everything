@@ -69,15 +69,17 @@ fn compile_pane(
         bail!("pane {} has invalid percent size {}", pane.id, pane.size);
     }
 
-    let split_flag = match pane.direction {
-        SplitDirection::Left | SplitDirection::Right => "-h",
-        SplitDirection::Up | SplitDirection::Down => "-v",
+    let split_flags = match pane.direction {
+        SplitDirection::Left => "-h -b",
+        SplitDirection::Right => "-h",
+        SplitDirection::Up => "-v -b",
+        SplitDirection::Down => "-v",
     };
 
     let pane_var = format!("PANE_{}", sanitize_var(&pane.id));
     commands.push(format!(
         "{}=$(tmux split-window {} -p {} -P -F \"#{{pane_id}}\" -t {})",
-        pane_var, split_flag, size_percent, parent_target
+        pane_var, split_flags, size_percent, parent_target
     ));
     commands.push(format!("tmux send-keys -t ${{{}}} \"{}\" C-m", pane_var, pane.cmd));
 

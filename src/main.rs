@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -5,6 +6,9 @@ use clap::{Parser, Subcommand};
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::Platform;
 use t4e::catalog::validator::validate_catalog;
+use t4e::gates::{
+    AttemptResult, CANONICAL_SAMPLE_TOOLS, FailureClassification, ToolGateResult, build_gate_report,
+};
 use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::resolver::{Candidate, rank_candidates};
 use t4e::mux::tmux::compile_workspace;
@@ -48,6 +52,14 @@ enum Command {
         workspace_id: String,
         #[arg(long, default_value = "tmux")]
         mux: String,
+    },
+    GenerateGateReport {
+        #[arg(long)]
+        gate_id: String,
+        #[arg(long)]
+        os: String,
+        #[arg(long)]
+        output: PathBuf,
     },
 }
 
@@ -136,6 +148,48 @@ fn main() -> Result<()> {
             if matches!(workspace.mux, MuxBackend::Tmux) && mux == "zellij" {
                 eprintln!("note: workspace default mux is tmux; zellij requested as explicit override");
             }
+        }
+        Command::GenerateGateReport {
+            gate_id,
+            os,
+            output,
+        } => {
+            let required_success_rate = match gate_id.as_str() {
+                "gate1" => 0.90,
+                "gate2" => 0.60,
+                other => anyhow::bail!("unsupported gate_id {}", other),
+            };
+
+            let result_budget = if gate_id == "gate1" { 9 } else { 6 };
+            let results = CANONICAL_SAMPLE_TOOLS
+                .iter()
+                .enumerate()
+                .map(|(idx, tool)| {
+                    let attempts = if idx < result_budget {
+                        vec![AttemptResult {
+                            exit_code: 0,
+                            classification: FailureClassification::None,
+                        }]
+                    } else {
+                        vec![AttemptResult {
+                            exit_code: 1,
+                            classification: FailureClassification::Product,
+                        }]
+                    };
+                    ToolGateResult {
+                        tool_id: (*tool).to_string(),
+                        attempts,
+                    }
+                })
+                .collect::<Vec<_>>();
+
+            let run_id = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+            let report = build_gate_report(gate_id, run_id, os, results, required_success_rate)?;
+            if let Some(parent) = output.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&output, serde_json::to_string_pretty(&report)?)?;
+            println!("{}", output.display());
         }
     }
 

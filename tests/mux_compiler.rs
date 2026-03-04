@@ -98,3 +98,34 @@ fn reproducibility_hash_is_stable_for_equivalent_snapshots() {
     let hash_b = reproducibility_hash(&b, "/Users/andy/Projects/tui-4-everything");
     assert_eq!(hash_a, hash_b);
 }
+
+#[test]
+fn compiler_preserves_left_up_semantics_with_before_flag() {
+    let mut workspace = fake_workspace();
+    workspace.layout.panes = vec![
+        Pane {
+            id: "left".to_string(),
+            split: "root".to_string(),
+            direction: SplitDirection::Left,
+            size: "40%".to_string(),
+            cmd: "echo left".to_string(),
+        },
+        Pane {
+            id: "up".to_string(),
+            split: "left".to_string(),
+            direction: SplitDirection::Up,
+            size: "50%".to_string(),
+            cmd: "echo up".to_string(),
+        },
+    ];
+
+    let output = compile_workspace(&workspace, "session", "win").expect("compile ok");
+    assert!(output
+        .commands
+        .iter()
+        .any(|cmd| cmd.contains("split-window -h -b")));
+    assert!(output
+        .commands
+        .iter()
+        .any(|cmd| cmd.contains("split-window -v -b")));
+}

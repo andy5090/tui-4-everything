@@ -60,9 +60,9 @@ fn materialize_command(installer: &Installer) -> Result<String> {
     let command = match installer.method {
         InstallMethod::Brew => format!("brew install {}", hint),
         InstallMethod::BrewCask => format!("brew install --cask {}", hint),
-        InstallMethod::Apt => format!("sudo apt-get install -y {}", hint),
-        InstallMethod::Dnf => format!("sudo dnf install -y {}", hint),
-        InstallMethod::Pacman => format!("sudo pacman -S --noconfirm {}", hint),
+        InstallMethod::Apt => format!("DEBIAN_FRONTEND=noninteractive apt-get install -y {}", hint),
+        InstallMethod::Dnf => format!("dnf install -y {}", hint),
+        InstallMethod::Pacman => format!("pacman -S --noconfirm {}", hint),
         InstallMethod::Pipx => format!("pipx install {}", hint),
         InstallMethod::NpmGlobal => format!("npm install -g {}", hint),
         InstallMethod::Cargo => format!("cargo install {}", hint),

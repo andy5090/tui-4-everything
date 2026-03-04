@@ -1,3 +1,4 @@
 .omx/
 target/
+artifacts/
 .DS_Store
