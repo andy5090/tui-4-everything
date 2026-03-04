@@ -1,0 +1,905 @@
+packs:
+  - id: music-pack
+    title: Music Pack
+    exposure: starter
+    tool_ids: [spotatui, spotify-player, ncspot, cava, termusic, mpv]
+  - id: video-pack
+    title: Video Pack
+    exposure: starter
+    tool_ids: [mpv, yewtube, yt-dlp, ffmpeg, streamlink, mediainfo]
+  - id: podcasts-reading-pack
+    title: Podcasts & Reading Pack
+    exposure: starter
+    tool_ids: [shellcast, termusic, newsboat, glow, jq, yq, tldr, less]
+  - id: files-pack
+    title: Files Pack
+    exposure: starter
+    tool_ids: [yazi, bat, eza, fd, ripgrep, fzf, zoxide, dust, duf, ncdu, broot, tree, file, p7zip, unzip, rsync]
+  - id: fun-pack
+    title: Fun Pack
+    exposure: starter
+    tool_ids: [cmatrix, bastet, asciiquarium, sl, lolcat, cowsay, fortune, tty-clock, nyancat, pipes-sh, ninvaders, nudoku]
+  - id: edit-pack
+    title: Edit Pack
+    exposure: starter
+    tool_ids: [micro, helix, neovim, visidata]
+  - id: ide-pack
+    title: IDE Pack
+    exposure: search_only
+    tool_ids: [lazyvim]
+  - id: agents-pack
+    title: Agents Pack
+    exposure: search_only
+    tool_ids: [claude-code, codex-cli, opencode]
+
+tools:
+  - id: spotatui
+    name: "Spotatui"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "spotatui"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["spotatui"]
+      - platform: linux
+        method: apt
+        package_hints: ["spotatui"]
+  - id: spotify-player
+    name: "Spotify Player"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "spotify_player"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["spotify-player"]
+      - platform: linux
+        method: apt
+        package_hints: ["spotify-player"]
+  - id: ncspot
+    name: "Ncspot"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "ncspot"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["ncspot"]
+      - platform: linux
+        method: apt
+        package_hints: ["ncspot"]
+  - id: cava
+    name: "Cava"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "cava"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["cava"]
+      - platform: linux
+        method: apt
+        package_hints: ["cava"]
+  - id: termusic
+    name: "Termusic"
+    category: entertainment
+    tags: []
+    audience: prosumer
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "termusic"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["termusic"]
+      - platform: linux
+        method: apt
+        package_hints: ["termusic"]
+  - id: mpv
+    name: "mpv"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "mpv"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["mpv"]
+      - platform: linux
+        method: apt
+        package_hints: ["mpv"]
+  - id: yewtube
+    name: "Yewtube"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "yewtube"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["yewtube"]
+      - platform: linux
+        method: apt
+        package_hints: ["yewtube"]
+  - id: yt-dlp
+    name: "yt-dlp"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: CAUTION
+    exposure: starter
+    run:
+      cmd: "yt-dlp"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["yt-dlp"]
+      - platform: linux
+        method: apt
+        package_hints: ["yt-dlp"]
+  - id: ffmpeg
+    name: "ffmpeg"
+    category: utility
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "ffmpeg"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["ffmpeg"]
+      - platform: linux
+        method: apt
+        package_hints: ["ffmpeg"]
+  - id: streamlink
+    name: "Streamlink"
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "streamlink"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["streamlink"]
+      - platform: linux
+        method: apt
+        package_hints: ["streamlink"]
+  - id: mediainfo
+    name: "MediaInfo"
+    category: utility
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "mediainfo"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["mediainfo"]
+      - platform: linux
+        method: apt
+        package_hints: ["mediainfo"]
+  - id: shellcast
+    name: "Shellcast"
+    category: reading
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "shellcast"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["shellcast"]
+      - platform: linux
+        method: apt
+        package_hints: ["shellcast"]
+  - id: newsboat
+    name: "Newsboat"
+    category: reading
+    tags: []
+    audience: prosumer
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "newsboat"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["newsboat"]
+      - platform: linux
+        method: apt
+        package_hints: ["newsboat"]
+  - id: glow
+    name: "Glow"
+    category: reading
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "glow"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["glow"]
+      - platform: linux
+        method: apt
+        package_hints: ["glow"]
+  - id: jq
+    name: "jq"
+    category: utility
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "jq"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["jq"]
+      - platform: linux
+        method: apt
+        package_hints: ["jq"]
+  - id: yq
+    name: "yq"
+    category: utility
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "yq"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["yq"]
+      - platform: linux
+        method: apt
+        package_hints: ["yq"]
+  - id: tldr
+    name: "tldr"
+    category: reading
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "tldr"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["tldr"]
+      - platform: linux
+        method: apt
+        package_hints: ["tldr"]
+  - id: less
+    name: "less"
+    category: reading
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "less"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["less"]
+      - platform: linux
+        method: apt
+        package_hints: ["less"]
+  - id: yazi
+    name: "Yazi"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "yazi"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["yazi"]
+      - platform: linux
+        method: apt
+        package_hints: ["yazi"]
+  - id: bat
+    name: "bat"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "bat"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["bat"]
+      - platform: linux
+        method: apt
+        package_hints: ["bat"]
+  - id: eza
+    name: "eza"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "eza"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["eza"]
+      - platform: linux
+        method: apt
+        package_hints: ["eza"]
+  - id: fd
+    name: "fd"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "fd"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["fd"]
+      - platform: linux
+        method: apt
+        package_hints: ["fd-find"]
+  - id: ripgrep
+    name: "ripgrep"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "rg"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["ripgrep"]
+      - platform: linux
+        method: apt
+        package_hints: ["ripgrep"]
+  - id: fzf
+    name: "fzf"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "fzf"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["fzf"]
+      - platform: linux
+        method: apt
+        package_hints: ["fzf"]
+  - id: zoxide
+    name: "zoxide"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "zoxide"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["zoxide"]
+      - platform: linux
+        method: apt
+        package_hints: ["zoxide"]
+  - id: dust
+    name: "dust"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "dust"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["dust"]
+      - platform: linux
+        method: apt
+        package_hints: ["dust"]
+  - id: duf
+    name: "duf"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "duf"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["duf"]
+      - platform: linux
+        method: apt
+        package_hints: ["duf"]
+  - id: ncdu
+    name: "ncdu"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "ncdu"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["ncdu"]
+      - platform: linux
+        method: apt
+        package_hints: ["ncdu"]
+  - id: broot
+    name: "broot"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "broot"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["broot"]
+      - platform: linux
+        method: apt
+        package_hints: ["broot"]
+  - id: tree
+    name: "tree"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "tree"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["tree"]
+      - platform: linux
+        method: apt
+        package_hints: ["tree"]
+  - id: file
+    name: "file"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "file"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["file"]
+      - platform: linux
+        method: apt
+        package_hints: ["file"]
+  - id: p7zip
+    name: "p7zip"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "7z"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["p7zip"]
+      - platform: linux
+        method: apt
+        package_hints: ["p7zip-full"]
+  - id: unzip
+    name: "unzip"
+    category: files
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "unzip"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["unzip"]
+      - platform: linux
+        method: apt
+        package_hints: ["unzip"]
+  - id: rsync
+    name: "rsync"
+    category: files
+    tags: []
+    audience: general
+    risk: CAUTION
+    exposure: starter
+    run:
+      cmd: "rsync"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["rsync"]
+      - platform: linux
+        method: apt
+        package_hints: ["rsync"]
+  - id: cmatrix
+    name: "cmatrix"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "cmatrix"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["cmatrix"]
+      - platform: linux
+        method: apt
+        package_hints: ["cmatrix"]
+  - id: bastet
+    name: "bastet"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "bastet"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["bastet"]
+      - platform: linux
+        method: apt
+        package_hints: ["bastet"]
+  - id: asciiquarium
+    name: "Asciiquarium"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "asciiquarium"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["asciiquarium"]
+      - platform: linux
+        method: apt
+        package_hints: ["asciiquarium"]
+  - id: sl
+    name: "sl"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "sl"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["sl"]
+      - platform: linux
+        method: apt
+        package_hints: ["sl"]
+  - id: lolcat
+    name: "lolcat"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "lolcat"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["lolcat"]
+      - platform: linux
+        method: apt
+        package_hints: ["lolcat"]
+  - id: cowsay
+    name: "cowsay"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "cowsay"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["cowsay"]
+      - platform: linux
+        method: apt
+        package_hints: ["cowsay"]
+  - id: fortune
+    name: "fortune"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "fortune"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["fortune"]
+      - platform: linux
+        method: apt
+        package_hints: ["fortune"]
+  - id: tty-clock
+    name: "tty-clock"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "tty-clock"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["tty-clock"]
+      - platform: linux
+        method: apt
+        package_hints: ["tty-clock"]
+  - id: nyancat
+    name: "nyancat"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "nyancat"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["nyancat"]
+      - platform: linux
+        method: apt
+        package_hints: ["nyancat"]
+  - id: pipes-sh
+    name: "pipes.sh"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "pipes.sh"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["pipes-sh"]
+      - platform: linux
+        method: apt
+        package_hints: ["pipes-sh"]
+  - id: ninvaders
+    name: "ninvaders"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "ninvaders"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["ninvaders"]
+      - platform: linux
+        method: apt
+        package_hints: ["ninvaders"]
+  - id: nudoku
+    name: "nudoku"
+    category: fun
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "nudoku"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["nudoku"]
+      - platform: linux
+        method: apt
+        package_hints: ["nudoku"]
+  - id: micro
+    name: "Micro"
+    category: edit
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "micro"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["micro"]
+      - platform: linux
+        method: apt
+        package_hints: ["micro"]
+  - id: helix
+    name: "Helix"
+    category: edit
+    tags: []
+    audience: prosumer
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "hx"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["helix"]
+      - platform: linux
+        method: apt
+        package_hints: ["helix"]
+  - id: neovim
+    name: "Neovim"
+    category: edit
+    tags: []
+    audience: developer
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "nvim"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["neovim"]
+      - platform: linux
+        method: apt
+        package_hints: ["neovim"]
+  - id: visidata
+    name: "VisiData"
+    category: edit
+    tags: []
+    audience: prosumer
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "vd"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["visidata"]
+      - platform: linux
+        method: apt
+        package_hints: ["visidata"]
+  - id: lazyvim
+    name: "LazyVim"
+    category: ide
+    tags: []
+    audience: developer
+    risk: SAFE
+    exposure: search_only
+    run:
+      cmd: "nvim"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["lazyvim"]
+      - platform: linux
+        method: apt
+        package_hints: ["neovim"]
+  - id: claude-code
+    name: "Claude Code"
+    category: agents
+    tags: ["agent"]
+    audience: developer
+    risk: HIGH
+    exposure: search_only
+    run:
+      cmd: "claude"
+    installers:
+      - platform: macos
+        method: brew_cask
+        package_hints: ["claude"]
+      - platform: linux
+        method: script
+        package_hints: ["claude"]
+        install_cmd: "curl -fsSL https://example.com/claude/install.sh | bash"
+        requires_confirm: true
+
+  - id: codex-cli
+    name: "Codex CLI"
+    category: agents
+    tags: ["agent"]
+    audience: developer
+    risk: HIGH
+    exposure: search_only
+    run:
+      cmd: "codex"
+    installers:
+      - platform: macos
+        method: brew_cask
+        package_hints: ["codex"]
+      - platform: linux
+        method: npm_global
+        package_hints: ["@openai/codex"]
+
+  - id: opencode
+    name: "OpenCode"
+    category: agents
+    tags: ["agent"]
+    audience: developer
+    risk: HIGH
+    exposure: search_only
+    run:
+      cmd: "opencode"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["opencode"]
+      - platform: linux
+        method: script
+        package_hints: ["opencode"]
+        install_cmd: "curl -fsSL https://example.com/opencode/install.sh | bash"
+        requires_confirm: true

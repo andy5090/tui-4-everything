@@ -1,0 +1,14 @@
+id = "fun-pack"
+title = "Fun Pack"
+version = "0.1.0"
+description = "General starter pack"
+
+[[tools]]
+id = "ripgrep"
+display_name = "ripgrep"
+fallback_query = "ripgrep package"
+risk_tags = ["network"]
+
+[tools.manager_hints]
+brew = "ripgrep"
+apt = "ripgrep"

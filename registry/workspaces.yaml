@@ -1,0 +1,110 @@
+workspaces:
+  - id: video-desk
+    title: Video Desk
+    mux: tmux
+    session_name: t4e-video
+    recommended_tools: [yewtube, mpv, yazi]
+    layout:
+      panes:
+        - id: root
+          split: root
+          direction: right
+          size: "40%"
+          cmd: "yewtube"
+        - id: player
+          split: root
+          direction: left
+          size: "60%"
+          cmd: "mpv"
+        - id: files
+          split: player
+          direction: down
+          size: "50%"
+          cmd: "yazi ~/Downloads"
+
+  - id: music-desk
+    title: Music Desk
+    mux: tmux
+    session_name: t4e-music
+    recommended_tools: [spotatui, cava, yazi]
+    layout:
+      panes:
+        - id: root
+          split: root
+          direction: right
+          size: "50%"
+          cmd: "spotatui"
+        - id: viz
+          split: root
+          direction: left
+          size: "50%"
+          cmd: "cava"
+        - id: files
+          split: viz
+          direction: down
+          size: "50%"
+          cmd: "yazi ~/Music"
+
+  - id: fun-desk
+    title: Fun Desk
+    mux: tmux
+    session_name: t4e-fun
+    recommended_tools: [cmatrix, bastet]
+    layout:
+      panes:
+        - id: root
+          split: root
+          direction: right
+          size: "50%"
+          cmd: "cmatrix"
+        - id: game
+          split: root
+          direction: left
+          size: "50%"
+          cmd: "bastet"
+
+  - id: files-desk
+    title: Files Desk
+    mux: zellij
+    session_name: t4e-files
+    recommended_tools: [yazi, bat, ripgrep]
+    layout:
+      panes:
+        - id: root
+          split: root
+          direction: right
+          size: "50%"
+          cmd: "yazi"
+        - id: preview
+          split: root
+          direction: left
+          size: "50%"
+          cmd: "bat --paging=never README.md"
+        - id: helper
+          split: preview
+          direction: down
+          size: "50%"
+          cmd: "bash"
+
+  - id: coding-desk
+    title: Coding Desk
+    mux: zellij
+    session_name: t4e-coding
+    recommended_tools: [yazi, helix, codex-cli]
+    layout:
+      panes:
+        - id: root
+          split: root
+          direction: right
+          size: "40%"
+          cmd: "yazi"
+        - id: editor
+          split: root
+          direction: left
+          size: "60%"
+          cmd: "hx"
+        - id: agent
+          split: editor
+          direction: down
+          size: "40%"
+          cmd: "codex"
