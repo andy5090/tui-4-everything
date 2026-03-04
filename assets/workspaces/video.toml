@@ -1,0 +1,11 @@
+id = "video"
+title = "Video Desk"
+default_mux = "tmux"
+
+[[windows]]
+name = "main"
+layout = "even-horizontal"
+
+[[windows.panes]]
+cwd = "$WORKSPACE_ROOT"
+startup_command = "nvim"

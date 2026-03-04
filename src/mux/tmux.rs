@@ -13,10 +13,14 @@ pub struct CompileOutput {
 }
 
 pub fn compile_workspace(workspace: &Workspace, session_name: &str, window_name: &str) -> Result<CompileOutput> {
+    validate_identifier("session_name", session_name)?;
+    validate_identifier("window_name", window_name)?;
+
     let mut commands = Vec::new();
     commands.push(format!(
         "tmux new-session -d -s {} -n {} \"bash\"",
-        session_name, window_name
+        shell_quote(session_name),
+        shell_quote(window_name)
     ));
 
     let mut pane_map = HashMap::new();
@@ -59,15 +63,8 @@ fn compile_pane(
         );
     };
 
-    let size_percent = pane
-        .size
-        .trim_end_matches('%')
-        .parse::<u8>()
+    let size_percent = parse_percent_size(&pane.size)
         .map_err(|_| anyhow::anyhow!("invalid pane size {}", pane.size))?;
-
-    if size_percent == 0 || size_percent > 100 {
-        bail!("pane {} has invalid percent size {}", pane.id, pane.size);
-    }
 
     let split_flags = match pane.direction {
         SplitDirection::Left => "-h -b",
@@ -81,7 +78,11 @@ fn compile_pane(
         "{}=$(tmux split-window {} -p {} -P -F \"#{{pane_id}}\" -t {})",
         pane_var, split_flags, size_percent, parent_target
     ));
-    commands.push(format!("tmux send-keys -t ${{{}}} \"{}\" C-m", pane_var, pane.cmd));
+    commands.push(format!(
+        "tmux send-keys -t ${{{}}} -- {} C-m",
+        pane_var,
+        shell_quote(&pane.cmd)
+    ));
 
     pane_map.insert(pane.id.clone(), format!("${{{}}}", pane_var));
     Ok(())
@@ -179,4 +180,39 @@ fn sanitize_var(value: &str) -> String {
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
         .collect::<String>()
         .to_ascii_uppercase()
+}
+
+fn validate_identifier(label: &str, value: &str) -> Result<()> {
+    let ok = value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.');
+    if !ok || value.is_empty() {
+        bail!("invalid {}: {}", label, value);
+    }
+    Ok(())
+}
+
+fn parse_percent_size(value: &str) -> Result<u8> {
+    if !value.ends_with('%') {
+        bail!("size must end with %");
+    }
+
+    let number = &value[..value.len() - 1];
+    if number.is_empty() || !number.chars().all(|ch| ch.is_ascii_digit()) {
+        bail!("size must be numeric");
+    }
+    if number.len() > 1 && number.starts_with('0') {
+        bail!("size cannot have leading zero");
+    }
+
+    let parsed = number.parse::<u8>()?;
+    if parsed == 0 || parsed > 100 {
+        bail!("size must be within 1..=100");
+    }
+    Ok(parsed)
+}
+
+fn shell_quote(value: &str) -> String {
+    let escaped = value.replace('\'', "'\"'\"'");
+    format!("'{}'", escaped)
 }

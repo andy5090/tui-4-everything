@@ -30,7 +30,10 @@ pub fn build_install_task(tool: &Tool, installer: &Installer, policy: &InstallPo
     let command = materialize_command(installer)?;
 
     let requires_confirmation = match installer.method {
-        InstallMethod::Script => policy.enforce_script_confirmation || installer.requires_confirm,
+        InstallMethod::Script => {
+            let _ = policy.enforce_script_confirmation;
+            true
+        }
         _ => installer.requires_confirm || matches!(tool.risk, Risk::Admin | Risk::High),
     };
 
@@ -56,6 +59,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         .package_hints
         .first()
         .ok_or_else(|| anyhow::anyhow!("installer has no package hint"))?;
+    validate_package_hint(hint)?;
 
     let command = match installer.method {
         InstallMethod::Brew => format!("brew install {}", hint),
@@ -78,4 +82,14 @@ fn materialize_command(installer: &Installer) -> Result<String> {
     };
 
     Ok(command)
+}
+
+fn validate_package_hint(hint: &str) -> Result<()> {
+    let is_valid = hint
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || "-._@+/".contains(ch));
+    if !is_valid {
+        bail!("unsafe package hint: {}", hint);
+    }
+    Ok(())
 }

@@ -3,36 +3,77 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT_DIR"
+export CI=1
+
+ATTEMPT_TIMEOUT_SEC="${ATTEMPT_TIMEOUT_SEC:-600}"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-2}"
+INCONCLUSIVE_RERUNS="${INCONCLUSIVE_RERUNS:-1}"
 
 pass() { printf '[PASS] %s\n' "$1"; }
 fail() { printf '[FAIL] %s\n' "$1"; return 1; }
 
-cargo test >/tmp/t4e-gates-test.log 2>&1 || { cat /tmp/t4e-gates-test.log; fail "cargo test"; }
-pass "cargo test"
-
-cargo run -- validate >/tmp/t4e-gates-validate.log 2>&1 || { cat /tmp/t4e-gates-validate.log; fail "validate"; }
-pass "registry validation"
-
-cargo run -- workspace-plan --workspace-id video-desk --mux tmux >/tmp/t4e-gates-workspace.log 2>&1 || {
-  cat /tmp/t4e-gates-workspace.log
-  fail "workspace-plan"
+run_with_timeout() {
+  local cmd="$1"
+  local logfile="$2"
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "${ATTEMPT_TIMEOUT_SEC}" bash -lc "$cmd" >"$logfile" 2>&1
+  else
+    bash -lc "$cmd" >"$logfile" 2>&1
+  fi
 }
-pass "workspace compiler"
+
+is_inconclusive() {
+  local logfile="$1"
+  rg -qi '(timed out|timeout|temporary failure|network|dns|connection reset|5xx)' "$logfile"
+}
+
+run_with_policy() {
+  local name="$1"
+  local cmd="$2"
+  local logfile="$3"
+
+  local rerun=0
+  while [[ "$rerun" -le "$INCONCLUSIVE_RERUNS" ]]; do
+    local attempt=1
+    local inconclusive=false
+
+    while [[ "$attempt" -le "$MAX_ATTEMPTS" ]]; do
+      if run_with_timeout "$cmd" "$logfile"; then
+        pass "$name"
+        return 0
+      fi
+
+      if is_inconclusive "$logfile"; then
+        inconclusive=true
+      fi
+      attempt=$((attempt + 1))
+    done
+
+    if [[ "$inconclusive" == true && "$rerun" -lt "$INCONCLUSIVE_RERUNS" ]]; then
+      rerun=$((rerun + 1))
+      continue
+    fi
+
+    cat "$logfile"
+    fail "$name"
+    return 1
+  done
+
+  cat "$logfile"
+  fail "$name"
+  return 1
+}
+
+run_with_policy "cargo test" "cargo test" "/tmp/t4e-gates-test.log"
+run_with_policy "registry validation" "cargo run -- validate" "/tmp/t4e-gates-validate.log"
+run_with_policy "workspace compiler" "cargo run -- workspace-plan --workspace-id video-desk --mux tmux" "/tmp/t4e-gates-workspace.log"
 
 mkdir -p artifacts/gates
-cargo run -- generate-gate-report --gate-id gate1 --os macos-14 --output artifacts/gates/gate1-report.json >/tmp/t4e-gates-g1.log 2>&1 || {
-  cat /tmp/t4e-gates-g1.log
-  fail "gate1-report"
-}
-grep -q '"status": "pass"' artifacts/gates/gate1-report.json || fail "gate1-status"
-pass "gate1 artifact"
+run_with_policy "gate1 artifact" "cargo run -- generate-gate-report --gate-id gate1 --os macos-14 --output artifacts/gates/gate1-report.json" "/tmp/t4e-gates-g1.log"
+rg -q '"status": "pass"' artifacts/gates/gate1-report.json || fail "gate1-status"
 
-cargo run -- generate-gate-report --gate-id gate2 --os ubuntu-24.04 --output artifacts/gates/gate2-report.json >/tmp/t4e-gates-g2.log 2>&1 || {
-  cat /tmp/t4e-gates-g2.log
-  fail "gate2-report"
-}
-grep -q '"status": "pass"' artifacts/gates/gate2-report.json || fail "gate2-status"
-pass "gate2 artifact"
+run_with_policy "gate2 artifact" "cargo run -- generate-gate-report --gate-id gate2 --os ubuntu-24.04 --output artifacts/gates/gate2-report.json" "/tmp/t4e-gates-g2.log"
+rg -q '"status": "pass"' artifacts/gates/gate2-report.json || fail "gate2-status"
 
 echo "Gate protocol docs: tests/gates/gate{1..5}.md"
 echo "Overall: PASS"

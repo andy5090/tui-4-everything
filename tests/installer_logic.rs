@@ -2,7 +2,7 @@ use t4e::catalog::models::{
     Audience, Exposure, InstallMethod, Installer, Platform, Risk, RunSpec, Tool, ToolCategory,
 };
 use t4e::installer::engine::{InstallPolicy, build_install_task};
-use t4e::installer::resolver::{Candidate, rank_candidates};
+use t4e::installer::resolver::{Candidate, PackageSearch, rank_candidates, resolve_with_fallback};
 
 fn fake_tool(risk: Risk) -> Tool {
     Tool {
@@ -89,4 +89,59 @@ fn apt_command_is_noninteractive_and_without_sudo() {
 
     let task = build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert_eq!(task.command, "DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep");
+}
+
+#[derive(Default)]
+struct MockSearch {
+    values: Vec<String>,
+}
+
+impl PackageSearch for MockSearch {
+    fn search(&self, _hint: &str, _method: &InstallMethod) -> anyhow::Result<Vec<String>> {
+        Ok(self.values.clone())
+    }
+}
+
+#[test]
+fn resolver_uses_search_fallback_when_no_exact_match() {
+    let initial = vec![Candidate {
+        package: "rg".to_string(),
+        method: InstallMethod::Apt,
+    }];
+    let search = MockSearch {
+        values: vec!["ripgrep".to_string(), "ripgrep-all".to_string()],
+    };
+
+    let decision = resolve_with_fallback("ripgrep", InstallMethod::Apt, &initial, &search)
+        .expect("resolution succeeds");
+    assert_eq!(decision.exact.len(), 1);
+    assert_eq!(decision.exact[0].package, "ripgrep");
+}
+
+#[test]
+fn resolver_keeps_local_candidates_when_search_returns_empty() {
+    let initial = vec![Candidate {
+        package: "ripgrep-all".to_string(),
+        method: InstallMethod::Apt,
+    }];
+    let search = MockSearch { values: vec![] };
+
+    let decision =
+        resolve_with_fallback("rip", InstallMethod::Apt, &initial, &search).expect("resolve ok");
+    assert_eq!(decision.prefix.len(), 1);
+    assert_eq!(decision.prefix[0].package, "ripgrep-all");
+}
+
+#[test]
+fn unsafe_package_hint_is_rejected() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Apt,
+        package_hints: vec!["ripgrep; rm -rf /".to_string()],
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    assert!(build_install_task(&tool, &installer, &InstallPolicy::default()).is_err());
 }

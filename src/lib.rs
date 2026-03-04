@@ -1,3 +1,5 @@
+pub mod agents;
+pub mod app;
 pub mod catalog;
 pub mod gates;
 pub mod installer;

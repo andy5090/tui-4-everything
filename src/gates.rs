@@ -12,7 +12,10 @@ pub const MAX_ATTEMPTS_PER_TOOL: usize = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AttemptResult {
+    pub attempt: u8,
     pub exit_code: i32,
+    pub duration_ms: u64,
+    pub stderr_summary: String,
     pub classification: FailureClassification,
 }
 
@@ -29,6 +32,10 @@ pub enum FailureClassification {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolGateResult {
     pub tool_id: String,
+    pub manager: String,
+    pub attempt_count: u8,
+    pub final_status: String,
+    pub failure_classification: FailureClassification,
     pub attempts: Vec<AttemptResult>,
 }
 
@@ -89,6 +96,22 @@ pub fn validate_gate_input(results: &[ToolGateResult]) -> Result<()> {
                 MAX_ATTEMPTS_PER_TOOL
             );
         }
+        if result.attempt_count as usize != result.attempts.len() {
+            bail!(
+                "tool {} attempt_count {} mismatches attempts length {}",
+                result.tool_id,
+                result.attempt_count,
+                result.attempts.len()
+            );
+        }
+    }
+
+    let expected = CANONICAL_SAMPLE_TOOLS
+        .iter()
+        .map(ToString::to_string)
+        .collect::<BTreeSet<_>>();
+    if seen != expected {
+        bail!("gate input must contain the full canonical sample set");
     }
 
     Ok(())

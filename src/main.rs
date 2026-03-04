@@ -10,7 +10,9 @@ use t4e::gates::{
     AttemptResult, CANONICAL_SAMPLE_TOOLS, FailureClassification, ToolGateResult, build_gate_report,
 };
 use t4e::installer::engine::{InstallPolicy, build_install_task};
-use t4e::installer::resolver::{Candidate, rank_candidates};
+use t4e::installer::resolver::{
+    Candidate, ShellPackageSearch, resolve_with_fallback,
+};
 use t4e::mux::tmux::compile_workspace;
 use t4e::mux::workspace::MuxBackend;
 use t4e::mux::zellij::render_layout_kdl;
@@ -107,14 +109,15 @@ fn main() -> Result<()> {
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
         Command::Resolve { hint, candidates } => {
+            let method = t4e::catalog::models::InstallMethod::Apt;
             let candidates = candidates
                 .into_iter()
                 .map(|package| Candidate {
                     package,
-                    method: t4e::catalog::models::InstallMethod::Apt,
+                    method: method.clone(),
                 })
                 .collect::<Vec<_>>();
-            let ranked = rank_candidates(&hint, &candidates);
+            let ranked = resolve_with_fallback(&hint, method, &candidates, &ShellPackageSearch)?;
             println!("{}", serde_json::to_string_pretty(&ranked)?);
         }
         Command::WorkspacePlan {
@@ -167,17 +170,39 @@ fn main() -> Result<()> {
                 .map(|(idx, tool)| {
                     let attempts = if idx < result_budget {
                         vec![AttemptResult {
+                            attempt: 1,
                             exit_code: 0,
+                            duration_ms: 1000,
+                            stderr_summary: String::new(),
                             classification: FailureClassification::None,
                         }]
                     } else {
                         vec![AttemptResult {
+                            attempt: 1,
                             exit_code: 1,
+                            duration_ms: 1000,
+                            stderr_summary: "mock failure".to_string(),
                             classification: FailureClassification::Product,
                         }]
                     };
                     ToolGateResult {
                         tool_id: (*tool).to_string(),
+                        manager: if os.contains("macos") {
+                            "brew".to_string()
+                        } else {
+                            "apt".to_string()
+                        },
+                        attempt_count: attempts.len() as u8,
+                        final_status: if idx < result_budget {
+                            "success".to_string()
+                        } else {
+                            "failed".to_string()
+                        },
+                        failure_classification: if idx < result_budget {
+                            FailureClassification::None
+                        } else {
+                            FailureClassification::Product
+                        },
                         attempts,
                     }
                 })

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail};
 
-use crate::catalog::models::{CatalogRegistry, InstallMethod, Risk};
+use crate::catalog::models::{CatalogRegistry, InstallMethod};
 
 pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
     let mut tool_ids = HashSet::new();
@@ -11,14 +11,12 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
             bail!("duplicate tool id: {}", tool.id);
         }
 
-        if matches!(tool.risk, Risk::High) && !tool.installers.is_empty() {
-            for installer in &tool.installers {
-                if matches!(installer.method, InstallMethod::Script) && !installer.requires_confirm {
-                    bail!(
-                        "HIGH risk tool {} has script installer without explicit confirmation",
-                        tool.id
-                    );
-                }
+        for installer in &tool.installers {
+            if matches!(installer.method, InstallMethod::Script) && !installer.requires_confirm {
+                bail!(
+                    "tool {} has script installer without explicit confirmation",
+                    tool.id
+                );
             }
         }
     }

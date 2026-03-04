@@ -2,6 +2,7 @@ use t4e::mux::tmux::{
     CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot, compile_workspace, reproducibility_hash,
 };
 use t4e::mux::workspace::{Layout, MuxBackend, Pane, SplitDirection, Workspace};
+use t4e::mux::zellij::render_layout_kdl;
 
 fn fake_workspace() -> Workspace {
     Workspace {
@@ -128,4 +129,32 @@ fn compiler_preserves_left_up_semantics_with_before_flag() {
         .commands
         .iter()
         .any(|cmd| cmd.contains("split-window -v -b")));
+}
+
+#[test]
+fn compiler_rejects_non_percent_sizes() {
+    let mut workspace = fake_workspace();
+    workspace.layout.panes[0].size = "50".to_string();
+    let result = compile_workspace(&workspace, "session", "win");
+    assert!(result.is_err());
+}
+
+#[test]
+fn compiler_escapes_shell_sensitive_pane_commands() {
+    let mut workspace = fake_workspace();
+    workspace.layout.panes[0].cmd = "echo 'unsafe' && touch /tmp/pwn".to_string();
+    let output = compile_workspace(&workspace, "session", "win").expect("compile ok");
+    assert!(output
+        .commands
+        .iter()
+        .any(|cmd| cmd.contains("send-keys") && cmd.contains("'\"'\"'unsafe'\"'\"'")));
+}
+
+#[test]
+fn zellij_layout_keeps_split_direction_and_size_metadata() {
+    let workspace = fake_workspace();
+    let rendered = render_layout_kdl(&workspace).expect("render ok");
+    assert!(rendered.contains("direction=\"Right\""));
+    assert!(rendered.contains("size=\"40%\""));
+    assert!(rendered.contains("split=\"root\""));
 }
