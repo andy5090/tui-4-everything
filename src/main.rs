@@ -7,6 +7,9 @@ use t4e::catalog::models::Platform;
 use t4e::catalog::validator::validate_catalog;
 use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::resolver::{Candidate, rank_candidates};
+use t4e::mux::tmux::compile_workspace;
+use t4e::mux::workspace::MuxBackend;
+use t4e::mux::zellij::render_layout_kdl;
 
 #[derive(Debug, Parser)]
 #[command(name = "t4e")]
@@ -37,6 +40,14 @@ enum Command {
         hint: String,
         #[arg(long)]
         candidates: Vec<String>,
+    },
+    WorkspacePlan {
+        #[arg(long, default_value = "registry/workspaces.yaml")]
+        workspaces: PathBuf,
+        #[arg(long)]
+        workspace_id: String,
+        #[arg(long, default_value = "tmux")]
+        mux: String,
     },
 }
 
@@ -93,6 +104,38 @@ fn main() -> Result<()> {
                 .collect::<Vec<_>>();
             let ranked = rank_candidates(&hint, &candidates);
             println!("{}", serde_json::to_string_pretty(&ranked)?);
+        }
+        Command::WorkspacePlan {
+            workspaces,
+            workspace_id,
+            mux,
+        } => {
+            let workspaces_model = load_workspaces(&workspaces)?;
+            let workspace = workspaces_model
+                .workspaces
+                .iter()
+                .find(|workspace| workspace.id == workspace_id)
+                .with_context(|| format!("workspace not found: {}", workspace_id))?;
+
+            match mux.as_str() {
+                "tmux" => {
+                    let session_name = workspace
+                        .session_name
+                        .clone()
+                        .unwrap_or_else(|| format!("t4e-{}", workspace.id));
+                    let output = compile_workspace(workspace, &session_name, "main")?;
+                    println!("{}", serde_json::to_string_pretty(&output)?);
+                }
+                "zellij" => {
+                    let layout = render_layout_kdl(workspace)?;
+                    println!("{}", layout);
+                }
+                other => anyhow::bail!("unsupported mux target {}", other),
+            }
+
+            if matches!(workspace.mux, MuxBackend::Tmux) && mux == "zellij" {
+                eprintln!("note: workspace default mux is tmux; zellij requested as explicit override");
+            }
         }
     }
 
