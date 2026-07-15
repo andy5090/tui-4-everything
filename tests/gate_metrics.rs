@@ -1,6 +1,7 @@
 use t4e::gates::{
-    AttemptResult, FailureClassification, ToolGateResult, build_gate_report, compute_gate_summary,
-    validate_gate_input, CANONICAL_SAMPLE_TOOLS,
+    AttemptResult, CANONICAL_SAMPLE_TOOLS, EvidenceKind, FailureClassification, GateProvenance,
+    RuntimeCheckEvidence, ToolGateResult, build_gate_report, build_runtime_gate_report,
+    compute_gate_summary, validate_gate_input,
 };
 
 #[test]
@@ -109,9 +110,23 @@ fn gate_report_contains_rich_tool_metadata_contract() {
         })
         .collect::<Vec<_>>();
 
-    let report = build_gate_report("gate2", "20260304T000000Z", "ubuntu-24.04", sample, 0.60)
-        .expect("report builds");
+    let report = build_gate_report(
+        "gate2",
+        "20260304T000000Z",
+        "ubuntu-24.04",
+        sample,
+        0.60,
+        EvidenceKind::Real,
+        GateProvenance {
+            result_source: "results.json".to_string(),
+            result_sha256: "abc123".to_string(),
+            generated_at: "2026-03-04T00:00:00Z".to_string(),
+        },
+    )
+    .expect("report builds");
     let as_json = serde_json::to_value(report).expect("serialize");
+    assert_eq!(as_json["evidence_kind"], "real");
+    assert_eq!(as_json["provenance"]["result_sha256"], "abc123");
     let first = &as_json["tool_results"][0];
     assert!(first.get("manager").is_some());
     assert!(first.get("attempt_count").is_some());
@@ -138,4 +153,58 @@ fn gate_input_rejects_partial_canonical_set() {
         }],
     }];
     assert!(validate_gate_input(&sample).is_err());
+}
+
+#[test]
+fn runtime_gate_report_requires_exact_real_check_set() {
+    let evidence = |check_id: &str| RuntimeCheckEvidence {
+        check_id: check_id.to_string(),
+        command: format!("verify {check_id}"),
+        status: "pass".to_string(),
+        result_source: format!("artifacts/{check_id}.log"),
+        result_sha256: "a".repeat(64),
+    };
+    let provenance = GateProvenance {
+        result_source: "direct-runtime-check-logs".to_string(),
+        result_sha256: "b".repeat(64),
+        generated_at: "2026-07-15T00:00:00Z".to_string(),
+    };
+
+    let report = build_runtime_gate_report(
+        "gate3",
+        "run-1",
+        "ubuntu-24.04",
+        vec![
+            evidence("tmux-live-repro"),
+            evidence("workspace-canonical-hash"),
+        ],
+        provenance.clone(),
+    )
+    .expect("complete evidence builds");
+    assert_eq!(report.evidence_kind, EvidenceKind::Real);
+    assert_eq!(report.summary.status, "pass");
+
+    let incomplete = build_runtime_gate_report(
+        "gate3",
+        "run-2",
+        "ubuntu-24.04",
+        vec![evidence("tmux-live-repro")],
+        provenance,
+    );
+    assert!(incomplete.is_err());
+
+    let mut failed = evidence("tmux-live-repro");
+    failed.status = "fail".to_string();
+    let failed_report = build_runtime_gate_report(
+        "gate3",
+        "run-3",
+        "ubuntu-24.04",
+        vec![failed, evidence("workspace-canonical-hash")],
+        GateProvenance {
+            result_source: "direct-runtime-check-logs".to_string(),
+            result_sha256: "b".repeat(64),
+            generated_at: "2026-07-15T00:00:00Z".to_string(),
+        },
+    );
+    assert!(failed_report.is_err());
 }

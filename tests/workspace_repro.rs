@@ -2,13 +2,15 @@ use std::path::Path;
 
 use t4e::catalog::loader::load_workspaces;
 use t4e::mux::tmux::{
-    CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot, compile_workspace, reproducibility_hash,
+    CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot, compile_workspace,
+    reproducibility_hash,
 };
 use t4e::mux::workspace::MuxBackend;
 
 #[test]
 fn three_tmux_workspaces_compile_reproducibly_twice() {
-    let model = load_workspaces(Path::new("registry/workspaces.yaml")).expect("load workspace registry");
+    let model =
+        load_workspaces(Path::new("registry/workspaces.yaml")).expect("load workspace registry");
     let target_ids = ["video-desk", "music-desk", "fun-desk"];
 
     for id in target_ids {
@@ -24,7 +26,11 @@ fn three_tmux_workspaces_compile_reproducibly_twice() {
         let run2 = compile_workspace(ws, ws.session_name.as_deref().unwrap_or("t4e"), "main")
             .expect("compile 2");
 
-        assert_eq!(run1.commands, run2.commands, "workspace {} compile output drifted", id);
+        assert_eq!(
+            run1.commands, run2.commands,
+            "workspace {} compile output drifted",
+            id
+        );
 
         let snapshot1 = ReproSnapshot {
             windows: vec![WindowSnapshot {

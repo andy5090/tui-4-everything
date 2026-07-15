@@ -865,7 +865,7 @@ tools:
       - platform: linux
         method: script
         package_hints: ["claude"]
-        install_cmd: "curl -fsSL https://example.com/claude/install.sh | bash"
+        install_cmd: "curl -fsSL https://claude.ai/install.sh | bash"
         requires_confirm: true
 
   - id: codex-cli
@@ -901,5 +901,5 @@ tools:
       - platform: linux
         method: script
         package_hints: ["opencode"]
-        install_cmd: "curl -fsSL https://example.com/opencode/install.sh | bash"
+        install_cmd: "curl -fsSL https://opencode.ai/install | bash"
         requires_confirm: true

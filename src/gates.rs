@@ -72,10 +72,114 @@ pub struct GateReport {
     pub gate_id: String,
     pub run_id: String,
     pub os: String,
+    pub evidence_kind: EvidenceKind,
+    pub provenance: GateProvenance,
     pub sample_set: SampleSet,
     pub policy: GatePolicy,
     pub summary: GateSummary,
     pub tool_results: Vec<ToolGateResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceKind {
+    Contract,
+    Real,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeCheckEvidence {
+    pub check_id: String,
+    pub command: String,
+    pub status: String,
+    pub result_source: String,
+    pub result_sha256: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeGateSummary {
+    pub checks_total: usize,
+    pub checks_passed: usize,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeGateReport {
+    pub gate_id: String,
+    pub run_id: String,
+    pub os: String,
+    pub evidence_kind: EvidenceKind,
+    pub provenance: GateProvenance,
+    pub summary: RuntimeGateSummary,
+    pub checks: Vec<RuntimeCheckEvidence>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct GateProvenance {
+    pub result_source: String,
+    pub result_sha256: String,
+    pub generated_at: String,
+}
+
+pub fn runtime_gate_check_ids(gate_id: &str) -> Result<&'static [&'static str]> {
+    match gate_id {
+        "gate3" => Ok(&["tmux-live-repro", "workspace-canonical-hash"]),
+        "gate4" => Ok(&["installer-execution", "queue-retry-state"]),
+        "gate5" => Ok(&["agent-policy", "install-confirmation"]),
+        other => bail!("unsupported runtime gate_id {other}"),
+    }
+}
+
+pub fn build_runtime_gate_report(
+    gate_id: impl Into<String>,
+    run_id: impl Into<String>,
+    os: impl Into<String>,
+    checks: Vec<RuntimeCheckEvidence>,
+    provenance: GateProvenance,
+) -> Result<RuntimeGateReport> {
+    let gate_id = gate_id.into();
+    let expected = runtime_gate_check_ids(&gate_id)?
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let actual = checks
+        .iter()
+        .map(|check| check.check_id.as_str())
+        .collect::<BTreeSet<_>>();
+
+    if checks.len() != expected.len() || actual != expected {
+        bail!("{gate_id} requires exactly these checks: {expected:?}");
+    }
+    for check in &checks {
+        if check.status != "pass" {
+            bail!("{} did not pass", check.check_id);
+        }
+        if check.command.trim().is_empty() || check.result_source.trim().is_empty() {
+            bail!("{} has incomplete provenance", check.check_id);
+        }
+        if check.result_sha256.len() != 64
+            || !check
+                .result_sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        {
+            bail!("{} has an invalid SHA-256", check.check_id);
+        }
+    }
+
+    Ok(RuntimeGateReport {
+        gate_id,
+        run_id: run_id.into(),
+        os: os.into(),
+        evidence_kind: EvidenceKind::Real,
+        provenance,
+        summary: RuntimeGateSummary {
+            checks_total: checks.len(),
+            checks_passed: checks.len(),
+            status: "pass".to_string(),
+        },
+        checks,
+    })
 }
 
 pub fn validate_gate_input(results: &[ToolGateResult]) -> Result<()> {
@@ -118,8 +222,10 @@ pub fn validate_gate_input(results: &[ToolGateResult]) -> Result<()> {
 }
 
 pub fn compute_gate_summary(results: &[ToolGateResult], required_success_rate: f64) -> GateSummary {
-    let index: BTreeMap<&str, &ToolGateResult> =
-        results.iter().map(|item| (item.tool_id.as_str(), item)).collect();
+    let index: BTreeMap<&str, &ToolGateResult> = results
+        .iter()
+        .map(|item| (item.tool_id.as_str(), item))
+        .collect();
 
     let total_tools = CANONICAL_SAMPLE_SIZE as f64;
     let mut first_attempt_successes = 0_u32;
@@ -191,6 +297,8 @@ pub fn build_gate_report(
     os: impl Into<String>,
     results: Vec<ToolGateResult>,
     required_success_rate: f64,
+    evidence_kind: EvidenceKind,
+    provenance: GateProvenance,
 ) -> Result<GateReport> {
     validate_gate_input(&results)?;
     let summary = compute_gate_summary(&results, required_success_rate);
@@ -199,6 +307,8 @@ pub fn build_gate_report(
         gate_id: gate_id.into(),
         run_id: run_id.into(),
         os: os.into(),
+        evidence_kind,
+        provenance,
         sample_set: SampleSet {
             version: "v0.1".to_string(),
             size: CANONICAL_SAMPLE_SIZE,

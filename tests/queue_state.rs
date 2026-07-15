@@ -3,11 +3,16 @@ use t4e::installer::queue::{QueueItem, QueueState, QueueTransitionError};
 #[test]
 fn queue_allows_documented_transitions() {
     let mut item = QueueItem::new("ripgrep", "brew");
-    item.transition(QueueState::Installing).expect("queued -> installing");
-    item.transition(QueueState::Failed).expect("installing -> failed");
-    item.transition(QueueState::Queued).expect("failed -> queued retry");
-    item.transition(QueueState::Installing).expect("queued -> installing");
-    item.transition(QueueState::Success).expect("installing -> success");
+    item.transition(QueueState::Installing)
+        .expect("queued -> installing");
+    item.transition(QueueState::Failed)
+        .expect("installing -> failed");
+    item.transition(QueueState::Queued)
+        .expect("failed -> queued retry");
+    item.transition(QueueState::Installing)
+        .expect("queued -> installing");
+    item.transition(QueueState::Success)
+        .expect("installing -> success");
 }
 
 #[test]

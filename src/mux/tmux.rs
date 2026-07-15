@@ -12,7 +12,11 @@ pub struct CompileOutput {
     pub focus_target: String,
 }
 
-pub fn compile_workspace(workspace: &Workspace, session_name: &str, window_name: &str) -> Result<CompileOutput> {
+pub fn compile_workspace(
+    workspace: &Workspace,
+    session_name: &str,
+    window_name: &str,
+) -> Result<CompileOutput> {
     validate_identifier("session_name", session_name)?;
     validate_identifier("window_name", window_name)?;
 
@@ -24,7 +28,10 @@ pub fn compile_workspace(workspace: &Workspace, session_name: &str, window_name:
     ));
 
     let mut pane_map = HashMap::new();
-    pane_map.insert("root".to_string(), format!("{}:{}.0", session_name, window_name));
+    pane_map.insert(
+        "root".to_string(),
+        format!("{}:{}.0", session_name, window_name),
+    );
 
     let mut last_pane_var = String::new();
     for pane in &workspace.layout.panes {
@@ -75,7 +82,7 @@ fn compile_pane(
 
     let pane_var = format!("PANE_{}", sanitize_var(&pane.id));
     commands.push(format!(
-        "{}=$(tmux split-window {} -p {} -P -F \"#{{pane_id}}\" -t {})",
+        "{}=$(tmux split-window {} -l {}% -P -F \"#{{pane_id}}\" -t {})",
         pane_var, split_flags, size_percent, parent_target
     ));
     commands.push(format!(
@@ -129,7 +136,7 @@ pub fn reproducibility_hash(snapshot: &ReproSnapshot, workspace_root: &str) -> S
             "W|{}|{}|{}",
             window.window_index,
             normalize_text(&window.window_name, workspace_root),
-            normalize_text(&window.window_layout, workspace_root)
+            normalize_tmux_layout(&window.window_layout, workspace_root)
         ));
     }
 
@@ -172,6 +179,35 @@ fn normalize_text(input: &str, workspace_root: &str) -> String {
 
     let normalized_ws = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
     normalized_ws.replace(workspace_root, "$WORKSPACE_ROOT")
+}
+
+fn normalize_tmux_layout(input: &str, workspace_root: &str) -> String {
+    let normalized = normalize_text(input, workspace_root);
+    let layout = normalized
+        .split_once(',')
+        .map_or(normalized.as_str(), |(_, layout)| layout);
+    let chars = layout.chars().collect::<Vec<_>>();
+    let mut output = String::new();
+    let mut index = 0;
+    while index < chars.len() {
+        if !chars[index].is_ascii_digit() {
+            output.push(chars[index]);
+            index += 1;
+            continue;
+        }
+        let start = index;
+        while index < chars.len() && chars[index].is_ascii_digit() {
+            index += 1;
+        }
+        let previous = start.checked_sub(1).and_then(|value| chars.get(value));
+        let next = chars.get(index);
+        if previous == Some(&'x') || next == Some(&'x') {
+            output.extend(chars[start..index].iter());
+        } else if !output.ends_with('#') {
+            output.push('#');
+        }
+    }
+    output
 }
 
 fn sanitize_var(value: &str) -> String {

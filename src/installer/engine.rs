@@ -9,6 +9,8 @@ pub struct InstallTask {
     pub tool_id: String,
     pub method: InstallMethod,
     pub command: String,
+    #[serde(default)]
+    pub check_command: Option<String>,
     pub requires_confirmation: bool,
     pub queued_at: DateTime<Utc>,
 }
@@ -26,7 +28,11 @@ impl Default for InstallPolicy {
     }
 }
 
-pub fn build_install_task(tool: &Tool, installer: &Installer, policy: &InstallPolicy) -> Result<InstallTask> {
+pub fn build_install_task(
+    tool: &Tool,
+    installer: &Installer,
+    policy: &InstallPolicy,
+) -> Result<InstallTask> {
     let command = materialize_command(installer)?;
 
     let requires_confirmation = match installer.method {
@@ -45,14 +51,25 @@ pub fn build_install_task(tool: &Tool, installer: &Installer, policy: &InstallPo
         tool_id: tool.id.clone(),
         method: installer.method.clone(),
         command,
+        check_command: tool
+            .checks
+            .iter()
+            .find_map(|check| check.which.clone())
+            .or_else(|| tool.run.cmd.split_whitespace().next().map(str::to_string)),
         requires_confirmation,
         queued_at: Utc::now(),
     })
 }
 
 fn materialize_command(installer: &Installer) -> Result<String> {
-    if let Some(cmd) = &installer.install_cmd {
-        return Ok(cmd.clone());
+    if matches!(installer.method, InstallMethod::Script) {
+        return installer
+            .install_cmd
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("script installer requires explicit install_cmd"));
+    }
+    if installer.install_cmd.is_some() {
+        bail!("install_cmd is only allowed for script installers");
     }
 
     let hint = installer
@@ -71,11 +88,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::NpmGlobal => format!("npm install -g {}", hint),
         InstallMethod::Cargo => format!("cargo install {}", hint),
         InstallMethod::Go => format!("go install {}", hint),
-        InstallMethod::Script => {
-            return Err(anyhow::anyhow!(
-                "script installer requires explicit install_cmd in manifest"
-            ));
-        }
+        InstallMethod::Script => unreachable!("script installers return before package handling"),
         InstallMethod::Other => {
             return Err(anyhow::anyhow!("unsupported install method"));
         }

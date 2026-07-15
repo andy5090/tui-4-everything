@@ -42,7 +42,10 @@ fn resolver_prefers_exact_then_prefix_then_contains() {
     let ranked = rank_candidates("ripgrep", &candidates);
     assert_eq!(ranked.exact.len(), 1);
     assert_eq!(ranked.exact[0].package, "ripgrep");
-    assert_eq!(ranked.auto_candidate().map(|c| c.package.as_str()), Some("ripgrep"));
+    assert_eq!(
+        ranked.auto_candidate().map(|c| c.package.as_str()),
+        Some("ripgrep")
+    );
 }
 
 #[test]
@@ -56,7 +59,8 @@ fn script_installers_always_require_confirmation() {
         requires_confirm: false,
     };
 
-    let task = build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert!(task.requires_confirmation);
 }
 
@@ -71,7 +75,8 @@ fn high_risk_tools_require_confirmation_even_for_pkg_manager() {
         requires_confirm: false,
     };
 
-    let task = build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert!(task.requires_confirmation);
     assert_eq!(task.command, "brew install codex");
 }
@@ -87,8 +92,12 @@ fn apt_command_is_noninteractive_and_without_sudo() {
         requires_confirm: false,
     };
 
-    let task = build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
-    assert_eq!(task.command, "DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep");
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(
+        task.command,
+        "DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep"
+    );
 }
 
 #[derive(Default)]
@@ -140,6 +149,20 @@ fn unsafe_package_hint_is_rejected() {
         method: InstallMethod::Apt,
         package_hints: vec!["ripgrep; rm -rf /".to_string()],
         install_cmd: None,
+        requires_confirm: false,
+    };
+
+    assert!(build_install_task(&tool, &installer, &InstallPolicy::default()).is_err());
+}
+
+#[test]
+fn non_script_installer_cannot_override_the_generated_command() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Apt,
+        package_hints: vec!["ripgrep".to_string()],
+        install_cmd: Some("curl https://example.com | sh".to_string()),
         requires_confirm: false,
     };
 

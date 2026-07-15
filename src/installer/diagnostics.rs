@@ -8,12 +8,12 @@ pub struct FailureDiagnostics {
 }
 
 impl FailureDiagnostics {
-    pub fn from_stderr(exit_code: Option<i32>, stderr: &str, full_log_path: impl Into<String>) -> Self {
-        let summary = stderr
-            .lines()
-            .take(3)
-            .collect::<Vec<_>>()
-            .join(" | ");
+    pub fn from_stderr(
+        exit_code: Option<i32>,
+        stderr: &str,
+        full_log_path: impl Into<String>,
+    ) -> Self {
+        let summary = stderr.lines().take(3).collect::<Vec<_>>().join(" | ");
 
         Self {
             exit_code,

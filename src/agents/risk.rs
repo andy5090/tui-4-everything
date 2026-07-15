@@ -8,7 +8,9 @@ pub enum RiskLevel {
 }
 
 pub fn classify(tool: &Tool) -> RiskLevel {
-    if tool.category == crate::catalog::models::ToolCategory::Agents || matches!(tool.risk, Risk::High) {
+    if tool.category == crate::catalog::models::ToolCategory::Agents
+        || matches!(tool.risk, Risk::High)
+    {
         return RiskLevel::High;
     }
 

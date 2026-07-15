@@ -1,8 +1,11 @@
+pub mod adapters;
 pub mod agents;
 pub mod app;
 pub mod catalog;
+pub mod codex;
 pub mod gates;
 pub mod installer;
+pub mod mcp;
 pub mod mux;
 pub mod security;
 pub mod storage;

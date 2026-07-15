@@ -63,7 +63,10 @@ pub fn resolve_with_fallback(
 
     let mut merged = initial_candidates.to_vec();
     for candidate in searched {
-        if !merged.iter().any(|existing| existing.package == candidate.package) {
+        if !merged
+            .iter()
+            .any(|existing| existing.package == candidate.package)
+        {
             merged.push(candidate);
         }
     }
@@ -117,10 +120,7 @@ impl PackageSearch for ShellPackageSearch {
             InstallMethod::Brew | InstallMethod::BrewCask => {
                 ("brew", vec!["search".to_string(), hint.to_string()])
             }
-            InstallMethod::Apt => (
-                "apt-cache",
-                vec!["search".to_string(), hint.to_string()],
-            ),
+            InstallMethod::Apt => ("apt-cache", vec!["search".to_string(), hint.to_string()]),
             InstallMethod::Dnf => ("dnf", vec!["search".to_string(), hint.to_string()]),
             InstallMethod::Pacman => ("pacman", vec!["-Ss".to_string(), hint.to_string()]),
             _ => return Ok(Vec::new()),
@@ -137,7 +137,12 @@ impl PackageSearch for ShellPackageSearch {
             .lines()
             .map(str::trim)
             .filter(|line| !line.is_empty())
-            .map(|line| line.split_whitespace().next().unwrap_or_default().to_string())
+            .map(|line| {
+                line.split_whitespace()
+                    .next()
+                    .unwrap_or_default()
+                    .to_string()
+            })
             .filter(|name| !name.is_empty())
             .collect::<Vec<_>>();
         Ok(parsed)

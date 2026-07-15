@@ -1,5 +1,6 @@
 use t4e::mux::tmux::{
-    CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot, compile_workspace, reproducibility_hash,
+    CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot, compile_workspace,
+    reproducibility_hash,
 };
 use t4e::mux::workspace::{Layout, MuxBackend, Pane, SplitDirection, Workspace};
 use t4e::mux::zellij::render_layout_kdl;
@@ -37,18 +38,26 @@ fn compiler_tracks_pane_ids_with_tmux_print_mode() {
     let workspace = fake_workspace();
     let output = compile_workspace(&workspace, "session", "win").expect("compile ok");
 
-    assert!(output
-        .commands
-        .iter()
-        .any(|cmd| cmd.contains("split-window -h") && cmd.contains("-P -F \"#{pane_id}\"")));
-    assert!(output
-        .commands
-        .iter()
-        .any(|cmd| cmd.contains("split-window -v") && cmd.contains("-P -F \"#{pane_id}\"")));
-    assert!(output
-        .commands
-        .iter()
-        .any(|cmd| cmd.contains("send-keys") && cmd.contains("yewtube")));
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| cmd.contains("split-window -h")
+                && cmd.contains("-l 40%")
+                && cmd.contains("-P -F \"#{pane_id}\""))
+    );
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| cmd.contains("split-window -v") && cmd.contains("-P -F \"#{pane_id}\""))
+    );
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| cmd.contains("send-keys") && cmd.contains("yewtube"))
+    );
 }
 
 #[test]
@@ -121,14 +130,18 @@ fn compiler_preserves_left_up_semantics_with_before_flag() {
     ];
 
     let output = compile_workspace(&workspace, "session", "win").expect("compile ok");
-    assert!(output
-        .commands
-        .iter()
-        .any(|cmd| cmd.contains("split-window -h -b")));
-    assert!(output
-        .commands
-        .iter()
-        .any(|cmd| cmd.contains("split-window -v -b")));
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| cmd.contains("split-window -h -b"))
+    );
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| cmd.contains("split-window -v -b"))
+    );
 }
 
 #[test]
@@ -144,10 +157,12 @@ fn compiler_escapes_shell_sensitive_pane_commands() {
     let mut workspace = fake_workspace();
     workspace.layout.panes[0].cmd = "echo 'unsafe' && touch /tmp/pwn".to_string();
     let output = compile_workspace(&workspace, "session", "win").expect("compile ok");
-    assert!(output
-        .commands
-        .iter()
-        .any(|cmd| cmd.contains("send-keys") && cmd.contains("'\"'\"'unsafe'\"'\"'")));
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| cmd.contains("send-keys") && cmd.contains("'\"'\"'unsafe'\"'\"'"))
+    );
 }
 
 #[test]

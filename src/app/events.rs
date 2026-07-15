@@ -6,6 +6,7 @@ pub enum Screen {
     Workspace,
     Agents,
     Logs,
+    Settings,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -15,6 +16,7 @@ pub enum EventAction {
     GoWorkspace,
     GoAgents,
     GoLogs,
+    GoSettings,
     MoveDown,
     MoveUp,
     Select,
@@ -35,6 +37,7 @@ pub fn map_key(screen: Screen, key: char) -> EventAction {
         (Screen::Home, 'w') => EventAction::GoWorkspace,
         (Screen::Home, 'a') => EventAction::GoAgents,
         (Screen::Home, 'l') => EventAction::GoLogs,
+        (Screen::Home, 's') => EventAction::GoSettings,
         (Screen::Catalog, 'j') => EventAction::MoveDown,
         (Screen::Catalog, 'k') => EventAction::MoveUp,
         (Screen::Catalog, '\n') => EventAction::OpenDetail,

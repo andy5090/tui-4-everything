@@ -9,7 +9,10 @@ fn event_map_matches_spec_subset() {
     assert_eq!(map_key(Screen::Home, 'c'), EventAction::GoCatalog);
     assert_eq!(map_key(Screen::Catalog, 'j'), EventAction::MoveDown);
     assert_eq!(map_key(Screen::Catalog, '\n'), EventAction::OpenDetail);
-    assert_eq!(map_key(Screen::Workspace, '\n'), EventAction::LaunchWorkspace);
+    assert_eq!(
+        map_key(Screen::Workspace, '\n'),
+        EventAction::LaunchWorkspace
+    );
     assert_eq!(map_key(Screen::Install, 'r'), EventAction::Retry);
 }
 
