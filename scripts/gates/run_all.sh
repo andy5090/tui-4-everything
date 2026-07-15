@@ -24,7 +24,7 @@ run_with_timeout() {
 
 is_inconclusive() {
   local logfile="$1"
-  rg -qi '(timed out|timeout|temporary failure|network|dns|connection reset|5xx)' "$logfile"
+  grep -Eqi '(timed out|timeout|temporary failure|network|dns|connection reset|5xx)' "$logfile"
 }
 
 run_with_policy() {
@@ -72,10 +72,10 @@ run_with_policy "workspace compiler" "cargo run -- workspace-plan --workspace-id
 
 mkdir -p artifacts/contracts
 run_with_policy "gate1 contract" "cargo run -- generate-contract-gate-report --gate-id gate1 --os contract-macos --output artifacts/contracts/gate1-report.json" "/tmp/t4e-gates-g1.log"
-rg -q '"evidence_kind": "contract"' artifacts/contracts/gate1-report.json || fail "gate1-evidence"
+grep -q '"evidence_kind": "contract"' artifacts/contracts/gate1-report.json || fail "gate1-evidence"
 
 run_with_policy "gate2 contract" "cargo run -- generate-contract-gate-report --gate-id gate2 --os contract-linux --output artifacts/contracts/gate2-report.json" "/tmp/t4e-gates-g2.log"
-rg -q '"evidence_kind": "contract"' artifacts/contracts/gate2-report.json || fail "gate2-evidence"
+grep -q '"evidence_kind": "contract"' artifacts/contracts/gate2-report.json || fail "gate2-evidence"
 
 run_with_policy "runtime gates 3-5" "scripts/gates/run_runtime_gates.sh artifacts/gates local-ci" "/tmp/t4e-gates-runtime.log"
 

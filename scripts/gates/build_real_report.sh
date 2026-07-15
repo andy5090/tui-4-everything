@@ -20,5 +20,5 @@ cargo run -- build-real-gate-report \
   --input "$input" \
   --output "$output"
 
-rg -q '"evidence_kind": "real"' "$output"
-rg -q '"status": "pass"' "$output"
+grep -q '"evidence_kind": "real"' "$output"
+grep -q '"status": "pass"' "$output"
