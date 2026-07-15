@@ -26,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Collect real package-manager results
@@ -42,7 +42,7 @@ jobs:
           ${{ matrix.os_label }}
           artifacts/gates/${{ matrix.gate }}-results.json
           artifacts/gates/${{ matrix.gate }}-report.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.gate }}-${{ matrix.os_label }}
           path: artifacts/gates/*.json
@@ -51,12 +51,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run Gate 3, 4, and 5 with direct runtime evidence
         run: scripts/gates/run_runtime_gates.sh artifacts/gates ubuntu-24.04
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: gate3-gate5-ubuntu-24.04
           path: artifacts/gates/*
@@ -68,7 +68,7 @@ jobs:
         runner: [ubuntu-24.04, macos-14]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release --locked
@@ -83,7 +83,7 @@ jobs:
           if [[ "$version" == "$GITHUB_REF_NAME" ]]; then version="0.1.0-dev"; fi
           platform="$(printf '%s-%s' "$RUNNER_OS" "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
           scripts/package_release.sh target/release/t4e artifacts/release "$version" "$platform"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: t4e-${{ runner.os }}-${{ runner.arch }}
           path: artifacts/release/*
