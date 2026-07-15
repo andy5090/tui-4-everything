@@ -1,6 +1,6 @@
 # t4e v0.1 Completion Audit
 
-Date: 2026-07-15
+Date: 2026-07-16
 
 ## Implemented And Proven Locally
 
@@ -23,22 +23,25 @@ Generated local Gate 3 through 5 reports live under `artifacts/gates`. Each
 report has `evidence_kind: real`, a successful Cargo test result for every
 required check, and SHA-256 provenance for the direct log.
 
-## External Evidence Still Required
+## External Release Evidence
 
-- Gate 1 must run on a clean `macos-14` GitHub runner and meet the fixed
-  ten-tool Homebrew threshold of 90%.
-- Gate 2 must run on a clean `ubuntu-24.04` GitHub runner and meet the fixed
-  ten-tool apt threshold of 60%.
-- The macOS release archive must be built and validated by that workflow.
+- Gate 1 passed on `macos-14`: 10/10 fixed-sample Homebrew installs succeeded
+  on the first attempt, exceeding the 90% threshold.
+- Gate 2 passed on `ubuntu-24.04`: 10/10 fixed-sample apt installs succeeded on
+  the first attempt, exceeding the 60% threshold.
+- Gates 3 through 5 passed with direct runtime logs and SHA-256 provenance.
+- Linux x64 and macOS ARM64 release archives built, validated their embedded
+  defaults outside the source tree, and published checksums.
 
-These checks are implemented in `.github/workflows/release-gates.yml`, but a
-local Linux host cannot produce macOS evidence and this host does not have the
-passwordless sudo required for an isolated apt gate. Contract reports are not
-accepted as substitutes.
+The authoritative GitHub Actions run is
+[`29430982685`](https://github.com/andy5090/tui-4-everything/actions/runs/29430982685),
+executed for source SHA `932a5335c1b7f5ef820dff86651df7e027005826`.
+Downloaded reports declare `evidence_kind: real` and `status: pass`; contract
+reports are not used as release evidence.
 
 ## Next Stage
 
-Automated self-verification and the first eight-task release-binary walkthrough
-are complete for the current host. All S0 through S2 findings are closed; see
-`docs/plans/usability-results-2026-07-15.md`. Independent human testing and the
-external Gate 1/2 runner evidence remain before v0.1 release.
+Automated self-verification, the first eight-task release-binary walkthrough,
+and external Gates 1 through 5 are complete. All S0 through S2 findings are
+closed; see `docs/plans/usability-results-2026-07-15.md`. Independent human
+testing remains the final product-confidence step before the v0.1 release.

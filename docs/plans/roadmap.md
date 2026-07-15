@@ -28,10 +28,9 @@ mechanism.
   approval, usage events, and t4e MCP server: complete.
 - Phase 5 mpv, yazi, and newsboat adapters with allowlists, observation,
   compensating actions, and audit records: complete.
-- Phase 6 packaging, protocol checks, CI, and real-gate workflow: implemented.
-  Gates 3 through 5 have local direct-runtime evidence. Real macOS Gate 1 and
-  Ubuntu Gate 2 evidence must still be produced by the isolated runner
-  workflow; contract reports do not satisfy release gates.
+- Phase 6 packaging, protocol checks, CI, and real-gate workflow: complete.
+  Gates 1 through 5 passed on isolated GitHub runners, and Linux x64 plus macOS
+  ARM64 release packages passed out-of-tree validation.
 
 ### Phase 0: Engineering Baseline
 
@@ -133,7 +132,7 @@ Exit criteria:
 - Voice or remote clients only after local authentication and policy boundaries
   have been proven.
 
-## Verification Snapshot (2026-07-15)
+## Verification Snapshot (2026-07-16)
 
 - Formatting, Clippy with warnings denied, unit/integration tests, Registry
   validation, MCP contracts, and contract gates pass locally. The suite has 69
@@ -150,6 +149,10 @@ Exit criteria:
 - Gates 3, 4, and 5 produce direct-runtime `real/pass` reports with a SHA-256
   for every test log. The Linux release archive builds, verifies its checksum,
   and validates its embedded Registry outside the source tree.
+- GitHub Actions run
+  [`29430982685`](https://github.com/andy5090/tui-4-everything/actions/runs/29430982685)
+  passed the real macOS Homebrew and Ubuntu apt gates at 10/10 first-attempt
+  installs, then built and validated Linux x64 and macOS ARM64 archives.
 - A task-based, isolated hands-on protocol is ready at
   `docs/plans/usability-test.md`. The first release-binary walkthrough completed
   all eight tasks after closing one S1, four S2, and two S3 findings; results
