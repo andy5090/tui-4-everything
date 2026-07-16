@@ -40,6 +40,8 @@ Important actions are intentionally explicit:
   the current app. `Backspace` and `Esc` are forwarded to the running app.
   Text selection is the default mouse mode; `Alt+M` toggles T4E mouse controls
   for lists, app tabs, scrolling, and App View footer actions.
+  `Alt+O` opens the most likely HTTP(S) link from the current app, and `Alt+C`
+  copies the original unwrapped link without App View borders.
 - App rows show install readiness and live install state. The detail panel keeps
   the current attempt, channel, recent package-manager output, and failure
   summary visible without opening the install utility.

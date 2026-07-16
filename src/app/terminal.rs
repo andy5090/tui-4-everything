@@ -1,12 +1,14 @@
 use std::collections::{BTreeSet, HashMap};
-use std::io::{self, Stdout};
+use std::io::{self, Stdout, Write};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -295,6 +297,14 @@ fn process_effects(
                     app.status = format!("Mouse mode failed: {error}");
                 }
             }
+            AppEffect::CopyUrl(url) => match copy_to_clipboard(&url) {
+                Ok(method) => app.status = format!("Copied link via {method}"),
+                Err(error) => app.status = format!("Could not copy link: {error}"),
+            },
+            AppEffect::OpenUrl(url) => match open_url(&url) {
+                Ok(()) => app.status = "Opened link in the default browser".to_string(),
+                Err(error) => app.status = format!("Could not open link: {error}"),
+            },
             AppEffect::Uninstall(request) => {
                 let tool_id = request.tool_id.clone();
                 if active.contains_key(&tool_id) {
@@ -400,6 +410,73 @@ fn process_effects(
             }
         }
     }
+}
+
+fn copy_to_clipboard(text: &str) -> Result<&'static str> {
+    let candidates: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
+        &[("pbcopy", &[])]
+    } else {
+        &[
+            ("wl-copy", &[]),
+            ("xclip", &["-selection", "clipboard"]),
+            ("xsel", &["--clipboard", "--input"]),
+        ]
+    };
+    for (program, args) in candidates {
+        let mut child = match Command::new(program)
+            .args(*args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(_) => continue,
+        };
+        if let Some(stdin) = &mut child.stdin {
+            stdin.write_all(text.as_bytes())?;
+        }
+        drop(child.stdin.take());
+        let deadline = Instant::now() + Duration::from_millis(250);
+        loop {
+            match child.try_wait()? {
+                Some(status) if status.success() => return Ok(program),
+                Some(_) => break,
+                None if Instant::now() >= deadline => {
+                    thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                    return Ok(program);
+                }
+                None => thread::sleep(Duration::from_millis(10)),
+            }
+        }
+    }
+
+    let encoded = BASE64_STANDARD.encode(text);
+    let mut stdout = io::stdout();
+    write!(stdout, "\x1b]52;c;{encoded}\x07")?;
+    stdout.flush()?;
+    Ok("OSC 52")
+}
+
+fn open_url(url: &str) -> Result<()> {
+    if !(url.starts_with("https://") || url.starts_with("http://")) {
+        anyhow::bail!("only HTTP(S) links can be opened");
+    }
+    let program = if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    };
+    Command::new(program)
+        .arg(url)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| anyhow::anyhow!("could not start {program}: {error}"))?;
+    Ok(())
 }
 
 fn refresh_app_view(app: &mut AppState, tmux: &TmuxRuntime<SystemTmuxRunner>) {

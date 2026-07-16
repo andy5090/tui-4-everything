@@ -530,8 +530,11 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         sections[1],
     );
     frame.render_widget(
-        Paragraph::new("[Tab] Next  [Shift-Tab] Previous  [Alt-BS] Background  [Alt-Q] Close")
-            .style(Style::default().fg(Color::Gray)),
+        Paragraph::new(vec![
+            Line::from("[Tab] Next  [Shift-Tab] Previous  [Alt-BS] Background  [Alt-Q] Close"),
+            Line::from("[Alt-O] Open link  [Alt-C] Copy clean link"),
+        ])
+        .style(Style::default().fg(Color::Gray)),
         sections[2],
     );
 }

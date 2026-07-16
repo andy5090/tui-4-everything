@@ -38,6 +38,8 @@ pub enum AppEffect {
     SendAppInput { pane_id: String, input: AppInput },
     CloseApp(String),
     SetMouseCapture(bool),
+    CopyUrl(String),
+    OpenUrl(String),
     Uninstall(UninstallRequest),
     StopWorkspace(String),
     RefreshWorkspaces,
@@ -1017,6 +1019,12 @@ impl AppState {
             KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::ALT) => {
                 self.request_close_current_app();
             }
+            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.request_app_url(false);
+            }
+            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.request_app_url(true);
+            }
             KeyCode::Backspace if key.modifiers.contains(KeyModifiers::ALT) => {
                 self.background_app_view();
             }
@@ -1047,6 +1055,22 @@ impl AppState {
             self.return_after_app_close = true;
             self.effects.push_back(AppEffect::CloseApp(pane_id));
         }
+    }
+
+    fn request_app_url(&mut self, open: bool) {
+        let Some(url) = self
+            .app_view
+            .as_ref()
+            .and_then(|view| preferred_url(&view.content))
+        else {
+            self.status = "No HTTP(S) link found in the current app".to_string();
+            return;
+        };
+        self.effects.push_back(if open {
+            AppEffect::OpenUrl(url)
+        } else {
+            AppEffect::CopyUrl(url)
+        });
     }
 
     fn leave_app_view(&mut self, status: &str) {
@@ -1935,6 +1959,48 @@ fn app_input_from_key(key: KeyEvent) -> Option<AppInput> {
     Some(AppInput::Key(
         modifier.map_or(name.clone(), |prefix| format!("{prefix}-{name}")),
     ))
+}
+
+fn preferred_url(content: &str) -> Option<String> {
+    extract_urls(content).into_iter().max_by_key(|url| {
+        (
+            usize::from(url.starts_with("https://")),
+            url.chars().count(),
+        )
+    })
+}
+
+fn extract_urls(content: &str) -> Vec<String> {
+    let mut urls = Vec::new();
+    let mut offset = 0;
+    while offset < content.len() {
+        let remaining = &content[offset..];
+        let next = [remaining.find("https://"), remaining.find("http://")]
+            .into_iter()
+            .flatten()
+            .min();
+        let Some(start) = next else {
+            break;
+        };
+        let absolute_start = offset + start;
+        let tail = &content[absolute_start..];
+        let end = tail
+            .char_indices()
+            .find(|(_, ch)| {
+                ch.is_whitespace()
+                    || ch.is_control()
+                    || matches!(ch, '"' | '\'' | '<' | '>' | '[' | ']')
+            })
+            .map_or(tail.len(), |(index, _)| index);
+        let url = tail[..end]
+            .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', '}'])
+            .to_string();
+        if !url.is_empty() && !urls.contains(&url) {
+            urls.push(url);
+        }
+        offset = absolute_start + end.max(1);
+    }
+    urls
 }
 
 fn move_index(current: usize, len: usize, delta: isize) -> usize {

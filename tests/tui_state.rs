@@ -310,6 +310,37 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
 }
 
 #[test]
+fn app_view_opens_and_copies_the_clean_preferred_auth_url() {
+    let mut app = app();
+    app.open_app_view(
+        "t4e-links".to_string(),
+        vec![ManagedApp {
+            pane_id: "%50".to_string(),
+            window_index: 0,
+            window_name: "spotatui".to_string(),
+            pane_index: 0,
+            process: "spotatui".to_string(),
+        }],
+    );
+    let auth_url = "https://accounts.spotify.com/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A8989%2Flogin&client_id=test&code_challenge=long-value";
+    app.app_view.as_mut().expect("app view").content = format!(
+        "Using redirect URI: http://127.0.0.1:8989/login\nOpen this URL:\n{auth_url}\nWaiting..."
+    );
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::CopyUrl(url)) if url == auth_url
+    ));
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::ALT));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::OpenUrl(url)) if url == auth_url
+    ));
+}
+
+#[test]
 fn alt_backspace_returns_to_the_previous_screen_without_closing_the_app() {
     let mut app = app();
     app.handle_key(key(KeyCode::Enter));
