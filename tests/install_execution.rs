@@ -75,6 +75,7 @@ fn task() -> InstallTask {
         method: InstallMethod::Apt,
         command: "install test-tool".to_string(),
         check_command: None,
+        requires_privileges: false,
         requires_confirmation: false,
         queued_at: Utc::now(),
     }

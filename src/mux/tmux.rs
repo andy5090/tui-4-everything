@@ -4,7 +4,7 @@ use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::mux::workspace::{Pane, SplitDirection, Workspace};
+use crate::mux::workspace::{Pane, SplitDirection, TmuxView, Workspace};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CompileOutput {
@@ -26,6 +26,10 @@ pub fn compile_workspace(
         shell_quote(session_name),
         shell_quote(window_name)
     ));
+
+    if matches!(workspace.tmux_view, TmuxView::Windows) {
+        return compile_app_windows(workspace, session_name, window_name, commands);
+    }
 
     let mut pane_map = HashMap::new();
     pane_map.insert(
@@ -53,6 +57,63 @@ pub fn compile_workspace(
     Ok(CompileOutput {
         commands,
         focus_target,
+    })
+}
+
+fn compile_app_windows(
+    workspace: &Workspace,
+    session_name: &str,
+    initial_window: &str,
+    mut commands: Vec<String>,
+) -> Result<CompileOutput> {
+    let Some(first) = workspace.layout.panes.first() else {
+        bail!("workspace {} has no apps", workspace.id);
+    };
+
+    validate_identifier("app window", &first.id)?;
+    let initial_target = format!("{}:{}", session_name, initial_window);
+    commands.push(format!(
+        "tmux rename-window -t {} {}",
+        shell_quote(&initial_target),
+        shell_quote(&first.id)
+    ));
+    let first_target = format!("{}:{}", session_name, first.id);
+    commands.push(format!(
+        "tmux set-window-option -t {} automatic-rename off",
+        shell_quote(&first_target)
+    ));
+    commands.push(format!(
+        "tmux send-keys -t {} -- {} C-m",
+        shell_quote(&format!("{}.0", first_target)),
+        shell_quote(&first.cmd)
+    ));
+
+    for app in workspace.layout.panes.iter().skip(1) {
+        validate_identifier("app window", &app.id)?;
+        commands.push(format!(
+            "tmux new-window -d -t {} -n {} \"bash\"",
+            shell_quote(session_name),
+            shell_quote(&app.id)
+        ));
+        let target = format!("{}:{}", session_name, app.id);
+        commands.push(format!(
+            "tmux set-window-option -t {} automatic-rename off",
+            shell_quote(&target)
+        ));
+        commands.push(format!(
+            "tmux send-keys -t {} -- {} C-m",
+            shell_quote(&format!("{}.0", target)),
+            shell_quote(&app.cmd)
+        ));
+    }
+
+    commands.push(format!(
+        "tmux select-window -t {}",
+        shell_quote(&first_target)
+    ));
+    Ok(CompileOutput {
+        commands,
+        focus_target: first_target,
     })
 }
 

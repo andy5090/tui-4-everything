@@ -1,3 +1,4 @@
+use ansi_to_tui::IntoText as _;
 use ratatui::Frame;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -5,6 +6,8 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap};
 
 use crate::catalog::models::{Exposure, Risk};
+use crate::installer::queue::QueueState;
+use crate::mux::workspace::TmuxView;
 
 use super::events::Screen;
 use super::state::AppState;
@@ -25,6 +28,11 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         return;
     }
 
+    if app.screen == Screen::AppView {
+        render_app_view(frame, app, area);
+        return;
+    }
+
     let sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -40,6 +48,7 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         Screen::Catalog => render_catalog(frame, app, sections[1]),
         Screen::Install => render_install(frame, app, sections[1]),
         Screen::Workspace => render_workspaces(frame, app, sections[1]),
+        Screen::AppView => unreachable!("app view renders before the dashboard layout"),
         Screen::Agents => render_agents(frame, app, sections[1]),
         Screen::Logs => render_logs(frame, app, sections[1]),
         Screen::Settings => render_settings(frame, app, sections[1]),
@@ -48,6 +57,10 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
 
     if app.show_help {
         render_help(frame, area);
+    } else if app.launch_options.is_some() {
+        render_launch_options(frame, app, area);
+    } else if app.uninstall_confirmation.is_some() {
+        render_uninstall_confirmation(frame, app, area);
     } else if app.confirmation.is_some() {
         render_confirmation(frame, app, area);
     } else if app.ai_confirmation.is_some() {
@@ -56,30 +69,33 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
 }
 
 fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
-    let labels = if area.width < 80 {
-        ["1 H", "2 App", "3 Q", "4 Work", "5 AI", "6 Log", "7 Set"]
-    } else {
-        [
-            "1 Home", "2 Apps", "3 Queue", "4 Work", "5 AI", "6 Logs", "7 Setup",
-        ]
+    let section = match app.screen {
+        Screen::Home => "Packs".to_string(),
+        Screen::Catalog => app
+            .active_pack
+            .as_ref()
+            .and_then(|id| app.catalog.packs.iter().find(|pack| &pack.id == id))
+            .map(|pack| pack.title.clone())
+            .unwrap_or_else(|| "All apps".to_string()),
+        Screen::Install => "Installs".to_string(),
+        Screen::Workspace => "Workspaces".to_string(),
+        Screen::AppView => "Running apps".to_string(),
+        Screen::Agents => "AI".to_string(),
+        Screen::Logs => "Activity".to_string(),
+        Screen::Settings => "Settings".to_string(),
     };
-    let titles = labels.into_iter().map(Line::from).collect::<Vec<_>>();
-    let selected = match app.screen {
-        Screen::Home => 0,
-        Screen::Catalog => 1,
-        Screen::Install => 2,
-        Screen::Workspace => 3,
-        Screen::Agents => 4,
-        Screen::Logs => 5,
-        Screen::Settings => 6,
-    };
-    let tabs = Tabs::new(titles)
-        .block(Block::default().title(" t4e ").borders(Borders::ALL))
-        .select(selected)
-        .style(Style::default().fg(Color::Gray))
-        .highlight_style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
-        .divider(if area.width < 80 { " " } else { " | " });
-    frame.render_widget(tabs, area);
+    frame.render_widget(
+        Paragraph::new(Line::from(vec![
+            Span::styled(
+                "t4e",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw("  /  "),
+            Span::raw(section),
+        ]))
+        .block(Block::default().borders(Borders::ALL)),
+        area,
+    );
 }
 
 fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
@@ -89,14 +105,21 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         .packs
         .iter()
         .map(|pack| {
+            let app_count = pack
+                .tool_ids
+                .iter()
+                .filter_map(|id| app.catalog.tools.iter().find(|tool| &tool.id == id))
+                .filter(|tool| tool.is_launchable_app())
+                .count();
             let visibility = match pack.exposure {
                 Exposure::Starter => "starter",
                 Exposure::SearchOnly => "search",
                 Exposure::Labs => "labs",
             };
             ListItem::new(format!(
-                "{:<24} {:>2} tools  {}",
+                "{:<24} {:>2} apps / {:>2} tools  {}",
                 pack.title,
+                app_count,
                 pack.tool_ids.len(),
                 visibility
             ))
@@ -118,7 +141,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             Span::raw(format!("{} tools", app.catalog.tools.len())),
         ]),
         Line::from(vec![
-            Span::styled("Sessions ", Style::default().fg(Color::Green)),
+            Span::styled("Workspaces ", Style::default().fg(Color::Green)),
             Span::raw(format!(
                 "{} workspace templates",
                 app.workspaces.workspaces.len()
@@ -137,8 +160,8 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             )),
         ]),
         Line::from(""),
-        Line::from("Enter view pack   I queue pack"),
-        Line::from("c catalog   i queue   w workspaces"),
+        Line::from("Enter open pack   I install pack"),
+        Line::from("c all apps   i installs   w workspaces"),
         Line::from("a agents   l logs   s settings"),
     ];
     frame.render_widget(
@@ -155,14 +178,10 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     let items = tools
         .iter()
         .map(|tool| {
+            let (install_status, install_style) = catalog_install_status(app, &tool.id);
             ListItem::new(Line::from(vec![
                 Span::raw(format!(
-                    "{}{} ",
-                    if app.selected_tools.contains(&tool.id) {
-                        "[x]"
-                    } else {
-                        "[ ]"
-                    },
+                    "{} ",
                     if app.favorites.contains(&tool.id) {
                         "*"
                     } else {
@@ -173,7 +192,8 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                     format!("{:<10}", AppState::risk_label(&tool.risk)),
                     risk_style(&tool.risk),
                 ),
-                Span::raw(&tool.name),
+                Span::raw(format!("{:<20}", tool.name)),
+                Span::styled(install_status, install_style),
             ]))
         })
         .collect::<Vec<_>>();
@@ -205,16 +225,67 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 Line::styled(&tool.name, Style::default().add_modifier(Modifier::BOLD)),
                 Line::from(format!("id: {}", tool.id)),
                 Line::from(format!("risk: {}", AppState::risk_label(&tool.risk))),
-                Line::from(format!("run: {}", tool.run.cmd)),
+                Line::from(format!("run: {}", tool.run_command_for_current_platform())),
+                Line::from(format!("launch options: {}", tool.run_options.len())),
                 Line::from(""),
             ];
-            lines.extend(tool.installers.iter().map(|installer| {
-                Line::from(format!("{:?}: {:?}", installer.platform, installer.method))
-            }));
+            if let Some(job) = app.queue.iter().find(|job| job.item.tool_id == tool.id) {
+                lines.push(Line::styled(
+                    format!("install: {}", catalog_install_status(app, &tool.id).0),
+                    catalog_install_status(app, &tool.id).1,
+                ));
+                lines.push(Line::from(format!("channel: {}", job.item.channel)));
+                lines.push(Line::from(format!(
+                    "attempts: {}/{}",
+                    if job.item.state == QueueState::Installing {
+                        job.item.attempts.saturating_add(1)
+                    } else {
+                        job.item.attempts
+                    },
+                    app.settings.max_install_attempts
+                )));
+                if let Some(diagnostics) = &job.diagnostics {
+                    lines.push(Line::styled(
+                        format!("error: {}", diagnostics.stderr_summary),
+                        Style::default().fg(Color::Red),
+                    ));
+                }
+                let recent = app
+                    .logs
+                    .iter()
+                    .rev()
+                    .filter(|line| {
+                        line.starts_with(&format!("{} [", tool.id))
+                            || line.starts_with(&format!("install: {}", tool.id))
+                            || line.starts_with(&format!("uninstall: {}", tool.id))
+                    })
+                    .take(4)
+                    .collect::<Vec<_>>();
+                if !recent.is_empty() {
+                    lines.push(Line::from(""));
+                    lines.push(Line::styled(
+                        match job.item.state {
+                            QueueState::Installing => "Live install output",
+                            QueueState::Failed => "Last output before failure",
+                            _ => "Recent install output",
+                        },
+                        Style::default().fg(MUTED),
+                    ));
+                    lines.extend(
+                        recent
+                            .into_iter()
+                            .rev()
+                            .map(|line| Line::from(line.as_str())),
+                    );
+                }
+            } else {
+                let (status, style) = catalog_install_status(app, &tool.id);
+                lines.push(Line::styled(format!("install: {status}"), style));
+            }
             lines.extend([
                 Line::from(""),
                 Line::styled(
-                    "Space select  a all  I queue  f favorite  p all packs",
+                    "Enter run  I install  U uninstall  f favorite  Backspace packs",
                     Style::default().fg(MUTED),
                 ),
             ]);
@@ -227,6 +298,36 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             .wrap(Wrap { trim: false }),
         chunks[1],
     );
+}
+
+fn catalog_install_status(app: &AppState, tool_id: &str) -> (String, Style) {
+    if app.uninstalling_tools.contains(tool_id) {
+        return (
+            "UNINSTALLING...".to_string(),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
+    }
+    if let Some(job) = app.queue.iter().find(|job| job.item.tool_id == tool_id) {
+        return match job.item.state {
+            QueueState::Installing => (
+                "INSTALLING...".to_string(),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            QueueState::Queued => ("QUEUED".to_string(), Style::default().fg(Color::Yellow)),
+            QueueState::Success => ("INSTALLED".to_string(), Style::default().fg(Color::Green)),
+            QueueState::Failed => ("FAILED".to_string(), Style::default().fg(Color::Red)),
+            QueueState::Idle => ("PENDING".to_string(), Style::default().fg(MUTED)),
+        };
+    }
+    if app.installed_tools.contains(tool_id) {
+        ("INSTALLED".to_string(), Style::default().fg(Color::Green))
+    } else {
+        ("NOT INSTALLED".to_string(), Style::default().fg(MUTED))
+    }
 }
 
 fn render_install(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
@@ -301,9 +402,8 @@ fn render_workspaces(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 .iter()
                 .find(|session| session.workspace_id == workspace.id);
             ListItem::new(format!(
-                "{:<20} {:<8} {:<7} {} panes",
+                "{:<24} {:<8} {} apps",
                 workspace.title,
-                format!("{:?}", workspace.mux).to_ascii_lowercase(),
                 session.map_or("stopped", |_| "running"),
                 workspace.layout.panes.len()
             ))
@@ -327,33 +427,45 @@ fn render_workspaces(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                     &workspace.title,
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
-                Line::from(format!(
-                    "target: {}",
-                    workspace.session_name.as_deref().unwrap_or("auto")
-                )),
                 Line::from(format!("tools: {}", workspace.recommended_tools.join(", "))),
                 Line::from(format!(
-                    "session: {}",
+                    "view: {}",
+                    match workspace.tmux_view {
+                        TmuxView::Windows => "one full-screen app at a time",
+                        TmuxView::Panes => "multi-app layout",
+                    }
+                )),
+                Line::from(format!(
+                    "status: {}",
                     app.managed_sessions
                         .iter()
                         .find(|session| session.workspace_id == workspace.id)
-                        .map_or("stopped", |session| session.name.as_str())
+                        .map_or("stopped", |_| "running")
                 )),
                 Line::from(""),
             ];
-            lines.extend(workspace.layout.panes.iter().map(|pane| {
-                Line::from(format!(
-                    "{} <- {}  {}  {}  {}",
-                    pane.id,
-                    pane.split,
-                    format!("{:?}", pane.direction).to_ascii_lowercase(),
-                    pane.size,
-                    pane.cmd
-                ))
-            }));
+            lines.extend(
+                workspace
+                    .layout
+                    .panes
+                    .iter()
+                    .map(|pane| match workspace.tmux_view {
+                        TmuxView::Windows => {
+                            Line::from(format!("app {:<12} {}", pane.id, pane.cmd))
+                        }
+                        TmuxView::Panes => Line::from(format!(
+                            "{} <- {}  {}  {}  {}",
+                            pane.id,
+                            pane.split,
+                            format!("{:?}", pane.direction).to_ascii_lowercase(),
+                            pane.size,
+                            pane.cmd
+                        )),
+                    }),
+            );
             lines.push(Line::from(""));
             lines.push(Line::styled(
-                "Enter launch  a attach  x stop  r refresh  h hash  I install tools",
+                "Enter start/open  a open  x stop all  r refresh  h hash  I install tools",
                 Style::default().fg(MUTED),
             ));
             Text::from(lines)
@@ -364,6 +476,63 @@ fn render_workspaces(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             .block(panel("Layout"))
             .wrap(Wrap { trim: false }),
         chunks[1],
+    );
+}
+
+fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(view) = &app.app_view else {
+        frame.render_widget(Paragraph::new("Opening workspace apps..."), area);
+        return;
+    };
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(8),
+            Constraint::Length(2),
+        ])
+        .split(area);
+    let titles = view
+        .apps
+        .iter()
+        .map(|managed_app| Line::from(managed_app.window_name.clone()))
+        .collect::<Vec<_>>();
+    frame.render_widget(
+        Tabs::new(titles)
+            .block(
+                Block::default()
+                    .title(format!(
+                        " t4e Apps · {} · {} ",
+                        view.workspace_title,
+                        if app.mouse_enabled { "MOUSE" } else { "SELECT" }
+                    ))
+                    .borders(Borders::ALL),
+            )
+            .select(view.selected)
+            .style(Style::default().fg(Color::Gray))
+            .highlight_style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
+            .divider(" | "),
+        sections[0],
+    );
+    let title = view
+        .apps
+        .get(view.selected)
+        .map(|managed_app| format!(" {} · {} ", managed_app.window_name, managed_app.process))
+        .unwrap_or_else(|| " App ".to_string());
+    let content = view
+        .content
+        .to_text()
+        .unwrap_or_else(|_| Text::from(view.content.as_str()));
+    frame.render_widget(
+        Paragraph::new(content)
+            .block(Block::default().title(title).borders(Borders::ALL))
+            .wrap(Wrap { trim: false }),
+        sections[1],
+    );
+    frame.render_widget(
+        Paragraph::new("[Tab] Next  [Shift-Tab] Previous  [Alt-BS] Background  [Alt-Q] Close")
+            .style(Style::default().fg(Color::Gray)),
+        sections[2],
     );
 }
 
@@ -409,11 +578,13 @@ fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         Line::from(format!("usage: {}", compact_usage(&app.ai_usage))),
         Line::from(""),
     ];
-    status.extend(
-        app.agent_tools()
-            .iter()
-            .map(|agent| Line::from(format!("{} ({})", agent.name, agent.run.cmd))),
-    );
+    status.extend(app.agent_tools().iter().map(|agent| {
+        Line::from(format!(
+            "{} ({})",
+            agent.name,
+            agent.run_command_for_current_platform()
+        ))
+    }));
     status.extend([
         Line::from(""),
         Line::styled(
@@ -536,11 +707,9 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         format!("Search: {}_   Enter apply   Esc cancel", app.search_query)
     } else if app.ai_input_mode {
         "AI prompt input   Enter send   Esc cancel".to_string()
-    } else if area.width < 80 {
-        format!("Tab j/k ? help q back | {}", app.status)
     } else {
         format!(
-            "{} | Tab switch  arrows/jk move  ? help  q back/quit",
+            "{} | arrows/jk move  Enter open/run  Backspace back  ? help",
             app.status
         )
     };
@@ -560,11 +729,13 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             "Navigation",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
-        Line::from("1-7 / Tab     switch screens"),
         Line::from("arrows / j k  move selection"),
-        Line::from("Enter         screen action"),
+        Line::from("Enter         open pack or run app"),
+        Line::from("Tab           switch running apps"),
+        Line::from("Backspace     back / keep app running"),
+        Line::from("Alt+M         toggle text selection / mouse controls"),
         Line::from("/             search catalog"),
-        Line::from("q / Esc       back, then quit"),
+        Line::from("q / Esc       main, then quit"),
         Line::from("Ctrl-C        quit immediately"),
         Line::from(""),
         Line::styled("Press any key to close", Style::default().fg(MUTED)),
@@ -583,7 +754,7 @@ fn render_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     };
     let popup = centered_rect(76, 14, area);
     frame.render_widget(Clear, popup);
-    let content = Text::from(vec![
+    let mut lines = vec![
         Line::styled(
             "Explicit installation approval required",
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
@@ -592,17 +763,113 @@ fn render_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Line::from(format!("tool: {}", confirmation.tool_id)),
         Line::from(format!("command: {}", confirmation.command)),
         Line::from(""),
-        Line::from(format!("Type: {}", confirmation.expected)),
-        Line::styled(
+    ];
+    if confirmation.typed {
+        lines.push(Line::from(format!("Type: {}", confirmation.expected)));
+        lines.push(Line::styled(
             format!("> {}_", confirmation.input),
             Style::default().fg(SELECTED),
-        ),
-        Line::from(""),
-        Line::styled("Enter confirm   Esc cancel", Style::default().fg(MUTED)),
-    ]);
+        ));
+        lines.push(Line::from(""));
+    } else {
+        lines.push(Line::from("SAFE app: no confirmation phrase is required."));
+        lines.push(Line::from(""));
+    }
+    lines.push(Line::styled(
+        "Enter confirm   Esc cancel",
+        Style::default().fg(MUTED),
+    ));
+    let content = Text::from(lines);
     frame.render_widget(
         Paragraph::new(content)
             .block(panel("Install confirmation"))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
+}
+
+fn render_launch_options(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(state) = &app.launch_options else {
+        return;
+    };
+    let Some(tool) = app
+        .catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == state.tool_id)
+    else {
+        return;
+    };
+    let popup = centered_rect(72, (tool.run_options.len() as u16 + 8).min(22), area);
+    frame.render_widget(Clear, popup);
+    let mut lines = vec![
+        Line::styled(
+            format!("{} launch options", state.tool_name),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Line::from(""),
+    ];
+    for (index, (option, selection)) in tool.run_options.iter().zip(&state.selections).enumerate() {
+        let value = option
+            .values
+            .get(selection.value_index)
+            .map_or(String::new(), |value| format!("  < {value} >"));
+        let line = format!(
+            "{} [{}] {:<24} {}{}",
+            if index == state.selected { ">" } else { " " },
+            if selection.enabled { "x" } else { " " },
+            option.label,
+            option.flag,
+            value
+        );
+        lines.push(Line::styled(
+            line,
+            if index == state.selected {
+                selection_style()
+            } else if selection.enabled {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default().fg(Color::Gray)
+            },
+        ));
+    }
+    lines.extend([
+        Line::from(""),
+        Line::styled(
+            "Space enable  Left/Right value  Enter launch  Esc cancel",
+            Style::default().fg(MUTED),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel("Configure app"))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
+}
+
+fn render_uninstall_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(request) = &app.uninstall_confirmation else {
+        return;
+    };
+    let popup = centered_rect(76, 12, area);
+    frame.render_widget(Clear, popup);
+    let content = Text::from(vec![
+        Line::styled(
+            "Remove installed app",
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+        ),
+        Line::from(""),
+        Line::from(format!("app: {}", request.tool_id)),
+        Line::from(format!("command: {}", request.command)),
+        Line::from(""),
+        Line::from("The package manager will remove this app."),
+        Line::from(""),
+        Line::styled("Enter uninstall   Esc cancel", Style::default().fg(MUTED)),
+    ]);
+    frame.render_widget(
+        Paragraph::new(content)
+            .block(panel("Uninstall confirmation"))
             .wrap(Wrap { trim: false }),
         popup,
     );

@@ -10,7 +10,7 @@ workspaces:
           split: root
           direction: right
           size: "40%"
-          cmd: "yewtube"
+          cmd: "yt"
         - id: player
           split: root
           direction: left

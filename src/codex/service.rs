@@ -8,7 +8,10 @@ use super::app_server::CodexAppServer;
 
 #[derive(Debug)]
 pub enum CodexCommand {
-    Prompt(String),
+    Prompt {
+        text: String,
+        environment_context: String,
+    },
     Interrupt,
     Shutdown,
 }
@@ -35,12 +38,10 @@ pub struct CodexService {
 }
 
 impl CodexService {
-    pub fn spawn(cwd: String, environment_context: String) -> Self {
+    pub fn spawn(cwd: String) -> Self {
         let (command_sender, command_receiver) = mpsc::channel();
         let (event_sender, event_receiver) = mpsc::channel();
-        let handle = thread::spawn(move || {
-            run_service(cwd, environment_context, command_receiver, event_sender)
-        });
+        let handle = thread::spawn(move || run_service(cwd, command_receiver, event_sender));
         Self {
             commands: command_sender,
             events: event_receiver,
@@ -66,12 +67,7 @@ impl Drop for CodexService {
     }
 }
 
-fn run_service(
-    cwd: String,
-    environment_context: String,
-    commands: Receiver<CodexCommand>,
-    events: Sender<CodexEvent>,
-) {
+fn run_service(cwd: String, commands: Receiver<CodexCommand>, events: Sender<CodexEvent>) {
     let mut client = match connect_client(&events) {
         Ok(client) => client,
         Err(error) => {
@@ -82,12 +78,15 @@ fn run_service(
 
     let mut thread_id: Option<String> = None;
     let mut active_turn: Option<String> = None;
-    let mut active_prompt: Option<String> = None;
+    let mut active_prompt: Option<(String, String)> = None;
     let mut retry_used = false;
     loop {
         match commands.recv_timeout(Duration::from_millis(25)) {
             Ok(CodexCommand::Shutdown) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
-            Ok(CodexCommand::Prompt(prompt)) => {
+            Ok(CodexCommand::Prompt {
+                text: prompt,
+                environment_context,
+            }) => {
                 if active_turn.is_some() {
                     let _ = events.send(CodexEvent::Error(
                         "A Codex turn is already active; interrupt it first".to_string(),
@@ -104,7 +103,7 @@ fn run_service(
                     ) {
                         Ok(turn_id) => {
                             active_turn = Some(turn_id.clone());
-                            active_prompt = Some(prompt);
+                            active_prompt = Some((prompt, environment_context));
                             retry_used = false;
                             let _ = events.send(CodexEvent::TurnStarted(turn_id));
                         }
@@ -133,7 +132,7 @@ fn run_service(
                         active_turn = None;
                         if status == "failed"
                             && !retry_used
-                            && let Some(prompt) = active_prompt.as_deref()
+                            && let Some((prompt, environment_context)) = active_prompt.as_ref()
                         {
                             let detail = error.as_deref().unwrap_or("unknown failure");
                             let fallback_model = fallback_model_for_error(detail);
@@ -151,7 +150,7 @@ fn run_service(
                                     &mut client,
                                     &mut thread_id,
                                     &cwd,
-                                    &environment_context,
+                                    environment_context,
                                     prompt,
                                     fallback_model.as_deref(),
                                     &events,
@@ -213,9 +212,7 @@ fn start_prompt(
         let _ = events.send(CodexEvent::ThreadStarted(id.clone()));
         *thread_id = Some(id);
     }
-    let bounded_prompt = format!(
-        "You are the t4e intent planner. Use only IDs in this environment. Do not run commands or edit files. Return a concise message and at most one bounded action. catalog_search and install_plan are read-only; use catalog_search for requests to find or show a catalog tool. workspace_launch is side-effecting: say it is proposed and requires approval, and never claim it was executed.\n\n{environment_context}\n\nUser request: {prompt}"
-    );
+    let bounded_prompt = planner_prompt(environment_context, prompt);
     let thread_id = thread_id.as_deref().expect("thread initialized");
     match model {
         Some(model) => client.start_turn_structured_with_model(
@@ -226,6 +223,12 @@ fn start_prompt(
         ),
         None => client.start_turn_structured(thread_id, &bounded_prompt, bounded_action_schema()),
     }
+}
+
+pub fn planner_prompt(environment_context: &str, user_request: &str) -> String {
+    format!(
+        "You are the AI control plane embedded inside t4e (TUI for Everything), not a generic coding assistant. The user is talking to you from t4e's AI Home. t4e catalogs terminal apps, plans and executes approved installations, and launches or manages approved tmux workspaces containing those apps. Treat the supplied t4e runtime context as authoritative.\n\nYour job is to help the user operate this t4e environment. Refer to apps and workspaces by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. catalog_search and install_plan are read-only proposals. workspace_launch is side-effecting: clearly say it is proposed and requires explicit approval in t4e. Direct launch of an individual catalog app is not enabled yet; explain that limitation instead of pretending to start it. t4e, not you, owns installation, process lifecycle, tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: navigate t4e to a catalog app\n- install_plan: prepare an app installation plan in t4e\n- workspace_launch: propose launching a t4e workspace after approval\n\nCurrent t4e runtime context:\n{environment_context}\n\nUser request: {user_request}"
+    )
 }
 
 enum MessageOutcome {
@@ -386,6 +389,7 @@ fn account_label(value: &Value) -> String {
 mod tests {
     use super::{
         MessageOutcome, extract_error_detail, fallback_model_for_error, parse_turn_completion,
+        planner_prompt,
     };
     use serde_json::json;
 
@@ -421,5 +425,21 @@ mod tests {
         let error = "The 'future' model requires a newer version of Codex. Please upgrade.";
         assert_eq!(fallback_model_for_error(error).as_deref(), Some("gpt-5.4"));
         assert!(fallback_model_for_error("temporary network failure").is_none());
+    }
+
+    #[test]
+    fn planner_prompt_establishes_t4e_identity_and_execution_boundaries() {
+        let prompt = planner_prompt(
+            "platform: linux\ncatalog apps: yazi=Yazi (run: yazi)",
+            "What can you do here?",
+        );
+
+        assert!(prompt.contains("AI control plane embedded inside t4e"));
+        assert!(prompt.contains("not a generic coding assistant"));
+        assert!(prompt.contains("plans and executes approved installations"));
+        assert!(prompt.contains("launches or manages approved tmux workspaces"));
+        assert!(prompt.contains("Direct launch of an individual catalog app is not enabled yet"));
+        assert!(prompt.contains("catalog apps: yazi=Yazi (run: yazi)"));
+        assert!(prompt.ends_with("User request: What can you do here?"));
     }
 }

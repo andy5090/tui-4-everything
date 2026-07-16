@@ -47,8 +47,9 @@ tools:
         method: brew
         package_hints: ["spotatui"]
       - platform: linux
-        method: apt
+        method: cargo
         package_hints: ["spotatui"]
+        system_packages: ["pkg-config", "libssl-dev", "xorg-dev", "libpipewire-0.3-dev", "libspa-0.2-dev"]
   - id: spotify-player
     name: "Spotify Player"
     category: entertainment
@@ -63,8 +64,9 @@ tools:
         method: brew
         package_hints: ["spotify-player"]
       - platform: linux
-        method: apt
-        package_hints: ["spotify-player"]
+        method: cargo
+        package_hints: ["spotify_player"]
+        system_packages: ["libssl-dev", "libasound2-dev", "libdbus-1-dev"]
   - id: ncspot
     name: "Ncspot"
     category: entertainment
@@ -79,8 +81,9 @@ tools:
         method: brew
         package_hints: ["ncspot"]
       - platform: linux
-        method: apt
+        method: cargo
         package_hints: ["ncspot"]
+        system_packages: ["pkg-config", "libssl-dev", "libasound2-dev", "libdbus-1-dev", "libpulse-dev"]
   - id: cava
     name: "Cava"
     category: entertainment
@@ -111,12 +114,13 @@ tools:
         method: brew
         package_hints: ["termusic"]
       - platform: linux
-        method: apt
-        package_hints: ["termusic"]
+        method: cargo
+        package_hints: ["termusic", "termusic-server"]
+        system_packages: ["git", "clang", "protobuf-compiler", "libdbus-1-dev", "libasound2-dev"]
   - id: mpv
     name: "mpv"
     category: entertainment
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -137,18 +141,20 @@ tools:
     risk: SAFE
     exposure: starter
     run:
-      cmd: "yewtube"
+      cmd: "yt"
     installers:
       - platform: macos
         method: brew
         package_hints: ["yewtube"]
       - platform: linux
-        method: apt
+        method: pipx
         package_hints: ["yewtube"]
+    checks:
+      - which: "yt"
   - id: yt-dlp
     name: "yt-dlp"
     category: entertainment
-    tags: []
+    tags: [support]
     audience: general
     risk: CAUTION
     exposure: starter
@@ -164,7 +170,7 @@ tools:
   - id: ffmpeg
     name: "ffmpeg"
     category: utility
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -180,7 +186,7 @@ tools:
   - id: streamlink
     name: "Streamlink"
     category: entertainment
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -196,7 +202,7 @@ tools:
   - id: mediainfo
     name: "MediaInfo"
     category: utility
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -223,8 +229,9 @@ tools:
         method: brew
         package_hints: ["shellcast"]
       - platform: linux
-        method: apt
+        method: cargo
         package_hints: ["shellcast"]
+        system_packages: ["pkg-config", "libssl-dev", "libasound2-dev"]
   - id: newsboat
     name: "Newsboat"
     category: reading
@@ -239,7 +246,7 @@ tools:
         method: brew
         package_hints: ["newsboat"]
       - platform: linux
-        method: apt
+        method: snap
         package_hints: ["newsboat"]
   - id: glow
     name: "Glow"
@@ -255,12 +262,12 @@ tools:
         method: brew
         package_hints: ["glow"]
       - platform: linux
-        method: apt
+        method: snap
         package_hints: ["glow"]
   - id: jq
     name: "jq"
     category: utility
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -276,7 +283,7 @@ tools:
   - id: yq
     name: "yq"
     category: utility
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -292,7 +299,7 @@ tools:
   - id: tldr
     name: "tldr"
     category: reading
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -308,7 +315,7 @@ tools:
   - id: less
     name: "less"
     category: reading
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -335,12 +342,12 @@ tools:
         method: brew
         package_hints: ["yazi"]
       - platform: linux
-        method: apt
+        method: snap_classic
         package_hints: ["yazi"]
   - id: bat
     name: "bat"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -353,10 +360,11 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["bat"]
+        executable: "batcat"
   - id: eza
     name: "eza"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -372,7 +380,7 @@ tools:
   - id: fd
     name: "fd"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -385,10 +393,11 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["fd-find"]
+        executable: "fdfind"
   - id: ripgrep
     name: "ripgrep"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -404,7 +413,7 @@ tools:
   - id: fzf
     name: "fzf"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -420,7 +429,7 @@ tools:
   - id: zoxide
     name: "zoxide"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -436,7 +445,7 @@ tools:
   - id: dust
     name: "dust"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -447,12 +456,12 @@ tools:
         method: brew
         package_hints: ["dust"]
       - platform: linux
-        method: apt
-        package_hints: ["dust"]
+        method: cargo
+        package_hints: ["du-dust"]
   - id: duf
     name: "duf"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -495,12 +504,12 @@ tools:
         method: brew
         package_hints: ["broot"]
       - platform: linux
-        method: apt
+        method: cargo
         package_hints: ["broot"]
   - id: tree
     name: "tree"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -516,7 +525,7 @@ tools:
   - id: file
     name: "file"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -532,7 +541,7 @@ tools:
   - id: p7zip
     name: "p7zip"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -548,7 +557,7 @@ tools:
   - id: unzip
     name: "unzip"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: SAFE
     exposure: starter
@@ -564,7 +573,7 @@ tools:
   - id: rsync
     name: "rsync"
     category: files
-    tags: []
+    tags: [support]
     audience: general
     risk: CAUTION
     exposure: starter
@@ -586,6 +595,29 @@ tools:
     exposure: starter
     run:
       cmd: "cmatrix"
+    run_options:
+      - id: bold
+        label: "Bold characters"
+        flag: "-b"
+        default_value: null
+      - id: asynchronous
+        label: "Asynchronous scroll"
+        flag: "-a"
+        default_value: null
+      - id: rainbow
+        label: "Rainbow mode"
+        flag: "-r"
+        default_value: null
+      - id: update-delay
+        label: "Update delay"
+        flag: "-u"
+        values: ["1", "2", "4", "6", "8", "10"]
+        default_value: "4"
+      - id: color
+        label: "Color"
+        flag: "-C"
+        values: ["green", "red", "blue", "white", "yellow", "cyan", "magenta", "black"]
+        default_value: "green"
     installers:
       - platform: macos
         method: brew
@@ -623,8 +655,9 @@ tools:
         method: brew
         package_hints: ["asciiquarium"]
       - platform: linux
-        method: apt
+        method: snap
         package_hints: ["asciiquarium"]
+    notes: "Linux uses the unofficial Snap Store package maintained at github.com/brlin-tw/asciiquarium-snap."
   - id: sl
     name: "sl"
     category: fun
@@ -688,7 +721,7 @@ tools:
         package_hints: ["fortune"]
       - platform: linux
         method: apt
-        package_hints: ["fortune"]
+        package_hints: ["fortune-mod"]
   - id: tty-clock
     name: "tty-clock"
     category: fun
@@ -698,6 +731,36 @@ tools:
     exposure: starter
     run:
       cmd: "tty-clock"
+    run_options:
+      - id: seconds
+        label: "Show seconds"
+        flag: "-s"
+        default_value: null
+      - id: centered
+        label: "Center clock"
+        flag: "-c"
+        default_value: null
+      - id: box
+        label: "Show box"
+        flag: "-x"
+        default_value: null
+      - id: bold
+        label: "Bold colors"
+        flag: "-b"
+        default_value: null
+      - id: twelve-hour
+        label: "12-hour time"
+        flag: "-t"
+        default_value: null
+      - id: utc
+        label: "UTC time"
+        flag: "-u"
+        default_value: null
+      - id: color
+        label: "Clock color"
+        flag: "-C"
+        values: ["0", "1", "2", "3", "4", "5", "6", "7"]
+        default_value: "2"
     installers:
       - platform: macos
         method: brew
@@ -730,6 +793,34 @@ tools:
     exposure: starter
     run:
       cmd: "pipes.sh"
+    run_options:
+      - id: pipes
+        label: "Number of pipes"
+        flag: "-p"
+        values: ["1", "2", "3", "4", "6", "8"]
+        default_value: "1"
+      - id: type
+        label: "Pipe type"
+        flag: "-t"
+        values: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        default_value: "0"
+      - id: framerate
+        label: "Framerate"
+        flag: "-f"
+        values: ["20", "30", "45", "60", "75", "100"]
+        default_value: "75"
+      - id: random-start
+        label: "Random start"
+        flag: "-R"
+        default_value: null
+      - id: no-bold
+        label: "Disable bold"
+        flag: "-B"
+        default_value: null
+      - id: no-color
+        label: "Disable color"
+        flag: "-C"
+        default_value: null
     installers:
       - platform: macos
         method: brew
@@ -737,6 +828,8 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["pipes-sh"]
+        executable: "/usr/games/pipes"
+    notes: "Ubuntu installs the pipes-sh executable as /usr/games/pipes."
   - id: ninvaders
     name: "ninvaders"
     category: fun
@@ -799,7 +892,7 @@ tools:
         method: brew
         package_hints: ["helix"]
       - platform: linux
-        method: apt
+        method: snap_classic
         package_hints: ["helix"]
   - id: neovim
     name: "Neovim"

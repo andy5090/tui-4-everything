@@ -31,6 +31,13 @@ mechanism.
 - Phase 6 packaging, protocol checks, CI, and real-gate workflow: complete.
   Gates 1 through 5 passed on isolated GitHub runners, and Linux x64 plus macOS
   ARM64 release packages passed out-of-tree validation.
+- Pack-first app shell: implemented. Selecting a pack opens its apps, Enter
+  launches the selected app, missing apps install and then launch, and the
+  embedded App View owns switching and process lifecycle without exposing tmux
+  controls.
+- Ubuntu catalog hardening: package-source candidates and declared build
+  dependencies are live-checked; installs are serialized; apt lock contention,
+  missing pipx, Cargo build duration, and multi-binary apps are handled.
 
 ### Phase 0: Engineering Baseline
 
@@ -44,11 +51,23 @@ Exit criteria:
 - Pull requests run formatting, lint, and unit/integration tests.
 - Mock gate results cannot be presented as real installation success.
 
-### Phase 1: Basic TUI Shell
+### Phase 1: Pack-First TUI Shell
 
-- Provide Home, Catalog, Install, Workspaces, Agents, and Logs screens.
+- Make packs the main screen and open a pack directly into its app list.
+- Launch the selected app with Enter; keep installs, workspaces, AI, logs, and
+  settings as secondary utilities rather than top-level tabs.
+- Show install state, attempts, recent output, and failures directly in the app
+  list and detail panel while an app is being prepared for launch.
+- Switch running apps with Tab/Shift-Tab, return with Alt+Backspace while keeping
+  the app alive, and explicitly terminate the selected app with Alt+Q.
+- Keep terminal text selection as the default mouse mode and toggle interactive
+  t4e mouse capture with Alt+M.
+- Expose allowlisted launch flags/arguments and verified package-manager
+  uninstall actions in the app selection screen.
 - Support keyboard navigation, catalog search, list selection, and help.
 - Display registry-backed packs, tools, risk levels, and workspace layouts.
+- Keep one-shot support commands available to pack installs and AI while only
+  presenting input-ready interactive apps in each pack launcher.
 - Keep all existing bootstrap CLI commands available.
 
 Exit criteria:
@@ -126,8 +145,10 @@ Exit criteria:
 
 ## v0.2 Experiments
 
-- Generic PTY screen observation with ANSI normalization.
-- Bounded synthetic key input for applications without an adapter.
+- Generic PTY screen observation with ANSI normalization: implemented for
+  t4e-managed tmux panes.
+- Bounded synthetic key input for applications without an adapter: implemented
+  for explicitly selected, t4e-managed panes; expand the per-app key policy.
 - Per-application reliability evaluation before enabling autonomous control.
 - Voice or remote clients only after local authentication and policy boundaries
   have been proven.

@@ -1,14 +1,15 @@
 # t4e v0.1 Completion Audit
 
-Date: 2026-07-16
+Date: 2026-07-17
 
 ## Implemented And Proven Locally
 
 | Requirement | Authoritative evidence | Result |
 | --- | --- | --- |
-| Engineering baseline | `scripts/gates/run_all.sh`, CI workflow, 69 default tests, Clippy warnings denied | Pass |
-| TUI navigation and responsive rendering | `tests/tui_state.rs`, 120x30 release PTY smoke | Pass |
+| Engineering baseline | `scripts/gates/run_all.sh`, CI workflow, 94 default tests, Clippy warnings denied | Pass |
+| Pack-first app navigation and responsive rendering | `tests/tui_state.rs`, real single-app tmux lifecycle, 120x30 release PTY smoke | Pass |
 | Installation execution and recovery | `tests/install_execution.rs`, `tests/queue_state.rs`, `tests/storage_state.rs` | Pass |
+| Full Linux catalog install and launch | Local package/source/dependency live gate plus manual `catalog-install-gate.yml`, isolated Ubuntu runner and evidence per app | Source and dependency gate pass; full install matrix not yet run |
 | tmux lifecycle and reproducibility | Gate 3 direct runtime report and hashed logs | Pass |
 | Codex app-server control plane | Current-protocol test and signed-in streamed live turn | Pass |
 | MCP protocol and fail-closed side effects | `tests/mcp_server.rs` and stdio lifecycle smoke | Pass |
@@ -45,3 +46,7 @@ Automated self-verification, the first eight-task release-binary walkthrough,
 and external Gates 1 through 5 are complete. All S0 through S2 findings are
 closed; see `docs/plans/usability-results-2026-07-15.md`. Independent human
 testing remains the final product-confidence step before the v0.1 release.
+
+The full-catalog workflow is intentionally separate from the fast release gates.
+It mutates a clean runner for every selected app and must pass before claiming
+that every Registry installer is operational on Ubuntu 24.04.

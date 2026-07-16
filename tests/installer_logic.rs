@@ -16,6 +16,7 @@ fn fake_tool(risk: Risk) -> Tool {
         run: RunSpec {
             cmd: "fake".to_string(),
         },
+        run_options: Vec::new(),
         installers: vec![],
         checks: vec![],
         notes: None,
@@ -55,6 +56,8 @@ fn script_installers_always_require_confirmation() {
         platform: Platform::Linux,
         method: InstallMethod::Script,
         package_hints: vec!["example".to_string()],
+        system_packages: vec![],
+        executable: None,
         install_cmd: Some("curl https://example.com/install.sh | bash".to_string()),
         requires_confirm: false,
     };
@@ -71,6 +74,8 @@ fn high_risk_tools_require_confirmation_even_for_pkg_manager() {
         platform: Platform::Macos,
         method: InstallMethod::Brew,
         package_hints: vec!["codex".to_string()],
+        system_packages: vec![],
+        executable: None,
         install_cmd: None,
         requires_confirm: false,
     };
@@ -82,12 +87,14 @@ fn high_risk_tools_require_confirmation_even_for_pkg_manager() {
 }
 
 #[test]
-fn apt_command_is_noninteractive_and_without_sudo() {
+fn apt_command_uses_cached_sudo_noninteractively() {
     let tool = fake_tool(Risk::Safe);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
         package_hints: vec!["ripgrep".to_string()],
+        system_packages: vec![],
+        executable: None,
         install_cmd: None,
         requires_confirm: false,
     };
@@ -96,8 +103,108 @@ fn apt_command_is_noninteractive_and_without_sudo() {
         build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert_eq!(
         task.command,
-        "DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep"
+        "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y ripgrep"
     );
+}
+
+#[test]
+fn pipx_install_bootstraps_the_package_manager() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Pipx,
+        package_hints: vec!["yewtube".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert!(task.command.contains("install -y pipx"));
+    assert!(task.command.ends_with("pipx install yewtube"));
+}
+
+#[test]
+fn cargo_install_uses_the_published_lockfile() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Cargo,
+        package_hints: vec!["spotatui".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(task.command, "cargo install --locked spotatui");
+}
+
+#[test]
+fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Cargo,
+        package_hints: vec!["termusic".to_string(), "termusic-server".to_string()],
+        system_packages: vec![
+            "protobuf-compiler".to_string(),
+            "libasound2-dev".to_string(),
+        ],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert!(task.requires_privileges);
+    assert_eq!(
+        task.command,
+        "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y protobuf-compiler libasound2-dev && cargo install --locked termusic termusic-server"
+    );
+}
+
+#[test]
+fn snap_command_uses_cached_sudo_noninteractively() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Snap,
+        package_hints: vec!["asciiquarium".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(task.command, "sudo -n snap install asciiquarium");
+    assert!(!task.requires_confirmation);
+}
+
+#[test]
+fn classic_snap_command_uses_cached_sudo_noninteractively() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::SnapClassic,
+        package_hints: vec!["yazi".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(task.command, "sudo -n snap install --classic yazi");
+    assert!(!task.requires_confirmation);
 }
 
 #[derive(Default)]
@@ -148,6 +255,8 @@ fn unsafe_package_hint_is_rejected() {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
         package_hints: vec!["ripgrep; rm -rf /".to_string()],
+        system_packages: vec![],
+        executable: None,
         install_cmd: None,
         requires_confirm: false,
     };
@@ -162,6 +271,8 @@ fn non_script_installer_cannot_override_the_generated_command() {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
         package_hints: vec!["ripgrep".to_string()],
+        system_packages: vec![],
+        executable: None,
         install_cmd: Some("curl https://example.com | sh".to_string()),
         requires_confirm: false,
     };

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail};
 
-use crate::catalog::models::{CatalogRegistry, InstallMethod};
+use crate::catalog::models::{CatalogRegistry, InstallMethod, Platform};
 use crate::mux::workspace::WorkspaceRegistry;
 
 pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
@@ -12,12 +12,85 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
             bail!("duplicate tool id: {}", tool.id);
         }
 
+        if tool.run.cmd.trim().is_empty()
+            || tool
+                .run
+                .cmd
+                .chars()
+                .any(|ch| matches!(ch, ';' | '|' | '&' | '`' | '$' | '<' | '>' | '\n' | '\r'))
+        {
+            bail!("tool {} has an unsafe run command", tool.id);
+        }
+        let mut option_ids = HashSet::new();
+        for option in &tool.run_options {
+            if !option_ids.insert(option.id.as_str()) {
+                bail!("tool {} has duplicate run option {}", tool.id, option.id);
+            }
+            if option.label.trim().is_empty()
+                || !is_safe_argument(&option.flag)
+                || !option.flag.starts_with('-')
+                || option.values.iter().any(|value| !is_safe_argument(value))
+            {
+                bail!("tool {} has an unsafe run option {}", tool.id, option.id);
+            }
+            if let Some(default) = &option.default_value
+                && !option.values.contains(default)
+            {
+                bail!(
+                    "tool {} option {} has an unknown default value",
+                    tool.id,
+                    option.id
+                );
+            }
+        }
+        for platform in [Platform::Macos, Platform::Linux] {
+            let count = tool
+                .installers
+                .iter()
+                .filter(|installer| installer.platform == platform)
+                .count();
+            if count != 1 {
+                bail!(
+                    "tool {} must define exactly one {:?} installer, found {}",
+                    tool.id,
+                    platform,
+                    count
+                );
+            }
+        }
+
         for installer in &tool.installers {
+            if installer.package_hints.is_empty()
+                || installer
+                    .package_hints
+                    .iter()
+                    .any(|hint| !is_safe_argument(hint))
+            {
+                bail!("tool {} installer has invalid package hints", tool.id);
+            }
+            if installer
+                .system_packages
+                .iter()
+                .any(|package| !is_safe_argument(package))
+            {
+                bail!("tool {} installer has invalid system packages", tool.id);
+            }
+            if !installer.system_packages.is_empty() && installer.platform != Platform::Linux {
+                bail!(
+                    "tool {} has system packages on a non-Linux installer",
+                    tool.id
+                );
+            }
             if matches!(installer.method, InstallMethod::Script) && !installer.requires_confirm {
                 bail!(
                     "tool {} has script installer without explicit confirmation",
                     tool.id
                 );
+            }
+            if matches!(installer.method, InstallMethod::Script)
+                && installer.install_cmd.as_deref().is_none_or(str::is_empty)
+            {
+                bail!("tool {} has a script installer without a command", tool.id);
             }
             if !matches!(installer.method, InstallMethod::Script) && installer.install_cmd.is_some()
             {
@@ -36,6 +109,13 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn is_safe_argument(value: &str) -> bool {
+    !value.is_empty()
+        && !value.chars().any(|ch| {
+            ch.is_whitespace() || matches!(ch, ';' | '|' | '&' | '`' | '$' | '<' | '>' | '\'' | '"')
+        })
 }
 
 pub fn validate_workspaces(catalog: &CatalogRegistry, registry: &WorkspaceRegistry) -> Result<()> {
@@ -70,6 +150,10 @@ pub fn validate_workspaces(catalog: &CatalogRegistry, registry: &WorkspaceRegist
                     tool_id
                 );
             }
+        }
+
+        if workspace.layout.panes.is_empty() {
+            bail!("workspace {} has no apps", workspace.id);
         }
 
         let mut pane_ids = HashSet::new();

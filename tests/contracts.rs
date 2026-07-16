@@ -29,6 +29,7 @@ fn agents_and_script_installs_are_high_risk() {
         run: RunSpec {
             cmd: "codex".to_string(),
         },
+        run_options: Vec::new(),
         installers: vec![],
         checks: vec![],
         notes: None,
@@ -46,10 +47,13 @@ fn agents_and_script_installs_are_high_risk() {
         run: RunSpec {
             cmd: "custom".to_string(),
         },
+        run_options: Vec::new(),
         installers: vec![Installer {
             platform: t4e::catalog::models::Platform::Linux,
             method: InstallMethod::Script,
             package_hints: vec!["custom".to_string()],
+            system_packages: vec![],
+            executable: None,
             install_cmd: Some("curl x | bash".to_string()),
             requires_confirm: true,
         }],

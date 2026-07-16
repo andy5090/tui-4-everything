@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 use t4e::app::state::AppState;
 use t4e::app::terminal::run as run_terminal_app;
 use t4e::catalog::loader::{load_catalog, load_workspaces};
-use t4e::catalog::models::Platform;
+use t4e::catalog::models::{Exposure, Platform};
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 use t4e::gates::{
     AttemptResult, CANONICAL_SAMPLE_TOOLS, EvidenceKind, FailureClassification, GateProvenance,
@@ -55,6 +55,14 @@ enum Command {
         tool_id: String,
         #[arg(long, default_value = "macos")]
         platform: String,
+    },
+    CatalogPlans {
+        #[arg(long, default_value = "registry/catalog.yaml")]
+        catalog: PathBuf,
+        #[arg(long, default_value = "linux")]
+        platform: String,
+        #[arg(long, default_value = "all", value_parser = ["all", "starter", "search_only", "labs"])]
+        exposure: String,
     },
     Install {
         #[arg(long, default_value = "registry/catalog.yaml")]
@@ -184,6 +192,65 @@ fn main() -> Result<()> {
             let task = build_install_task(tool, installer, &InstallPolicy::default())?;
             println!("{}", serde_json::to_string_pretty(&task)?);
         }
+        Some(Command::CatalogPlans {
+            catalog,
+            platform,
+            exposure,
+        }) => {
+            let catalog_model = load_catalog(&catalog)
+                .with_context(|| format!("failed to load catalog from {}", catalog.display()))?;
+            validate_catalog(&catalog_model)?;
+            let target_platform = parse_platform(&platform)?;
+            let mut plans = Vec::new();
+            for tool in &catalog_model.tools {
+                let exposure_name = match tool.exposure {
+                    Exposure::Starter => "starter",
+                    Exposure::SearchOnly => "search_only",
+                    Exposure::Labs => "labs",
+                };
+                if exposure != "all" && exposure != exposure_name {
+                    continue;
+                }
+                let Some(installer) = tool
+                    .installers
+                    .iter()
+                    .find(|installer| installer.platform == target_platform)
+                else {
+                    plans.push(serde_json::json!({
+                        "tool_id": tool.id,
+                        "name": tool.name,
+                        "exposure": exposure_name,
+                        "launchable_app": tool.is_launchable_app(),
+                        "supported": false,
+                        "error": format!("no {platform} installer")
+                    }));
+                    continue;
+                };
+                match build_install_task(tool, installer, &InstallPolicy::default()) {
+                    Ok(task) => plans.push(serde_json::json!({
+                        "tool_id": tool.id,
+                        "name": tool.name,
+                        "exposure": exposure_name,
+                        "launchable_app": tool.is_launchable_app(),
+                        "supported": true,
+                        "package_hint": installer.package_hints.first(),
+                        "method": task.method,
+                        "command": task.command,
+                        "check_command": task.check_command,
+                        "requires_confirmation": task.requires_confirmation
+                    })),
+                    Err(error) => plans.push(serde_json::json!({
+                        "tool_id": tool.id,
+                        "name": tool.name,
+                        "exposure": exposure_name,
+                        "launchable_app": tool.is_launchable_app(),
+                        "supported": false,
+                        "error": error.to_string()
+                    })),
+                }
+            }
+            println!("{}", serde_json::to_string_pretty(&plans)?);
+        }
         Some(Command::Install {
             catalog,
             tool_id,
@@ -221,7 +288,7 @@ fn main() -> Result<()> {
                 max_attempts: attempts.max(1),
                 log_dir: log_dir_for_state(&state_path),
             };
-            let channel = format!("{:?}", task.method).to_ascii_lowercase();
+            let channel = task.method.channel_name().to_string();
             let executor = InstallExecutor::new(SystemCommandRunner, policy);
             let completed = executor.execute(
                 InstallJob::new(task, channel),
@@ -493,7 +560,9 @@ fn main() -> Result<()> {
                 let command = if manager == "brew" {
                     format!("brew install {package}")
                 } else {
-                    format!("sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y {package}")
+                    format!(
+                        "sudo env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y {package}"
+                    )
                 };
                 let mut attempts = Vec::new();
                 for attempt in 1..=2_u8 {

@@ -1,0 +1,143 @@
+name: Full catalog install verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      exposure:
+        description: Catalog exposure to verify
+        required: true
+        default: starter
+        type: choice
+        options:
+          - starter
+          - all
+
+permissions:
+  contents: read
+
+jobs:
+  catalog-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      tools: ${{ steps.matrix.outputs.tools }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Verify Ubuntu package sources resolve
+        run: cargo test --locked --test ubuntu_catalog_live -- --ignored --nocapture
+      - name: Build authoritative Linux install plans
+        run: >-
+          cargo run --locked -- catalog-plans
+          --platform linux
+          --exposure "${{ inputs.exposure }}"
+          > catalog-plans.json
+      - name: Reject catalog entries without a Linux installer
+        run: jq -e 'all(.[]; .supported == true)' catalog-plans.json
+      - id: matrix
+        name: Build isolated tool matrix
+        run: echo "tools=$(jq -c '[.[] | select(.supported)]' catalog-plans.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-catalog-install-plans
+          path: catalog-plans.json
+          retention-days: 14
+
+  install-and-postflight:
+    needs: catalog-matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        plan: ${{ fromJSON(needs.catalog-matrix.outputs.tools) }}
+    env:
+      TOOL_ID: ${{ matrix.plan.tool_id }}
+      INSTALL_METHOD: ${{ matrix.plan.method }}
+      LAUNCHABLE_APP: ${{ matrix.plan.launchable_app }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Acquire package-manager privileges
+        if: ${{ contains(fromJSON('["apt", "dnf", "pacman", "snap", "snap_classic", "pipx"]'), matrix.plan.method) }}
+        run: sudo -v
+      - name: Install and verify executable discovery
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo run --locked -- install \
+            --tool-id "$TOOL_ID" \
+            --platform linux \
+            --yes \
+            --timeout-sec 1800 \
+            --attempts 1 2>&1 | tee install.log
+      - name: Launch installed executable
+        shell: bash
+        run: |
+          set -o pipefail
+          check_command=$(cargo run --quiet --locked -- install-plan \
+            --tool-id "$TOOL_ID" \
+            --platform linux | jq -er '.check_command')
+          resolved_path=$(command -v -- "$check_command")
+
+          launch_args=(--version)
+          if [[ "$LAUNCHABLE_APP" == "true" ]]; then
+            launch_args=()
+          fi
+
+          set +e
+          launch_started=$(date +%s%3N)
+          timeout --kill-after=1s 5s "$resolved_path" "${launch_args[@]}" \
+            </dev/null >launch.stdout.log 2>launch.stderr.log
+          launch_exit=$?
+          launch_duration_ms=$(( $(date +%s%3N) - launch_started ))
+          set -e
+
+          launch_passed=true
+          if (( launch_exit == 125 || launch_exit == 126 || launch_exit == 127 ||
+                (launch_exit >= 128 && launch_exit != 137) )); then
+            launch_passed=false
+          fi
+          if grep -Eiq 'panicked at|fatal runtime error|error while loading shared libraries|segmentation fault' \
+            launch.stderr.log; then
+            launch_passed=false
+          fi
+
+          jq -n \
+            --arg tool_id "$TOOL_ID" \
+            --arg install_method "$INSTALL_METHOD" \
+            --arg source_sha "$GITHUB_SHA" \
+            --arg runner_image "$ImageOS-$ImageVersion" \
+            --arg check_command "$check_command" \
+            --arg resolved_path "$resolved_path" \
+            --argjson launchable_app "$LAUNCHABLE_APP" \
+            --argjson exit_code "$launch_exit" \
+            --argjson duration_ms "$launch_duration_ms" \
+            --argjson passed "$launch_passed" \
+            '{tool_id: $tool_id, install_method: $install_method,
+              launchable_app: $launchable_app, source_sha: $source_sha,
+              runner_image: $runner_image, check_command: $check_command,
+              resolved_path: $resolved_path, exit_code: $exit_code,
+              duration_ms: $duration_ms, passed: $passed}' \
+            > launch-result.json
+
+          # 124/137 mean an interactive TUI stayed alive until the bounded timeout.
+          if [[ "$launch_passed" != true ]]; then
+            cat launch.stderr.log >&2
+            exit 1
+          fi
+      - name: Upload per-tool evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-install-${{ matrix.plan.tool_id }}
+          path: |
+            install.log
+            launch.stdout.log
+            launch.stderr.log
+            launch-result.json
+            ~/.local/state/t4e/logs/
+          if-no-files-found: warn
+          retention-days: 14

@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::codex::app_server::CodexAppServer;
-use t4e::codex::service::bounded_action_schema;
+use t4e::codex::service::{bounded_action_schema, planner_prompt};
 
 static LIVE_CODEX_LOCK: Mutex<()> = Mutex::new(());
 
@@ -45,9 +45,7 @@ fn signed_in_codex_completes_tui_catalog_intent() {
             .collect::<Vec<_>>()
             .join(", ")
     );
-    let prompt = format!(
-        "You are the t4e intent planner. Use only IDs in this environment. Do not run commands or edit files. Return a concise message and at most one bounded action. catalog_search and install_plan are read-only; use catalog_search for requests to find or show a catalog tool. workspace_launch is side-effecting: say it is proposed and requires approval, and never claim it was executed.\n\n{environment_context}\n\nUser request: Find ripgrep in the catalog"
-    );
+    let prompt = planner_prompt(&environment_context, "Find ripgrep in the catalog");
 
     let structured = run_structured_turn(&prompt);
     assert_eq!(
@@ -58,6 +56,33 @@ fn signed_in_codex_completes_tui_catalog_intent() {
         structured["action"]["target"], "ripgrep",
         "unexpected planner response: {structured}"
     );
+}
+
+#[test]
+#[ignore = "uses the signed-in Codex plan; run explicitly for release verification"]
+fn signed_in_codex_identifies_itself_as_t4e_control_plane() {
+    let _guard = LIVE_CODEX_LOCK.lock().expect("live Codex lock");
+    if Command::new("codex").arg("--version").output().is_err() {
+        return;
+    }
+    let prompt = planner_prompt(
+        "platform: linux\ninstall queue: empty\ncatalog apps: yazi=Yazi (run: yazi)\nworkspaces: video-desk=Video Desk (mux: Tmux, apps: yazi, state: stopped)",
+        "What environment are you operating inside, and what manages app execution? Do not propose an action.",
+    );
+    let structured = run_structured_turn(&prompt);
+    let message = structured["message"]
+        .as_str()
+        .expect("planner message")
+        .to_ascii_lowercase();
+    assert!(
+        message.contains("t4e"),
+        "unexpected planner response: {structured}"
+    );
+    assert!(
+        message.contains("control") || message.contains("manage"),
+        "unexpected planner response: {structured}"
+    );
+    assert!(structured["action"].is_null());
 }
 
 fn run_structured_turn(prompt: &str) -> serde_json::Value {

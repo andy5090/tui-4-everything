@@ -26,6 +26,7 @@ fn persistent_state_round_trips_queue_and_logs() {
         method: InstallMethod::Apt,
         command: "apt-get install -y ripgrep".to_string(),
         check_command: None,
+        requires_privileges: false,
         requires_confirmation: false,
         queued_at: Utc::now(),
     };

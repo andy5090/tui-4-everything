@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
-use t4e::catalog::models::{Exposure, Risk};
+use t4e::catalog::models::{Exposure, InstallMethod, Platform, Risk};
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
 #[test]
@@ -29,6 +29,50 @@ fn registry_loads_and_validates() {
             .iter()
             .all(|tool| matches!(tool.exposure, Exposure::SearchOnly))
     );
+    let asciiquarium = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "asciiquarium")
+        .expect("asciiquarium exists");
+    assert!(asciiquarium.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux && installer.method == InstallMethod::Snap
+    }));
+
+    let yewtube = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "yewtube")
+        .expect("yewtube exists");
+    assert_eq!(yewtube.run.cmd, "yt");
+    assert!(yewtube.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux && installer.method == InstallMethod::Pipx
+    }));
+    assert_eq!(yewtube.checks[0].which.as_deref(), Some("yt"));
+
+    let pipes = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "pipes-sh")
+        .expect("pipes-sh exists");
+    let pipes_linux = pipes
+        .installers
+        .iter()
+        .find(|installer| installer.platform == Platform::Linux)
+        .expect("pipes-sh Linux installer exists");
+    assert_eq!(pipes_linux.executable.as_deref(), Some("/usr/games/pipes"));
+    assert_eq!(pipes.run_command_for(Platform::Linux), "/usr/games/pipes");
+    assert_eq!(pipes.run_command_for(Platform::Macos), "pipes.sh");
+
+    for id in ["yazi", "helix"] {
+        let tool = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == id)
+            .expect("classic snap tool exists");
+        assert!(tool.installers.iter().any(|installer| {
+            installer.platform == Platform::Linux && installer.method == InstallMethod::SnapClassic
+        }));
+    }
 }
 
 #[test]

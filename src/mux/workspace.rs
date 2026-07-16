@@ -11,9 +11,19 @@ pub struct Workspace {
     pub title: String,
     pub mux: MuxBackend,
     pub session_name: Option<String>,
+    #[serde(default)]
+    pub tmux_view: TmuxView,
     pub layout: Layout,
     #[serde(default)]
     pub recommended_tools: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TmuxView {
+    #[default]
+    Windows,
+    Panes,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

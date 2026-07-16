@@ -125,7 +125,7 @@ fn call_tool(
                         "id": tool.id,
                         "name": tool.name,
                         "risk": tool.risk,
-                        "runCommand": tool.run.cmd
+                        "runCommand": tool.run_command_for_current_platform()
                     })
                 })
                 .collect::<Vec<_>>();

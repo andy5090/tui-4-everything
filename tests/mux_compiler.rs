@@ -2,7 +2,7 @@ use t4e::mux::tmux::{
     CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot, compile_workspace,
     reproducibility_hash,
 };
-use t4e::mux::workspace::{Layout, MuxBackend, Pane, SplitDirection, Workspace};
+use t4e::mux::workspace::{Layout, MuxBackend, Pane, SplitDirection, TmuxView, Workspace};
 use t4e::mux::zellij::render_layout_kdl;
 
 fn fake_workspace() -> Workspace {
@@ -11,6 +11,7 @@ fn fake_workspace() -> Workspace {
         title: "Video Desk".to_string(),
         mux: MuxBackend::Tmux,
         session_name: Some("t4e-video".to_string()),
+        tmux_view: TmuxView::Panes,
         recommended_tools: vec!["yewtube".to_string()],
         layout: Layout {
             panes: vec![
@@ -58,6 +59,33 @@ fn compiler_tracks_pane_ids_with_tmux_print_mode() {
             .iter()
             .any(|cmd| cmd.contains("send-keys") && cmd.contains("yewtube"))
     );
+}
+
+#[test]
+fn default_window_view_compiles_one_full_screen_window_per_app() {
+    let mut workspace = fake_workspace();
+    workspace.tmux_view = TmuxView::Windows;
+    let output = compile_workspace(&workspace, "session", "main").expect("compile ok");
+
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|command| command.contains("rename-window") && command.contains("left"))
+    );
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|command| command.contains("new-window") && command.contains("player"))
+    );
+    assert!(
+        output
+            .commands
+            .iter()
+            .all(|command| !command.contains("split-window"))
+    );
+    assert_eq!(output.focus_target, "session:left");
 }
 
 #[test]

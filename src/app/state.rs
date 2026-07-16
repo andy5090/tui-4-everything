@@ -2,15 +2,15 @@ use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use crate::catalog::models::{CatalogRegistry, Platform, Risk, Tool, ToolCategory};
+use crate::catalog::models::{CatalogRegistry, InstallMethod, Platform, Risk, Tool, ToolCategory};
 use crate::codex::service::CodexEvent;
 use crate::installer::diagnostics::FailureDiagnostics;
 use crate::installer::engine::{InstallPolicy, build_install_task};
 use crate::installer::execution::{InstallJob, OutputChunk, OutputStream};
 use crate::installer::queue::QueueState;
-use crate::mux::runtime::{LaunchOutcome, ManagedSession};
+use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
 use crate::mux::tmux::compile_workspace;
 use crate::mux::workspace::{Workspace, WorkspaceRegistry};
 use crate::storage::{
@@ -19,20 +19,11 @@ use crate::storage::{
 
 use super::events::Screen;
 
-const SCREENS: [Screen; 7] = [
-    Screen::Home,
-    Screen::Catalog,
-    Screen::Install,
-    Screen::Workspace,
-    Screen::Agents,
-    Screen::Logs,
-    Screen::Settings,
-];
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallConfirmation {
     pub tool_id: String,
     pub command: String,
+    pub typed: bool,
     pub expected: String,
     pub input: String,
 }
@@ -41,13 +32,62 @@ pub struct InstallConfirmation {
 pub enum AppEffect {
     Execute(Box<InstallJob>),
     Cancel(String),
+    LaunchTool(ToolLaunchRequest),
     LaunchWorkspace(Box<WorkspaceLaunchRequest>),
-    AttachWorkspace(String),
+    OpenAppView(String),
+    SendAppInput { pane_id: String, input: AppInput },
+    CloseApp(String),
+    SetMouseCapture(bool),
+    Uninstall(UninstallRequest),
     StopWorkspace(String),
     RefreshWorkspaces,
     SnapshotWorkspace(Box<Workspace>),
     CodexPrompt(String),
     CodexInterrupt,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UninstallRequest {
+    pub tool_id: String,
+    pub command: String,
+    pub check_command: String,
+    pub method: InstallMethod,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolLaunchRequest {
+    pub tool_id: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchOptionSelection {
+    pub enabled: bool,
+    pub value_index: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchOptionsState {
+    pub tool_id: String,
+    pub tool_name: String,
+    pub selected: usize,
+    pub selections: Vec<LaunchOptionSelection>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AppInput {
+    Text(String),
+    Key(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppViewState {
+    pub session_name: String,
+    pub workspace_title: String,
+    pub return_screen: Screen,
+    pub apps: Vec<ManagedApp>,
+    pub selected: usize,
+    pub content: String,
 }
 
 #[derive(Debug, Clone)]
@@ -90,18 +130,25 @@ pub struct AppState {
     pub search_mode: bool,
     pub show_help: bool,
     pub should_quit: bool,
+    pub mouse_enabled: bool,
     pub queue: Vec<InstallJob>,
     pub logs: Vec<String>,
     pub status: String,
     pub confirmation: Option<InstallConfirmation>,
-    pub selected_tools: BTreeSet<String>,
     pub active_pack: Option<String>,
     pub favorites: BTreeSet<String>,
+    pub installed_tools: BTreeSet<String>,
+    pub uninstalling_tools: BTreeSet<String>,
+    pub uninstall_confirmation: Option<UninstallRequest>,
     pub recents: Vec<RecentItem>,
     pub settings: UserSettings,
     pub queue_running: bool,
     pub managed_sessions: Vec<ManagedSession>,
     pub workspace_missing_tools: Vec<String>,
+    pub app_view: Option<AppViewState>,
+    pub launch_options: Option<LaunchOptionsState>,
+    pending_tool_launch: Option<ToolLaunchRequest>,
+    return_after_app_close: bool,
     pub ai_account: String,
     pub ai_status: String,
     pub ai_input: String,
@@ -150,6 +197,7 @@ impl AppState {
                 ));
             }
         }
+        reconcile_saved_queue(&catalog, &mut saved);
         saved.logs.push("t4e dashboard started".to_string());
         Self {
             catalog,
@@ -165,18 +213,25 @@ impl AppState {
             search_mode: false,
             show_help: false,
             should_quit: false,
+            mouse_enabled: false,
             queue: saved.queue,
             logs: saved.logs,
             status: "Ready".to_string(),
             confirmation: None,
-            selected_tools: BTreeSet::new(),
             active_pack: None,
             favorites: saved.favorites.into_iter().collect(),
+            installed_tools: BTreeSet::new(),
+            uninstalling_tools: BTreeSet::new(),
+            uninstall_confirmation: None,
             recents: saved.recents,
             settings: saved.settings,
             queue_running: false,
             managed_sessions: Vec::new(),
             workspace_missing_tools: Vec::new(),
+            app_view: None,
+            launch_options: None,
+            pending_tool_launch: None,
+            return_after_app_close: false,
             ai_account: "connecting".to_string(),
             ai_status: "Starting local Codex app-server".to_string(),
             ai_input: String::new(),
@@ -192,8 +247,37 @@ impl AppState {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
+        if key.modifiers.contains(KeyModifiers::ALT) && key.code == KeyCode::Char('m') {
+            self.mouse_enabled = !self.mouse_enabled;
+            self.effects
+                .push_back(AppEffect::SetMouseCapture(self.mouse_enabled));
+            self.status = format!(
+                "Mouse controls {}; Alt+M toggles",
+                if self.mouse_enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+            return;
+        }
+        if self.screen == Screen::AppView {
+            self.handle_app_view_key(key);
+            return;
+        }
+
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.should_quit = true;
+            return;
+        }
+
+        if self.launch_options.is_some() {
+            self.handle_launch_options_key(key.code);
+            return;
+        }
+
+        if self.uninstall_confirmation.is_some() {
+            self.handle_uninstall_confirmation_key(key.code);
             return;
         }
 
@@ -224,9 +308,7 @@ impl AppState {
 
         match key.code {
             KeyCode::Char('?') => self.show_help = true,
-            KeyCode::Tab => self.cycle_screen(1),
-            KeyCode::BackTab => self.cycle_screen(-1),
-            KeyCode::Esc => self.screen = Screen::Home,
+            KeyCode::Backspace | KeyCode::Esc => self.return_to_main(),
             KeyCode::Char('q') if self.screen == Screen::Home => self.should_quit = true,
             KeyCode::Char('q') => self.screen = Screen::Home,
             KeyCode::Char('1') => self.screen = Screen::Home,
@@ -240,12 +322,36 @@ impl AppState {
         }
     }
 
+    pub fn handle_mouse(&mut self, mouse: MouseEvent, terminal_height: u16) {
+        if !self.mouse_enabled
+            || self.confirmation.is_some()
+            || self.ai_confirmation.is_some()
+            || self.launch_options.is_some()
+            || self.uninstall_confirmation.is_some()
+            || self.search_mode
+            || self.ai_input_mode
+        {
+            return;
+        }
+
+        match mouse.kind {
+            MouseEventKind::ScrollUp => self.move_current_selection(-1),
+            MouseEventKind::ScrollDown => self.move_current_selection(1),
+            MouseEventKind::Down(MouseButton::Left) if self.screen == Screen::AppView => {
+                self.handle_app_view_click(mouse.column, mouse.row, terminal_height);
+            }
+            MouseEventKind::Down(MouseButton::Left) => self.select_list_row(mouse.row),
+            _ => {}
+        }
+    }
+
     pub fn visible_catalog_tools(&self) -> Vec<&Tool> {
         let query = self.search_query.to_ascii_lowercase();
         self.catalog
             .tools
             .iter()
             .filter(|tool| tool.category != ToolCategory::Agents)
+            .filter(|tool| self.active_pack.is_none() || tool.is_launchable_app())
             .filter(|tool| {
                 self.active_pack.as_ref().is_none_or(|pack_id| {
                     self.catalog
@@ -289,6 +395,65 @@ impl AppState {
         self.agent_tools().get(self.agent_index).copied()
     }
 
+    pub fn ai_environment_context(&self) -> String {
+        let platform = if cfg!(target_os = "macos") {
+            "macos"
+        } else {
+            "linux"
+        };
+        let apps = self
+            .catalog
+            .tools
+            .iter()
+            .map(|tool| {
+                format!(
+                    "{}={} (run: {})",
+                    tool.id,
+                    tool.name,
+                    tool.run_command_for_current_platform()
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        let workspaces = self
+            .workspaces
+            .workspaces
+            .iter()
+            .map(|workspace| {
+                let session = self
+                    .managed_sessions
+                    .iter()
+                    .find(|session| session.workspace_id == workspace.id);
+                let runtime = session.map_or_else(
+                    || "stopped".to_string(),
+                    |session| format!("running as {}", session.name),
+                );
+                format!(
+                    "{}={} (mux: {:?}, apps: {}, state: {})",
+                    workspace.id,
+                    workspace.title,
+                    workspace.mux,
+                    workspace.recommended_tools.join(","),
+                    runtime
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        let queue = if self.queue.is_empty() {
+            "empty".to_string()
+        } else {
+            self.queue
+                .iter()
+                .map(|job| format!("{}:{:?}", job.item.tool_id, job.item.state))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        format!(
+            "platform: {platform}\ninstall queue: {queue}\ncatalog apps: {apps}\nworkspaces: {workspaces}"
+        )
+    }
+
     pub fn risk_label(risk: &Risk) -> &'static str {
         match risk {
             Risk::Safe => "SAFE",
@@ -315,8 +480,18 @@ impl AppState {
         }
     }
 
-    pub fn apply_execution(&mut self, completed: InstallJob) {
+    pub fn apply_execution(&mut self, mut completed: InstallJob) {
         let tool_id = completed.item.tool_id.clone();
+        if self.should_quit
+            && let Some(attempt) = completed.attempts.last()
+            && attempt.cancelled
+        {
+            completed.diagnostics = Some(FailureDiagnostics::from_stderr(
+                attempt.exit_code,
+                "installation interrupted because t4e exited or restarted",
+                &attempt.log_path,
+            ));
+        }
         let state = completed.item.state.clone();
         let already_installed = state == QueueState::Success
             && completed.attempts.is_empty()
@@ -347,12 +522,43 @@ impl AppState {
                 .push(format!("install: {} -> {:?}", tool_id, state));
         }
         if state == QueueState::Success {
-            self.push_recent(tool_id, "tool");
+            self.installed_tools.insert(tool_id.clone());
+            self.push_recent(tool_id.clone(), "tool");
+            if self
+                .pending_tool_launch
+                .as_ref()
+                .is_some_and(|request| request.tool_id == tool_id)
+                && let Some(request) = self.pending_tool_launch.take()
+            {
+                self.effects.push_back(AppEffect::LaunchTool(request));
+            }
+        } else if state == QueueState::Failed
+            && self
+                .pending_tool_launch
+                .as_ref()
+                .is_some_and(|request| request.tool_id == tool_id)
+        {
+            self.pending_tool_launch = None;
         }
         self.trim_logs();
         if self.queue_running {
             self.request_next_queued();
         }
+    }
+
+    pub fn apply_install_authorization_error(&mut self, tool_id: &str, error: &anyhow::Error) {
+        if self
+            .pending_tool_launch
+            .as_ref()
+            .is_some_and(|request| request.tool_id == tool_id)
+        {
+            self.pending_tool_launch = None;
+        }
+        self.queue_running = false;
+        self.status = format!("Authorization cancelled for {tool_id}: {error}");
+        self.logs
+            .push(format!("install: {tool_id} authorization failed: {error}"));
+        self.trim_logs();
     }
 
     pub fn record_output(&mut self, tool_id: &str, chunk: OutputChunk) {
@@ -392,13 +598,40 @@ impl AppState {
 
     pub fn apply_managed_sessions(&mut self, sessions: Vec<ManagedSession>) {
         self.managed_sessions = sessions;
-        self.status = format!("{} managed tmux sessions", self.managed_sessions.len());
+        self.status = format!("{} running workspaces", self.managed_sessions.len());
+    }
+
+    pub fn apply_installed_tools(&mut self, tool_ids: BTreeSet<String>) {
+        self.installed_tools = tool_ids;
+    }
+
+    pub fn mark_uninstall_started(&mut self, tool_id: &str) {
+        self.uninstalling_tools.insert(tool_id.to_string());
+        self.status = format!("Uninstalling {tool_id}");
+        self.logs.push(format!("uninstall: started {tool_id}"));
+        self.trim_logs();
+    }
+
+    pub fn apply_uninstall_result(&mut self, tool_id: &str, success: bool, error: &str) {
+        self.uninstalling_tools.remove(tool_id);
+        if success {
+            self.installed_tools.remove(tool_id);
+            self.queue.retain(|job| job.item.tool_id != tool_id);
+            self.install_index = self.install_index.min(self.queue.len().saturating_sub(1));
+            self.status = format!("Uninstalled {tool_id}");
+            self.logs.push(format!("uninstall: completed {tool_id}"));
+        } else {
+            self.status = format!("Uninstall failed for {tool_id}: {error}");
+            self.logs
+                .push(format!("uninstall: failed {tool_id}: {error}"));
+        }
+        self.trim_logs();
     }
 
     pub fn apply_workspace_launch(&mut self, outcome: LaunchOutcome) {
         self.workspace_missing_tools.clear();
         self.status = if outcome.created {
-            format!("Launched tmux session {}", outcome.session_name)
+            format!("Launched workspace {}", outcome.workspace_id)
         } else {
             format!("Session {} is already running", outcome.session_name)
         };
@@ -413,7 +646,74 @@ impl AppState {
         ));
         self.push_recent(outcome.workspace_id, "workspace");
         self.effects.push_back(AppEffect::RefreshWorkspaces);
+        self.effects
+            .push_back(AppEffect::OpenAppView(outcome.session_name));
         self.trim_logs();
+    }
+
+    pub fn open_app_view(&mut self, session_name: String, apps: Vec<ManagedApp>) {
+        if apps.is_empty() {
+            self.status = "Workspace has no running apps".to_string();
+            return;
+        }
+        let workspace_title = self
+            .workspaces
+            .workspaces
+            .iter()
+            .find(|workspace| workspace.session_name.as_deref() == Some(&session_name))
+            .map(|workspace| workspace.title.clone())
+            .unwrap_or_else(|| "Running apps".to_string());
+        let return_screen = if self.screen == Screen::AppView {
+            self.app_view
+                .as_ref()
+                .map_or(Screen::Home, |view| view.return_screen)
+        } else {
+            self.screen
+        };
+        self.app_view = Some(AppViewState {
+            session_name,
+            workspace_title,
+            return_screen,
+            apps,
+            selected: 0,
+            content: String::new(),
+        });
+        self.screen = Screen::AppView;
+        self.return_after_app_close = false;
+        self.status = "App controls are available in the t4e toolbar".to_string();
+    }
+
+    pub fn focus_app(&mut self, app_id: &str) {
+        let Some(view) = &mut self.app_view else {
+            return;
+        };
+        if let Some(index) = view.apps.iter().position(|app| app.window_name == app_id) {
+            view.selected = index;
+            view.content.clear();
+        }
+    }
+
+    pub fn update_app_view(&mut self, apps: Vec<ManagedApp>, content: String) {
+        let Some(view) = &mut self.app_view else {
+            return;
+        };
+        view.apps = apps;
+        if self.return_after_app_close {
+            self.return_after_app_close = false;
+            self.leave_app_view("App closed");
+            return;
+        }
+        if view.apps.is_empty() {
+            self.leave_app_view("App closed");
+            return;
+        }
+        view.selected = view.selected.min(view.apps.len() - 1);
+        view.content = content;
+    }
+
+    pub fn apply_app_view_error(&mut self, error: &anyhow::Error) {
+        self.return_after_app_close = false;
+        self.leave_app_view(&format!("App view closed: {error}"));
     }
 
     pub fn apply_workspace_preflight_failure(&mut self, missing_tools: Vec<String>) {
@@ -636,10 +936,9 @@ impl AppState {
                 KeyCode::Char('/') => self.search_mode = true,
                 KeyCode::Down | KeyCode::Char('j') => self.move_catalog(1),
                 KeyCode::Up | KeyCode::Char('k') => self.move_catalog(-1),
-                KeyCode::Enter => self.queue_selected_tool(),
-                KeyCode::Char(' ') => self.toggle_selected_tool(),
-                KeyCode::Char('a') => self.toggle_all_visible_tools(),
-                KeyCode::Char('I') => self.queue_selected_tools(),
+                KeyCode::Enter => self.request_selected_tool_launch(),
+                KeyCode::Char('I') => self.queue_selected_tool(),
+                KeyCode::Char('U') => self.request_selected_uninstall(),
                 KeyCode::Char('f') => self.toggle_favorite(),
                 KeyCode::Char('p') => {
                     self.active_pack = None;
@@ -669,6 +968,7 @@ impl AppState {
                 KeyCode::Char('I') => self.queue_workspace_requirements(),
                 _ => {}
             },
+            Screen::AppView => {}
             Screen::Agents => match code {
                 KeyCode::Down | KeyCode::Char('j') => self.move_agent(1),
                 KeyCode::Up | KeyCode::Char('k') => self.move_agent(-1),
@@ -696,13 +996,128 @@ impl AppState {
         }
     }
 
-    fn cycle_screen(&mut self, delta: isize) {
-        let current = SCREENS
-            .iter()
-            .position(|screen| *screen == self.screen)
-            .unwrap_or_default();
-        let next = (current as isize + delta).rem_euclid(SCREENS.len() as isize) as usize;
-        self.screen = SCREENS[next];
+    fn handle_app_view_key(&mut self, key: KeyEvent) {
+        match key.code {
+            KeyCode::BackTab | KeyCode::F(6) => self.move_app_view(-1),
+            KeyCode::Tab | KeyCode::F(7) => self.move_app_view(1),
+            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.request_close_current_app();
+            }
+            KeyCode::Backspace if key.modifiers.contains(KeyModifiers::ALT) => {
+                self.leave_app_view("Returned; apps remain running");
+            }
+            _ => {
+                let Some(input) = app_input_from_key(key) else {
+                    return;
+                };
+                if let Some(pane_id) = self
+                    .app_view
+                    .as_ref()
+                    .and_then(|view| view.apps.get(view.selected))
+                    .map(|app| app.pane_id.clone())
+                {
+                    self.effects
+                        .push_back(AppEffect::SendAppInput { pane_id, input });
+                }
+            }
+        }
+    }
+
+    fn request_close_current_app(&mut self) {
+        if let Some(pane_id) = self
+            .app_view
+            .as_ref()
+            .and_then(|view| view.apps.get(view.selected))
+            .map(|app| app.pane_id.clone())
+        {
+            self.return_after_app_close = true;
+            self.effects.push_back(AppEffect::CloseApp(pane_id));
+        }
+    }
+
+    fn leave_app_view(&mut self, status: &str) {
+        let return_screen = self
+            .app_view
+            .as_ref()
+            .map_or(Screen::Home, |view| view.return_screen);
+        self.app_view = None;
+        self.return_after_app_close = false;
+        self.screen = return_screen;
+        self.status = status.to_string();
+    }
+
+    fn handle_app_view_click(&mut self, column: u16, row: u16, terminal_height: u16) {
+        if row <= 2 {
+            let Some(view) = &mut self.app_view else {
+                return;
+            };
+            let mut start = 1_u16;
+            for (index, app) in view.apps.iter().enumerate() {
+                let width = app.window_name.chars().count() as u16 + 2;
+                if column >= start && column < start.saturating_add(width) {
+                    view.selected = index;
+                    view.content.clear();
+                    return;
+                }
+                start = start.saturating_add(width + 3);
+            }
+        } else if row >= terminal_height.saturating_sub(2) {
+            match column {
+                0..=11 => self.move_app_view(1),
+                12..=33 => self.move_app_view(-1),
+                34..=51 => {
+                    self.leave_app_view("Returned; apps remain running");
+                }
+                _ => self.request_close_current_app(),
+            }
+        }
+    }
+
+    fn move_current_selection(&mut self, delta: isize) {
+        match self.screen {
+            Screen::Home => self.move_pack(delta),
+            Screen::Catalog => self.move_catalog(delta),
+            Screen::Install => self.move_install(delta),
+            Screen::Workspace => self.move_workspace(delta),
+            Screen::AppView => self.move_app_view(delta),
+            Screen::Agents => self.move_agent(delta),
+            Screen::Settings => self.move_setting(delta),
+            Screen::Logs => {}
+        }
+    }
+
+    fn select_list_row(&mut self, row: u16) {
+        let Some(index) = row.checked_sub(4).map(usize::from) else {
+            return;
+        };
+        match self.screen {
+            Screen::Home if index < self.catalog.packs.len() => self.pack_index = index,
+            Screen::Catalog if index < self.visible_catalog_tools().len() => {
+                self.catalog_index = index;
+            }
+            Screen::Install if index < self.queue.len() => self.install_index = index,
+            Screen::Workspace if index < self.workspaces.workspaces.len() => {
+                self.workspace_index = index;
+            }
+            Screen::Agents if index < self.agent_tools().len() => self.agent_index = index,
+            Screen::Settings if index < 4 => self.settings_index = index,
+            Screen::AppView
+            | Screen::Logs
+            | Screen::Home
+            | Screen::Catalog
+            | Screen::Install
+            | Screen::Workspace
+            | Screen::Agents
+            | Screen::Settings => {}
+        }
+    }
+
+    fn move_app_view(&mut self, delta: isize) {
+        let Some(view) = &mut self.app_view else {
+            return;
+        };
+        view.selected = move_index(view.selected, view.apps.len(), delta);
+        view.content.clear();
     }
 
     fn move_catalog(&mut self, delta: isize) {
@@ -745,42 +1160,236 @@ impl AppState {
         self.queue_tool_ids(vec![tool.id.clone()]);
     }
 
-    fn toggle_selected_tool(&mut self) {
-        let Some(tool_id) = self.selected_catalog_tool().map(|tool| tool.id.clone()) else {
+    fn request_selected_uninstall(&mut self) {
+        let Some(tool) = self.selected_catalog_tool() else {
             return;
         };
-        if !self.selected_tools.insert(tool_id.clone()) {
-            self.selected_tools.remove(&tool_id);
-        }
-        self.status = format!("{} tools selected", self.selected_tools.len());
-    }
-
-    fn toggle_all_visible_tools(&mut self) {
-        let visible = self
-            .visible_catalog_tools()
-            .into_iter()
-            .map(|tool| tool.id.clone())
-            .collect::<Vec<_>>();
-        let all_selected = visible
-            .iter()
-            .all(|tool_id| self.selected_tools.contains(tool_id));
-        if all_selected {
-            for tool_id in visible {
-                self.selected_tools.remove(&tool_id);
-            }
-        } else {
-            self.selected_tools.extend(visible);
-        }
-        self.status = format!("{} tools selected", self.selected_tools.len());
-    }
-
-    fn queue_selected_tools(&mut self) {
-        if self.selected_tools.is_empty() {
-            self.queue_selected_tool();
+        let tool_id = tool.id.clone();
+        if !self.installed_tools.contains(&tool_id) {
+            self.status = format!("{tool_id} is not installed");
             return;
         }
-        self.queue_tool_ids(self.selected_tools.iter().cloned().collect());
-        self.selected_tools.clear();
+        let platform = if cfg!(target_os = "macos") {
+            Platform::Macos
+        } else {
+            Platform::Linux
+        };
+        let Some(installer) = tool
+            .installers
+            .iter()
+            .find(|installer| installer.platform == platform)
+        else {
+            self.status = format!("No uninstall method for {tool_id}");
+            return;
+        };
+        let packages = if installer.method == InstallMethod::Cargo {
+            installer.package_hints.join(" ")
+        } else {
+            installer.package_hints[0].clone()
+        };
+        let Some(command) = uninstall_command(&installer.method, &packages) else {
+            self.status = format!("Uninstall is unavailable for {tool_id}");
+            return;
+        };
+        let check_command = installer
+            .executable
+            .clone()
+            .or_else(|| tool.checks.iter().find_map(|check| check.which.clone()))
+            .or_else(|| {
+                tool.run_command_for_current_platform()
+                    .split_whitespace()
+                    .next()
+                    .map(str::to_string)
+            })
+            .unwrap_or_else(|| tool_id.clone());
+        self.uninstall_confirmation = Some(UninstallRequest {
+            tool_id,
+            command,
+            check_command,
+            method: installer.method.clone(),
+        });
+        self.status = "Confirm app uninstall".to_string();
+    }
+
+    fn handle_uninstall_confirmation_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                self.uninstall_confirmation = None;
+                self.status = "Uninstall cancelled".to_string();
+            }
+            KeyCode::Enter => {
+                if let Some(request) = self.uninstall_confirmation.take() {
+                    self.effects.push_back(AppEffect::Uninstall(request));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn request_selected_tool_launch(&mut self) {
+        let Some(tool) = self.selected_catalog_tool() else {
+            self.status = "No app selected".to_string();
+            return;
+        };
+        let tool_id = tool.id.clone();
+        let tool_name = tool.name.clone();
+        let command = tool.run_command_for_current_platform().to_string();
+        let options = tool.run_options.clone();
+        if options.is_empty() {
+            self.effects
+                .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+                    tool_id,
+                    command,
+                }));
+            self.status = format!("Opening {tool_name}");
+            return;
+        }
+        let selections = options
+            .iter()
+            .map(|option| LaunchOptionSelection {
+                enabled: option.default_enabled,
+                value_index: option
+                    .default_value
+                    .as_ref()
+                    .and_then(|default| option.values.iter().position(|value| value == default))
+                    .unwrap_or_default(),
+            })
+            .collect();
+        self.launch_options = Some(LaunchOptionsState {
+            tool_id,
+            tool_name,
+            selected: 0,
+            selections,
+        });
+        self.status = "Configure launch options".to_string();
+    }
+
+    fn handle_launch_options_key(&mut self, code: KeyCode) {
+        let option_count = self
+            .launch_options
+            .as_ref()
+            .map_or(0, |options| options.selections.len());
+        match code {
+            KeyCode::Esc => {
+                self.launch_options = None;
+                self.status = "Launch cancelled".to_string();
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(options) = &mut self.launch_options {
+                    options.selected = move_index(options.selected, option_count, -1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(options) = &mut self.launch_options {
+                    options.selected = move_index(options.selected, option_count, 1);
+                }
+            }
+            KeyCode::Char(' ') => {
+                if let Some(options) = &mut self.launch_options
+                    && let Some(selection) = options.selections.get_mut(options.selected)
+                {
+                    selection.enabled = !selection.enabled;
+                }
+            }
+            KeyCode::Left | KeyCode::Char('h') => self.move_launch_option_value(-1),
+            KeyCode::Right | KeyCode::Char('l') => self.move_launch_option_value(1),
+            KeyCode::Enter => self.confirm_launch_options(),
+            _ => {}
+        }
+    }
+
+    fn move_launch_option_value(&mut self, delta: isize) {
+        let Some(options) = &mut self.launch_options else {
+            return;
+        };
+        let Some(tool) = self
+            .catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == options.tool_id)
+        else {
+            return;
+        };
+        let Some(option) = tool.run_options.get(options.selected) else {
+            return;
+        };
+        let Some(selection) = options.selections.get_mut(options.selected) else {
+            return;
+        };
+        if !option.values.is_empty() {
+            selection.value_index = move_index(selection.value_index, option.values.len(), delta);
+        }
+    }
+
+    fn confirm_launch_options(&mut self) {
+        let Some(options) = self.launch_options.take() else {
+            return;
+        };
+        let Some(tool) = self
+            .catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == options.tool_id)
+        else {
+            self.status = "Launch option tool is no longer available".to_string();
+            return;
+        };
+        let mut command = tool.run_command_for_current_platform().to_string();
+        for (option, selection) in tool.run_options.iter().zip(&options.selections) {
+            if !selection.enabled {
+                continue;
+            }
+            command.push(' ');
+            command.push_str(&option.flag);
+            if let Some(value) = option.values.get(selection.value_index) {
+                command.push(' ');
+                command.push_str(value);
+            }
+        }
+        self.effects
+            .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+                tool_id: tool.id.clone(),
+                command,
+            }));
+        self.status = format!("Opening {}", tool.name);
+    }
+
+    pub fn install_then_launch(&mut self, request: ToolLaunchRequest) {
+        let tool_id = request.tool_id.clone();
+        self.pending_tool_launch = Some(request);
+
+        if let Some(index) = self
+            .queue
+            .iter()
+            .position(|job| job.item.tool_id == tool_id)
+        {
+            self.install_index = index;
+            match self.queue[index].item.state {
+                QueueState::Failed => self.retry_selected(),
+                QueueState::Success => {
+                    self.queue.remove(index);
+                    self.queue_tool_ids(vec![tool_id.clone()]);
+                }
+                QueueState::Installing => {
+                    self.status = format!("Installing {tool_id}; it will open when ready");
+                    return;
+                }
+                QueueState::Queued | QueueState::Idle => {}
+            }
+        } else {
+            self.queue_tool_ids(vec![tool_id.clone()]);
+        }
+
+        self.status = format!("{tool_id} is not installed; installing before launch");
+        self.request_execute_selected();
+    }
+
+    fn return_to_main(&mut self) {
+        if self.screen == Screen::Catalog && self.active_pack.is_some() {
+            self.active_pack = None;
+            self.search_query.clear();
+        }
+        self.screen = Screen::Home;
     }
 
     fn open_selected_pack(&mut self) {
@@ -822,7 +1431,7 @@ impl AppState {
                 skipped += 1;
                 continue;
             };
-            let channel = format!("{:?}", task.method).to_ascii_lowercase();
+            let channel = task.method.channel_name().to_string();
             self.queue.push(InstallJob::new(task, channel));
             self.logs.push(format!("queue: added {tool_id}"));
             added += 1;
@@ -881,11 +1490,7 @@ impl AppState {
             );
             return;
         };
-        if current_task.command != job.task.command
-            || current_task.method != job.task.method
-            || current_task.check_command != job.task.check_command
-            || current_task.requires_confirmation != job.task.requires_confirmation
-        {
+        if install_plan_changed(&job.task, &current_task) {
             self.status = format!(
                 "Saved plan for {} is stale; remove and queue it again",
                 job.item.tool_id
@@ -895,13 +1500,19 @@ impl AppState {
 
         if job.task.requires_confirmation || self.settings.confirm_all_installs {
             let tool_id = job.item.tool_id.clone();
+            let typed = job.task.requires_confirmation;
             self.confirmation = Some(InstallConfirmation {
                 command: job.task.command.clone(),
                 expected: format!("INSTALL {tool_id}"),
                 input: String::new(),
+                typed,
                 tool_id,
             });
-            self.status = "Type the confirmation phrase exactly".to_string();
+            self.status = if typed {
+                "Type the confirmation phrase exactly".to_string()
+            } else {
+                "Press Enter to approve this SAFE installation".to_string()
+            };
         } else {
             self.effects
                 .push_back(AppEffect::Execute(Box::new(job.clone())));
@@ -970,17 +1581,7 @@ impl AppState {
     }
 
     fn build_current_task(&self, tool_id: &str) -> Option<crate::installer::engine::InstallTask> {
-        let platform = if cfg!(target_os = "macos") {
-            Platform::Macos
-        } else {
-            Platform::Linux
-        };
-        let tool = self.catalog.tools.iter().find(|tool| tool.id == tool_id)?;
-        let installer = tool
-            .installers
-            .iter()
-            .find(|installer| installer.platform == platform)?;
-        build_install_task(tool, installer, &InstallPolicy::default()).ok()
+        build_current_task(&self.catalog, tool_id)
     }
 
     fn handle_confirmation_key(&mut self, code: KeyCode) {
@@ -988,10 +1589,13 @@ impl AppState {
             KeyCode::Esc => {
                 self.confirmation = None;
                 self.queue_running = false;
+                self.pending_tool_launch = None;
                 self.status = "Installation confirmation cancelled".to_string();
             }
             KeyCode::Backspace => {
-                if let Some(confirmation) = &mut self.confirmation {
+                if let Some(confirmation) = &mut self.confirmation
+                    && confirmation.typed
+                {
                     confirmation.input.pop();
                 }
             }
@@ -999,7 +1603,7 @@ impl AppState {
                 let Some(confirmation) = self.confirmation.take() else {
                     return;
                 };
-                if confirmation.input == confirmation.expected {
+                if !confirmation.typed || confirmation.input == confirmation.expected {
                     if let Some(job) = self
                         .queue
                         .iter()
@@ -1014,7 +1618,9 @@ impl AppState {
                 }
             }
             KeyCode::Char(ch) => {
-                if let Some(confirmation) = &mut self.confirmation {
+                if let Some(confirmation) = &mut self.confirmation
+                    && confirmation.typed
+                {
                     confirmation.input.push(ch);
                 }
             }
@@ -1049,8 +1655,7 @@ impl AppState {
                     .map(|tool| {
                         (
                             id.clone(),
-                            tool.run
-                                .cmd
+                            tool.run_command_for_current_platform()
                                 .split_whitespace()
                                 .next()
                                 .unwrap_or(tool.id.as_str())
@@ -1072,7 +1677,7 @@ impl AppState {
             self.status = "Selected workspace has no running session".to_string();
             return;
         };
-        self.effects.push_back(AppEffect::AttachWorkspace(session));
+        self.effects.push_back(AppEffect::OpenAppView(session));
     }
 
     fn request_workspace_stop(&mut self) {
@@ -1161,6 +1766,137 @@ impl AppState {
             self.logs.drain(0..self.logs.len() - MAX_LOG_LINES);
         }
     }
+}
+
+fn reconcile_saved_queue(catalog: &CatalogRegistry, saved: &mut PersistentState) {
+    let mut refreshed = Vec::new();
+    for job in &mut saved.queue {
+        if !matches!(job.item.state, QueueState::Queued | QueueState::Failed) {
+            continue;
+        }
+        let Some(current_task) = build_current_task(catalog, &job.item.tool_id) else {
+            continue;
+        };
+        if !install_plan_changed(&job.task, &current_task) {
+            continue;
+        }
+
+        job.item.channel = current_task.method.channel_name().to_string();
+        if job.item.state == QueueState::Failed {
+            let _ = job.item.transition(QueueState::Queued);
+        }
+        job.item.attempts = 0;
+        job.task = current_task;
+        job.attempts.clear();
+        job.preflight = None;
+        job.postflight = None;
+        job.diagnostics = None;
+        refreshed.push(job.item.tool_id.clone());
+    }
+    saved.logs.extend(
+        refreshed
+            .into_iter()
+            .map(|tool_id| format!("queue: refreshed stale install plan for {tool_id}")),
+    );
+}
+
+fn build_current_task(
+    catalog: &CatalogRegistry,
+    tool_id: &str,
+) -> Option<crate::installer::engine::InstallTask> {
+    let platform = if cfg!(target_os = "macos") {
+        Platform::Macos
+    } else {
+        Platform::Linux
+    };
+    let tool = catalog.tools.iter().find(|tool| tool.id == tool_id)?;
+    let installer = tool
+        .installers
+        .iter()
+        .find(|installer| installer.platform == platform)?;
+    build_install_task(tool, installer, &InstallPolicy::default()).ok()
+}
+
+fn install_plan_changed(
+    saved: &crate::installer::engine::InstallTask,
+    current: &crate::installer::engine::InstallTask,
+) -> bool {
+    saved.command != current.command
+        || saved.method != current.method
+        || saved.check_command != current.check_command
+        || saved.requires_privileges != current.requires_privileges
+        || saved.requires_confirmation != current.requires_confirmation
+}
+
+fn uninstall_command(method: &InstallMethod, package: &str) -> Option<String> {
+    let command = match method {
+        InstallMethod::Brew => format!("brew uninstall {package}"),
+        InstallMethod::BrewCask => format!("brew uninstall --cask {package}"),
+        InstallMethod::Apt => {
+            format!(
+                "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y {package}"
+            )
+        }
+        InstallMethod::Dnf => format!("sudo -n dnf remove -y {package}"),
+        InstallMethod::Pacman => format!("sudo -n pacman -Rns --noconfirm {package}"),
+        InstallMethod::Snap | InstallMethod::SnapClassic => {
+            format!("sudo -n snap remove {package}")
+        }
+        InstallMethod::Pipx => format!("pipx uninstall {package}"),
+        InstallMethod::NpmGlobal => format!("npm uninstall --global {package}"),
+        InstallMethod::Cargo => format!("cargo uninstall {package}"),
+        InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => return None,
+    };
+    Some(command)
+}
+
+fn app_input_from_key(key: KeyEvent) -> Option<AppInput> {
+    let modifier = if key.modifiers.contains(KeyModifiers::CONTROL) {
+        Some("C")
+    } else if key.modifiers.contains(KeyModifiers::ALT) {
+        Some("M")
+    } else if key.modifiers.contains(KeyModifiers::SHIFT) {
+        Some("S")
+    } else {
+        None
+    };
+
+    if let KeyCode::Char(ch) = key.code {
+        return match modifier {
+            None | Some("S") => Some(AppInput::Text(ch.to_string())),
+            Some(prefix) => {
+                let name = if ch == ' ' {
+                    "Space".to_string()
+                } else {
+                    ch.to_ascii_lowercase().to_string()
+                };
+                Some(AppInput::Key(format!("{prefix}-{name}")))
+            }
+        };
+    }
+
+    let name = match key.code {
+        KeyCode::Enter => "Enter".to_string(),
+        KeyCode::Esc => "Escape".to_string(),
+        KeyCode::Backspace => "BSpace".to_string(),
+        KeyCode::Tab => "Tab".to_string(),
+        KeyCode::BackTab => "BTab".to_string(),
+        KeyCode::Delete => "DC".to_string(),
+        KeyCode::Insert => "IC".to_string(),
+        KeyCode::Up => "Up".to_string(),
+        KeyCode::Down => "Down".to_string(),
+        KeyCode::Left => "Left".to_string(),
+        KeyCode::Right => "Right".to_string(),
+        KeyCode::Home => "Home".to_string(),
+        KeyCode::End => "End".to_string(),
+        KeyCode::PageUp => "PPage".to_string(),
+        KeyCode::PageDown => "NPage".to_string(),
+        KeyCode::F(number) => format!("F{number}"),
+        _ => return None,
+    };
+    Some(AppInput::Key(
+        modifier.map_or(name.clone(), |prefix| format!("{prefix}-{name}")),
+    ))
 }
 
 fn move_index(current: usize, len: usize, delta: isize) -> usize {
