@@ -88,7 +88,7 @@ impl CodexAppServer {
             json!({
                 "clientInfo": {
                     "name": "t4e",
-                    "title": "t4e Terminal Environment",
+                    "title": "T4E Terminal Environment",
                     "version": env!("CARGO_PKG_VERSION")
                 },
                 "capabilities": { "experimentalApi": false }

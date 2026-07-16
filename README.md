@@ -1,6 +1,6 @@
-# t4e
+# T4E
 
-t4e is a curated terminal application manager, tmux workspace runtime, and
+T4E is a curated terminal application manager, tmux workspace runtime, and
 local Codex control surface. It uses the signed-in `codex` CLI account through
 `codex app-server`; it does not request or proxy an OpenAI API key.
 
@@ -38,7 +38,7 @@ Important actions are intentionally explicit:
   app -> run. In App View, `Tab`/`Shift-Tab` switches apps, `Alt+Backspace`
   returns to the previous screen while keeping apps running, and `Alt+Q` closes
   the current app. `Backspace` and `Esc` are forwarded to the running app.
-  Text selection is the default mouse mode; `Alt+M` toggles t4e mouse controls
+  Text selection is the default mouse mode; `Alt+M` toggles T4E mouse controls
   for lists, app tabs, scrolling, and App View footer actions.
 - App rows show install readiness and live install state. The detail panel keeps
   the current attempt, channel, recent package-manager output, and failure
@@ -56,11 +56,11 @@ Important actions are intentionally explicit:
 
 Script, HIGH-risk, and AI-proposed side effects require an exact typed
 confirmation. Codex runs in a read-only sandbox with app-server approvals set
-to `never`; t4e remains authoritative for installation and process lifecycle.
+to `never`; T4E remains authoritative for installation and process lifecycle.
 
 On Linux, `x` or `X` handles the package-manager command without requiring the
 user to type it. For apt, dnf, pacman, Snap, missing `pipx`, and declared Cargo
-system dependencies, t4e temporarily leaves the alternate screen and runs
+system dependencies, T4E temporarily leaves the alternate screen and runs
 interactive `sudo -v`; after authentication it returns to the TUI and executes
 the approved install noninteractively. Install processes are serialized, apt
 waits for an existing dpkg lock, and Cargo apps receive one 30-minute build
@@ -131,9 +131,9 @@ scripts/usability/start_session.sh
 The task list and acceptance criteria are in
 `docs/plans/usability-test.md`.
 
-If the account's configured model requires a newer Codex CLI, t4e retries once
+If the account's configured model requires a newer Codex CLI, T4E retries once
 with `gpt-5.4`. Set `T4E_CODEX_FALLBACK_MODEL` to select another compatible
-model available through the signed-in plan. t4e never runs `codex update`
+model available through the signed-in plan. T4E never runs `codex update`
 automatically.
 
 ## State And Recovery
@@ -150,5 +150,5 @@ startup; install logs are stored beside the state file.
   compile, but App View lifecycle parity is not implemented yet.
 - Native adapters are provided for mpv JSON IPC, yazi, and newsboat. The latter
   two verify the tmux pane process and accept only application-specific keys.
-- App View input is limited to pane IDs discovered inside t4e-managed sessions;
+- App View input is limited to pane IDs discovered inside T4E-managed sessions;
   commands are passed as structured tmux arguments without shell evaluation.

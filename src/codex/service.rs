@@ -227,7 +227,7 @@ fn start_prompt(
 
 pub fn planner_prompt(environment_context: &str, user_request: &str) -> String {
     format!(
-        "You are the AI control plane embedded inside t4e (TUI for Everything), not a generic coding assistant. The user is talking to you from t4e's AI Home. t4e catalogs terminal apps, plans and executes approved installations, and launches or manages approved tmux workspaces containing those apps. Treat the supplied t4e runtime context as authoritative.\n\nYour job is to help the user operate this t4e environment. Refer to apps and workspaces by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. catalog_search and install_plan are read-only proposals. workspace_launch is side-effecting: clearly say it is proposed and requires explicit approval in t4e. Direct launch of an individual catalog app is not enabled yet; explain that limitation instead of pretending to start it. t4e, not you, owns installation, process lifecycle, tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: navigate t4e to a catalog app\n- install_plan: prepare an app installation plan in t4e\n- workspace_launch: propose launching a t4e workspace after approval\n\nCurrent t4e runtime context:\n{environment_context}\n\nUser request: {user_request}"
+        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from T4E's AI Home. T4E catalogs terminal apps, plans and executes approved installations, launches individual apps, and manages approved tmux workspaces containing those apps. Treat the supplied T4E runtime context as authoritative.\n\nYour job is to help the user operate this T4E environment. Refer to apps and workspaces by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. catalog_search and install_plan are read-only proposals. workspace_launch is side-effecting: clearly say it is proposed and requires explicit approval in T4E. T4E can launch and manage individual catalog apps from its pack UI; the current AI action surface can navigate to an app but cannot press Enter for the user. T4E, not you, owns installation, process lifecycle, tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: navigate T4E to a catalog app\n- install_plan: prepare an app installation plan in T4E\n- workspace_launch: propose launching a T4E workspace after approval\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
     )
 }
 
@@ -246,7 +246,7 @@ fn handle_message(
 ) -> MessageOutcome {
     let method = message.get("method").and_then(Value::as_str).unwrap_or("");
     if let Some(id) = message.get("id").cloned() {
-        let _ = client.respond_error(id, -32000, "t4e denies app-server initiated requests");
+        let _ = client.respond_error(id, -32000, "T4E denies app-server initiated requests");
         let _ = events.send(CodexEvent::ApprovalDenied(method.to_string()));
         return MessageOutcome::Continue;
     }
@@ -434,11 +434,12 @@ mod tests {
             "What can you do here?",
         );
 
-        assert!(prompt.contains("AI control plane embedded inside t4e"));
+        assert!(prompt.contains("AI control plane embedded inside T4E"));
         assert!(prompt.contains("not a generic coding assistant"));
         assert!(prompt.contains("plans and executes approved installations"));
-        assert!(prompt.contains("launches or manages approved tmux workspaces"));
-        assert!(prompt.contains("Direct launch of an individual catalog app is not enabled yet"));
+        assert!(prompt.contains("launches individual apps"));
+        assert!(prompt.contains("manages approved tmux workspaces"));
+        assert!(prompt.contains("T4E can launch and manage individual catalog apps"));
         assert!(prompt.contains("catalog apps: yazi=Yazi (run: yazi)"));
         assert!(prompt.ends_with("User request: What can you do here?"));
     }

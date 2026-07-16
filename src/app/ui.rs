@@ -20,7 +20,7 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
     let area = frame.area();
     if area.width < 60 || area.height < 16 {
         frame.render_widget(
-            Paragraph::new("t4e needs a terminal of at least 60x16")
+            Paragraph::new("T4E needs a terminal of at least 60x16")
                 .alignment(Alignment::Center)
                 .block(panel("Terminal too small")),
             area,
@@ -87,7 +87,7 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     frame.render_widget(
         Paragraph::new(Line::from(vec![
             Span::styled(
-                "t4e",
+                "T4E",
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Span::raw("  /  "),
@@ -188,11 +188,11 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                         " "
                     }
                 )),
+                Span::raw(format!("{:<20}", tool.name)),
                 Span::styled(
                     format!("{:<10}", AppState::risk_label(&tool.risk)),
                     risk_style(&tool.risk),
                 ),
-                Span::raw(format!("{:<20}", tool.name)),
                 Span::styled(install_status, install_style),
             ]))
         })
@@ -502,7 +502,7 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             .block(
                 Block::default()
                     .title(format!(
-                        " t4e Apps · {} · {} ",
+                        " T4E Apps · {} · {} ",
                         view.workspace_title,
                         if app.mouse_enabled { "MOUSE" } else { "SELECT" }
                     ))

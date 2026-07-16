@@ -45,10 +45,10 @@ pub fn run_server(
                     "capabilities": { "tools": { "listChanged": false } },
                     "serverInfo": {
                         "name": "t4e",
-                        "title": "t4e Terminal Environment",
+                        "title": "T4E Terminal Environment",
                         "version": env!("CARGO_PKG_VERSION")
                     },
-                    "instructions": "Read-only discovery is available. Side effects require approval in the t4e TUI."
+                    "instructions": "Read-only discovery is available. Side effects require approval in the T4E TUI."
                 }
             }),
             _ if !initialized => protocol_error(id, -32002, "server is not initialized"),
@@ -181,7 +181,7 @@ fn call_tool(
         "workspace_launch" | "workspace_stop" | "app_start" | "app_stop" => {
             return Ok(tool_result(
                 json!({
-                    "error": "This action requires explicit approval in the t4e TUI",
+                    "error": "This action requires explicit approval in the T4E TUI",
                     "action": name
                 }),
                 true,
@@ -204,7 +204,7 @@ fn tool_definitions() -> Value {
     json!([
         {
             "name": "catalog_search",
-            "title": "Search t4e catalog",
+            "title": "Search T4E catalog",
             "description": "Search curated terminal applications without side effects.",
             "inputSchema": {
                 "type": "object",
@@ -229,14 +229,14 @@ fn tool_definitions() -> Value {
         },
         {
             "name": "workspace_list",
-            "title": "List t4e workspaces",
+            "title": "List T4E workspaces",
             "description": "List templates and live managed tmux session status.",
             "inputSchema": { "type": "object", "additionalProperties": false }
         },
         {
             "name": "workspace_launch",
             "title": "Launch a workspace",
-            "description": "Request workspace launch; requires approval in the t4e TUI.",
+            "description": "Request workspace launch; requires approval in the T4E TUI.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "workspaceId": { "type": "string" } },
@@ -247,7 +247,7 @@ fn tool_definitions() -> Value {
         {
             "name": "workspace_stop",
             "title": "Stop a workspace",
-            "description": "Request workspace stop; requires approval in the t4e TUI.",
+            "description": "Request workspace stop; requires approval in the T4E TUI.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "workspaceId": { "type": "string" } },
@@ -258,7 +258,7 @@ fn tool_definitions() -> Value {
         {
             "name": "app_start",
             "title": "Start a terminal app",
-            "description": "Request app start; requires approval in the t4e TUI.",
+            "description": "Request app start; requires approval in the T4E TUI.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "toolId": { "type": "string" } },
@@ -269,7 +269,7 @@ fn tool_definitions() -> Value {
         {
             "name": "app_stop",
             "title": "Stop a terminal app",
-            "description": "Request app stop; requires approval in the t4e TUI.",
+            "description": "Request app stop; requires approval in the T4E TUI.",
             "inputSchema": {
                 "type": "object",
                 "properties": { "toolId": { "type": "string" } },

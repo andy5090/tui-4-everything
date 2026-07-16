@@ -62,7 +62,16 @@ pub fn run(mut app: AppState) -> Result<()> {
         .collect::<BTreeSet<_>>();
     app.apply_installed_tools(installed);
     match tmux.list_managed() {
-        Ok(sessions) => app.apply_managed_sessions(sessions),
+        Ok(sessions) => {
+            let has_app_session = sessions.iter().any(|session| session.name == "t4e-apps");
+            app.apply_managed_sessions(sessions);
+            if has_app_session {
+                match tmux.list_apps("t4e-apps") {
+                    Ok(apps) => app.remember_app_view("t4e-apps".to_string(), apps),
+                    Err(error) => app.apply_workspace_error("restore apps", &error),
+                }
+            }
+        }
         Err(error) => app.apply_workspace_error("refresh", &error),
     }
     persist_or_report(&mut app);
@@ -481,7 +490,7 @@ fn acquire_install_privileges(tool_id: &str) -> Result<()> {
         return Ok(());
     }
 
-    println!("t4e needs administrator access to install {tool_id}.");
+    println!("T4E needs administrator access to install {tool_id}.");
     println!("Authenticate with sudo, or press Ctrl+C to cancel.\n");
     let status = Command::new("sudo")
         .arg("-v")

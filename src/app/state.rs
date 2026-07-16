@@ -192,13 +192,13 @@ impl AppState {
                 let _ = job.item.transition(QueueState::Failed);
                 job.diagnostics = Some(FailureDiagnostics::from_stderr(
                     None,
-                    "installation was interrupted before t4e exited",
+                    "installation was interrupted before T4E exited",
                     "",
                 ));
             }
         }
         reconcile_saved_queue(&catalog, &mut saved);
-        saved.logs.push("t4e dashboard started".to_string());
+        saved.logs.push("T4E dashboard started".to_string());
         Self {
             catalog,
             workspaces,
@@ -488,7 +488,7 @@ impl AppState {
         {
             completed.diagnostics = Some(FailureDiagnostics::from_stderr(
                 attempt.exit_code,
-                "installation interrupted because t4e exited or restarted",
+                "installation interrupted because T4E exited or restarted",
                 &attempt.log_path,
             ));
         }
@@ -680,7 +680,21 @@ impl AppState {
         });
         self.screen = Screen::AppView;
         self.return_after_app_close = false;
-        self.status = "App controls are available in the t4e toolbar".to_string();
+        self.status = "App controls are available in the T4E toolbar".to_string();
+    }
+
+    pub fn remember_app_view(&mut self, session_name: String, apps: Vec<ManagedApp>) {
+        if apps.is_empty() {
+            return;
+        }
+        self.app_view = Some(AppViewState {
+            session_name,
+            workspace_title: "Running apps".to_string(),
+            return_screen: self.screen,
+            apps,
+            selected: 0,
+            content: String::new(),
+        });
     }
 
     pub fn focus_app(&mut self, app_id: &str) {
@@ -1004,7 +1018,7 @@ impl AppState {
                 self.request_close_current_app();
             }
             KeyCode::Backspace if key.modifiers.contains(KeyModifiers::ALT) => {
-                self.leave_app_view("Returned; apps remain running");
+                self.background_app_view();
             }
             _ => {
                 let Some(input) = app_input_from_key(key) else {
@@ -1046,6 +1060,16 @@ impl AppState {
         self.status = status.to_string();
     }
 
+    fn background_app_view(&mut self) {
+        let return_screen = self
+            .app_view
+            .as_ref()
+            .map_or(Screen::Home, |view| view.return_screen);
+        self.return_after_app_close = false;
+        self.screen = return_screen;
+        self.status = "Returned; apps remain running".to_string();
+    }
+
     fn handle_app_view_click(&mut self, column: u16, row: u16, terminal_height: u16) {
         if row <= 2 {
             let Some(view) = &mut self.app_view else {
@@ -1066,7 +1090,7 @@ impl AppState {
                 0..=11 => self.move_app_view(1),
                 12..=33 => self.move_app_view(-1),
                 34..=51 => {
-                    self.leave_app_view("Returned; apps remain running");
+                    self.background_app_view();
                 }
                 _ => self.request_close_current_app(),
             }
@@ -1235,6 +1259,20 @@ impl AppState {
         let tool_name = tool.name.clone();
         let command = tool.run_command_for_current_platform().to_string();
         let options = tool.run_options.clone();
+        if let Some(index) = self
+            .app_view
+            .as_ref()
+            .and_then(|view| view.apps.iter().position(|app| app.window_name == tool_id))
+        {
+            if let Some(view) = &mut self.app_view {
+                view.return_screen = self.screen;
+                view.selected = index;
+                view.content.clear();
+            }
+            self.screen = Screen::AppView;
+            self.status = format!("Returned to {tool_name}");
+            return;
+        }
         if options.is_empty() {
             self.effects
                 .push_back(AppEffect::LaunchTool(ToolLaunchRequest {

@@ -541,7 +541,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         {
             Ok(())
         } else {
-            bail!("session {session_name} is not managed by t4e")
+            bail!("session {session_name} is not managed by T4E")
         }
     }
 
@@ -555,7 +555,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         {
             Ok(())
         } else {
-            bail!("pane {pane_id} is not managed by t4e")
+            bail!("pane {pane_id} is not managed by T4E")
         }
     }
 

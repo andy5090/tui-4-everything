@@ -74,6 +74,34 @@ fn catalog_search_filters_and_queues_a_tool_once() {
 }
 
 #[test]
+fn catalog_row_places_app_name_before_risk_column() {
+    let mut app = app();
+    app.pack_index = app
+        .catalog
+        .packs
+        .iter()
+        .position(|pack| pack.id == "fun-pack")
+        .expect("fun pack exists");
+    app.handle_key(key(KeyCode::Enter));
+    let backend = TestBackend::new(80, 24);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("catalog renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    let name_index = rendered.find("cmatrix").expect("app name is rendered");
+    let risk_index = rendered.find("SAFE").expect("risk is rendered");
+    assert!(name_index < risk_index);
+}
+
+#[test]
 fn catalog_enter_launches_and_missing_app_auto_launches_after_install() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -299,7 +327,36 @@ fn alt_backspace_returns_to_the_previous_screen_without_closing_the_app() {
     app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::ALT));
 
     assert_eq!(app.screen, Screen::Catalog);
-    assert!(app.app_view.is_none());
+    assert!(app.app_view.is_some());
+    assert!(app.take_effect().is_none());
+}
+
+#[test]
+fn catalog_enter_reopens_running_app_without_launch_options_or_duplicate_launch() {
+    let mut app = app();
+    app.remember_app_view(
+        "t4e-apps".to_string(),
+        vec![ManagedApp {
+            pane_id: "%40".to_string(),
+            window_index: 0,
+            window_name: "cmatrix".to_string(),
+            pane_index: 0,
+            process: "cmatrix".to_string(),
+        }],
+    );
+    app.pack_index = app
+        .catalog
+        .packs
+        .iter()
+        .position(|pack| pack.id == "fun-pack")
+        .expect("fun pack exists");
+    app.handle_key(key(KeyCode::Enter));
+
+    app.handle_key(key(KeyCode::Enter));
+
+    assert_eq!(app.screen, Screen::AppView);
+    assert_eq!(app.app_view.as_ref().expect("app view").selected, 0);
+    assert!(app.launch_options.is_none());
     assert!(app.take_effect().is_none());
 }
 
@@ -466,7 +523,7 @@ fn narrow_layout_keeps_every_screen_target_and_back_key_visible() {
         .map(|cell| cell.symbol())
         .collect::<String>();
 
-    assert!(rendered.contains("t4e"));
+    assert!(rendered.contains("T4E"));
     assert!(rendered.contains("Backspace back"));
 }
 

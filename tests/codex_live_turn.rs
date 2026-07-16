@@ -75,7 +75,7 @@ fn signed_in_codex_identifies_itself_as_t4e_control_plane() {
         .expect("planner message")
         .to_ascii_lowercase();
     assert!(
-        message.contains("t4e"),
+        message.contains("T4E"),
         "unexpected planner response: {structured}"
     );
     assert!(

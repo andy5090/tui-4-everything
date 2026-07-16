@@ -1,14 +1,14 @@
-# t4e Product Roadmap
+# T4E Product Roadmap
 
 ## Product Direction
 
-t4e starts as a curated TUI application manager and workspace launcher, then
+T4E starts as a curated TUI application manager and workspace launcher, then
 grows into an AI-assisted terminal environment. Codex is the control plane that
-interprets intent and plans multi-application work. t4e remains the trusted
+interprets intent and plans multi-application work. T4E remains the trusted
 runtime that owns permissions, process lifecycle, tmux/zellij sessions, logs,
 and persistent state.
 
-The AI layer must use bounded, structured t4e actions. Generic terminal-screen
+The AI layer must use bounded, structured T4E actions. Generic terminal-screen
 reading and synthetic key input are a later fallback, not the primary control
 mechanism.
 
@@ -25,7 +25,7 @@ mechanism.
 - Phase 3 tmux lifecycle, preflight, attach/stop, live snapshots, restoration,
   and reproducibility verification: complete.
 - Phase 4 Codex app-server client, AI Home, bounded intent actions, typed
-  approval, usage events, and t4e MCP server: complete.
+  approval, usage events, and T4E MCP server: complete.
 - Phase 5 mpv, yazi, and newsboat adapters with allowlists, observation,
   compensating actions, and audit records: complete.
 - Phase 6 packaging, protocol checks, CI, and real-gate workflow: complete.
@@ -61,7 +61,7 @@ Exit criteria:
 - Switch running apps with Tab/Shift-Tab, return with Alt+Backspace while keeping
   the app alive, and explicitly terminate the selected app with Alt+Q.
 - Keep terminal text selection as the default mouse mode and toggle interactive
-  t4e mouse capture with Alt+M.
+  T4E mouse capture with Alt+M.
 - Expose allowlisted launch flags/arguments and verified package-manager
   uninstall actions in the app selection screen.
 - Support keyboard navigation, catalog search, list selection, and help.
@@ -99,14 +99,14 @@ Exit criteria:
 Exit criteria:
 
 - Video, Music, and Fun workspaces launch twice with matching snapshots.
-- t4e can return to, switch between, and stop managed sessions.
+- T4E can return to, switch between, and stop managed sessions.
 
 ### Phase 4: Codex Control Plane
 
 - Integrate `codex app-server` over local stdio JSON-RPC.
 - Reuse each user's own Codex login; never copy or proxy Codex credentials.
 - Stream thread, turn, item, approval, and usage events into an AI Home screen.
-- Expose t4e as an MCP server with structured tools such as catalog search,
+- Expose T4E as an MCP server with structured tools such as catalog search,
   install planning, workspace launch, app start, app observation, pane switch,
   and app stop.
 - Keep deterministic navigation local; call Codex for ambiguous intent,
@@ -115,7 +115,7 @@ Exit criteria:
 Exit criteria:
 
 - Natural-language requests can search the catalog and launch a workspace.
-- Side-effecting actions pass through the t4e policy engine and user approval.
+- Side-effecting actions pass through the T4E policy engine and user approval.
 - AI work survives screen changes and can be interrupted or resumed.
 
 ### Phase 5: Application Adapters
@@ -133,7 +133,7 @@ Exit criteria:
 ### Phase 6: Release Hardening
 
 - Run real macOS Homebrew and Ubuntu apt installation gates.
-- Package t4e and document supported systems, permissions, and limitations.
+- Package T4E and document supported systems, permissions, and limitations.
 - Add crash recovery, session restoration, and compatibility checks for the
   installed Codex app-server protocol version.
 
@@ -146,9 +146,9 @@ Exit criteria:
 ## v0.2 Experiments
 
 - Generic PTY screen observation with ANSI normalization: implemented for
-  t4e-managed tmux panes.
+  T4E-managed tmux panes.
 - Bounded synthetic key input for applications without an adapter: implemented
-  for explicitly selected, t4e-managed panes; expand the per-app key policy.
+  for explicitly selected, T4E-managed panes; expand the per-app key policy.
 - Per-application reliability evaluation before enabling autonomous control.
 - Voice or remote clients only after local authentication and policy boundaries
   have been proven.
@@ -181,7 +181,7 @@ Exit criteria:
 
 ## Safety Boundaries
 
-- t4e, not the model, is authoritative for process and permission decisions.
+- T4E, not the model, is authoritative for process and permission decisions.
 - Observe, navigate, execute, install, destructive, network, and secret access
   are separate capabilities.
 - Install, delete, external transmission, and secret access require explicit
