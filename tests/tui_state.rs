@@ -505,6 +505,28 @@ fn home_pack_can_filter_catalog_and_queue_the_pack() {
 }
 
 #[test]
+fn agents_pack_opens_its_three_agent_apps() {
+    let mut app = app();
+    app.pack_index = app
+        .catalog
+        .packs
+        .iter()
+        .position(|pack| pack.id == "agents-pack")
+        .expect("agents pack exists");
+
+    app.handle_key(key(KeyCode::Enter));
+
+    assert_eq!(app.active_pack.as_deref(), Some("agents-pack"));
+    let visible = app.visible_catalog_tools();
+    assert_eq!(visible.len(), 3);
+    assert!(
+        visible
+            .iter()
+            .all(|tool| tool.category == t4e::catalog::models::ToolCategory::Agents)
+    );
+}
+
+#[test]
 fn global_catalog_entry_clears_a_transient_pack_filter() {
     let mut app = app();
     app.handle_key(key(KeyCode::Enter));

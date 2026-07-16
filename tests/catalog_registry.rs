@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
@@ -73,6 +74,40 @@ fn registry_loads_and_validates() {
             installer.platform == Platform::Linux && installer.method == InstallMethod::SnapClassic
         }));
     }
+}
+
+#[test]
+fn launchable_apps_belong_to_exactly_one_pack() {
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+    let mut memberships = catalog
+        .tools
+        .iter()
+        .filter(|tool| tool.is_launchable_app())
+        .map(|tool| (tool.id.as_str(), Vec::<&str>::new()))
+        .collect::<HashMap<_, _>>();
+
+    for pack in &catalog.packs {
+        for tool_id in &pack.tool_ids {
+            let tool = catalog
+                .tools
+                .iter()
+                .find(|tool| &tool.id == tool_id)
+                .expect("pack tool exists");
+            if tool.is_launchable_app() {
+                memberships
+                    .get_mut(tool.id.as_str())
+                    .expect("launchable tool is indexed")
+                    .push(pack.id.as_str());
+            }
+        }
+    }
+
+    let duplicates = memberships
+        .iter()
+        .filter(|(_, packs)| packs.len() != 1)
+        .map(|(tool, packs)| format!("{tool}: {}", packs.join(", ")))
+        .collect::<Vec<_>>();
+    assert!(duplicates.is_empty(), "{}", duplicates.join("\n"));
 }
 
 #[test]

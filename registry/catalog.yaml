@@ -10,7 +10,7 @@ packs:
   - id: podcasts-reading-pack
     title: Podcasts & Reading Pack
     exposure: starter
-    tool_ids: [shellcast, termusic, newsboat, glow, jq, yq, tldr, less]
+    tool_ids: [shellcast, newsboat, glow, jq, yq, tldr, less]
   - id: files-pack
     title: Files Pack
     exposure: starter

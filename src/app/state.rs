@@ -350,7 +350,7 @@ impl AppState {
         self.catalog
             .tools
             .iter()
-            .filter(|tool| tool.category != ToolCategory::Agents)
+            .filter(|tool| tool.category != ToolCategory::Agents || self.active_pack.is_some())
             .filter(|tool| self.active_pack.is_none() || tool.is_launchable_app())
             .filter(|tool| {
                 self.active_pack.as_ref().is_none_or(|pack_id| {
