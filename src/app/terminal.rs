@@ -24,6 +24,7 @@ use crate::installer::execution::{
 use crate::mux::runtime::{SystemTmuxRunner, TmuxRuntime};
 use crate::mux::tmux::reproducibility_hash;
 
+use super::events::Screen;
 use super::state::{AppEffect, AppInput, AppState};
 use super::ui::render;
 
@@ -90,7 +91,7 @@ pub fn run(mut app: AppState) -> Result<()> {
         sync_app_viewport(&mut app, &tmux, &mut app_sizes, &session);
         refresh_app_view(&mut app, &tmux);
         session.terminal.draw(|frame| render(frame, &mut app))?;
-        if event::poll(Duration::from_millis(100))? {
+        if event::poll(frame_poll_interval(app.screen))? {
             let handled = match event::read()? {
                 Event::Key(key)
                     if matches!(key.kind, KeyEventKind::Press | KeyEventKind::Repeat) =>
@@ -402,6 +403,9 @@ fn process_effects(
 }
 
 fn refresh_app_view(app: &mut AppState, tmux: &TmuxRuntime<SystemTmuxRunner>) {
+    if app.screen != Screen::AppView {
+        return;
+    }
     let Some((apps, selected)) = app
         .app_view
         .as_ref()
@@ -416,6 +420,14 @@ fn refresh_app_view(app: &mut AppState, tmux: &TmuxRuntime<SystemTmuxRunner>) {
     match tmux.capture_app(&current.pane_id) {
         Ok(content) => app.update_app_view(apps, content),
         Err(error) => app.apply_app_view_error(&error),
+    }
+}
+
+fn frame_poll_interval(screen: Screen) -> Duration {
+    if screen == Screen::AppView {
+        Duration::from_millis(33)
+    } else {
+        Duration::from_millis(100)
     }
 }
 
@@ -617,8 +629,22 @@ impl Drop for TerminalSession {
 
 #[cfg(test)]
 mod tests {
-    use super::install_method_requires_privileges;
+    use super::{frame_poll_interval, install_method_requires_privileges};
+    use crate::app::events::Screen;
     use crate::catalog::models::InstallMethod;
+    use std::time::Duration;
+
+    #[test]
+    fn app_view_targets_thirty_frames_per_second() {
+        assert_eq!(
+            frame_poll_interval(Screen::AppView),
+            Duration::from_millis(33)
+        );
+        assert_eq!(
+            frame_poll_interval(Screen::Catalog),
+            Duration::from_millis(100)
+        );
+    }
 
     #[test]
     fn system_package_managers_request_privileges() {
