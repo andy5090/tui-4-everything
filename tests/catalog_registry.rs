@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
-use t4e::catalog::models::{Exposure, InstallMethod, Platform, Risk};
+use t4e::catalog::models::{Exposure, InstallMethod, Platform, Risk, ToolCategory};
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
 #[test]
@@ -62,6 +62,34 @@ fn registry_loads_and_validates() {
         installer.platform == Platform::Linux && installer.method == InstallMethod::Pipx
     }));
     assert_eq!(yewtube.checks[0].which.as_deref(), Some("yt"));
+
+    let lynx = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "lynx")
+        .expect("lynx exists");
+    assert_eq!(lynx.run.cmd, "lynx");
+    assert!(lynx.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::Apt
+            && installer.package_hints == ["lynx"]
+    }));
+    assert!(catalog.tools.iter().all(|tool| tool.id != "lazyvim"));
+    assert_eq!(
+        catalog
+            .tools
+            .iter()
+            .filter(|tool| tool.run.cmd == "nvim")
+            .count(),
+        1,
+        "Neovim must not be duplicated as a fake LazyVim installation"
+    );
+    let helix = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "helix")
+        .expect("helix exists");
+    assert_eq!(helix.category, ToolCategory::Ide);
 
     let pipes = catalog
         .tools

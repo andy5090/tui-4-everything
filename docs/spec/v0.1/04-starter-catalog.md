@@ -6,8 +6,8 @@
 - Podcasts & Reading Pack (8)
 - Files Pack (16)
 - Fun Pack (12)
-- Edit Pack (4)
-= 합계 52개 + (옵션 Search-only) IDE(1) + Agents(3) = 총 56
+- Editors & IDEs Pack (4)
+= 합계 52개 + (옵션 Search-only) Agents(3) = 총 55
 v0.1 목표 40~80 범위 충족.
 
 > NOTE: “패키지명/가용성”은 OS/배포판마다 달라, v0.1은 package_hints + resolver 기반으로 설치 성공률을 확보한다.
@@ -30,9 +30,9 @@ v0.1 목표 40~80 범위 충족.
 
 ## 4.4 Podcasts & Reading Pack (8)
 1) shellcast
-2) termusic
-3) newsboat
-4) glow
+2) newsboat
+3) glow
+4) lynx
 5) jq
 6) yq
 7) tldr
@@ -70,16 +70,13 @@ v0.1 목표 40~80 범위 충족.
 11) ninvaders
 12) nudoku
 
-## 4.7 Edit Pack (4)
+## 4.7 Editors & IDEs Pack (4)
 1) micro
 2) helix
 3) neovim
 4) visidata
 
 ## 4.8 Search-only (옵션)
-### IDE Pack
-- LazyVim
-
 ### Agents Pack
 - Claude Code
 - Codex CLI

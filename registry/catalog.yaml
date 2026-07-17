@@ -10,7 +10,7 @@ packs:
   - id: podcasts-reading-pack
     title: Podcasts & Reading Pack
     exposure: starter
-    tool_ids: [shellcast, newsboat, glow, jq, yq, tldr, less]
+    tool_ids: [shellcast, newsboat, glow, lynx, jq, yq, tldr, less]
   - id: files-pack
     title: Files Pack
     exposure: starter
@@ -20,13 +20,9 @@ packs:
     exposure: starter
     tool_ids: [cmatrix, bastet, asciiquarium, sl, lolcat, cowsay, fortune, tty-clock, nyancat, pipes-sh, ninvaders, nudoku]
   - id: edit-pack
-    title: Edit Pack
+    title: Editors & IDEs Pack
     exposure: starter
     tool_ids: [micro, helix, neovim, visidata]
-  - id: ide-pack
-    title: IDE Pack
-    exposure: search_only
-    tool_ids: [lazyvim]
   - id: agents-pack
     title: Agents Pack
     exposure: search_only
@@ -273,6 +269,23 @@ tools:
       - platform: linux
         method: snap
         package_hints: ["glow"]
+  - id: lynx
+    name: "Lynx"
+    description: "Browse websites as text with a keyboard-driven terminal interface."
+    category: reading
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "lynx"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["lynx"]
+      - platform: linux
+        method: apt
+        package_hints: ["lynx"]
   - id: jq
     name: "jq"
     category: utility
@@ -906,7 +919,7 @@ tools:
   - id: helix
     name: "Helix"
     description: "A modal code editor with built-in language-server support."
-    category: edit
+    category: ide
     tags: []
     audience: prosumer
     risk: SAFE
@@ -954,23 +967,6 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["visidata"]
-  - id: lazyvim
-    name: "LazyVim"
-    description: "A preconfigured Neovim environment with IDE-oriented workflows."
-    category: ide
-    tags: []
-    audience: developer
-    risk: SAFE
-    exposure: search_only
-    run:
-      cmd: "nvim"
-    installers:
-      - platform: macos
-        method: brew
-        package_hints: ["lazyvim"]
-      - platform: linux
-        method: apt
-        package_hints: ["neovim"]
   - id: claude-code
     name: "Claude Code"
     description: "An agentic coding assistant that works inside the terminal."
