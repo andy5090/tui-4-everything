@@ -245,6 +245,12 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 ));
                 lines.push(Line::from(format!("channel: {}", job.item.channel)));
                 lines.push(Line::from(format!(
+                    "timeout: {} min",
+                    job.task
+                        .effective_timeout_sec(app.settings.install_timeout_sec)
+                        .div_ceil(60)
+                )));
+                lines.push(Line::from(format!(
                     "attempts: {}/{}",
                     if job.item.state == QueueState::Installing {
                         job.item.attempts.saturating_add(1)

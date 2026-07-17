@@ -21,6 +21,12 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
         {
             bail!("tool {} has an unsafe run command", tool.id);
         }
+        if tool
+            .install_timeout_sec
+            .is_some_and(|timeout| !(60..=7_200).contains(&timeout))
+        {
+            bail!("tool {} has an invalid install timeout", tool.id);
+        }
         let mut option_ids = HashSet::new();
         for option in &tool.run_options {
             if !option_ids.insert(option.id.as_str()) {

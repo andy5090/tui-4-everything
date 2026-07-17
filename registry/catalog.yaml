@@ -10,7 +10,11 @@ packs:
   - id: podcasts-reading-pack
     title: Podcasts & Reading Pack
     exposure: starter
-    tool_ids: [shellcast, newsboat, glow, lynx, jq, yq, tldr, less]
+    tool_ids: [shellcast, newsboat, glow, jq, yq, tldr, less]
+  - id: information-search-pack
+    title: Information Search Pack
+    exposure: starter
+    tool_ids: [lynx]
   - id: files-pack
     title: Files Pack
     exposure: starter
@@ -18,7 +22,11 @@ packs:
   - id: fun-pack
     title: Fun Pack
     exposure: starter
-    tool_ids: [cmatrix, bastet, asciiquarium, sl, lolcat, cowsay, fortune, tty-clock, nyancat, pipes-sh, ninvaders, nudoku]
+    tool_ids: [cmatrix, asciiquarium, sl, lolcat, cowsay, fortune, tty-clock, nyancat, pipes-sh]
+  - id: games-pack
+    title: Games Pack
+    exposure: starter
+    tool_ids: [bastet, ninvaders, nudoku]
   - id: edit-pack
     title: Editors & IDEs Pack
     exposure: starter
@@ -103,6 +111,7 @@ tools:
   - id: termusic
     name: "Termusic"
     description: "A terminal music player for local audio libraries."
+    install_timeout_sec: 3600
     category: entertainment
     tags: []
     audience: prosumer
@@ -110,6 +119,9 @@ tools:
     exposure: starter
     run:
       cmd: "termusic"
+    checks:
+      - which: "termusic"
+      - which: "termusic-server"
     installers:
       - platform: macos
         method: brew

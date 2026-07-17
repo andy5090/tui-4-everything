@@ -22,6 +22,8 @@ pub struct Tool {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub install_timeout_sec: Option<u64>,
     pub category: ToolCategory,
     #[serde(default)]
     pub tags: Vec<String>,
@@ -98,6 +100,29 @@ impl Tool {
         } else {
             Platform::Linux
         })
+    }
+
+    pub fn install_check_commands(&self, platform: Platform) -> Vec<String> {
+        let checks = self
+            .checks
+            .iter()
+            .filter_map(|check| check.which.clone())
+            .collect::<Vec<_>>();
+        if !checks.is_empty() {
+            return checks;
+        }
+        self.installers
+            .iter()
+            .find(|installer| installer.platform == platform)
+            .and_then(|installer| installer.executable.clone())
+            .or_else(|| {
+                self.run_command_for(platform)
+                    .split_whitespace()
+                    .next()
+                    .map(str::to_string)
+            })
+            .into_iter()
+            .collect()
     }
 }
 

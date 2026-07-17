@@ -252,14 +252,33 @@ impl<R: CommandRunner, C: InstallChecker> InstallExecutor<R, C> {
         }
     }
 
+    fn check_install(&self, task: &InstallTask) -> Result<CheckResult> {
+        let mut commands = Vec::new();
+        let mut resolved_paths = Vec::new();
+        let mut installed = true;
+        for command in task.check_commands() {
+            let result = self.checker.check(command)?;
+            commands.push(result.command);
+            installed &= result.installed;
+            if let Some(path) = result.resolved_path {
+                resolved_paths.push(path);
+            }
+        }
+        Ok(CheckResult {
+            command: commands.join(", "),
+            installed,
+            resolved_path: installed.then(|| resolved_paths.join(", ")),
+        })
+    }
+
     pub fn execute(
         &self,
         mut job: InstallJob,
         cancel: Arc<AtomicBool>,
         mut on_output: impl FnMut(OutputChunk),
     ) -> InstallJob {
-        if let Some(command) = &job.task.check_command {
-            match self.checker.check(command) {
+        if job.task.check_command.is_some() {
+            match self.check_install(&job.task) {
                 Ok(result) => {
                     let installed = result.installed;
                     job.preflight = Some(result);
@@ -324,8 +343,8 @@ impl<R: CommandRunner, C: InstallChecker> InstallExecutor<R, C> {
             });
 
             if output.exit_code == Some(0) && !output.timed_out && !output.cancelled {
-                let verified = if let Some(command) = &job.task.check_command {
-                    match self.checker.check(command) {
+                let verified = if job.task.check_command.is_some() {
+                    match self.check_install(&job.task) {
                         Ok(result) => {
                             let installed = result.installed;
                             job.postflight = Some(result);

@@ -12,6 +12,10 @@ pub struct InstallTask {
     #[serde(default)]
     pub check_command: Option<String>,
     #[serde(default)]
+    pub additional_check_commands: Vec<String>,
+    #[serde(default)]
+    pub install_timeout_sec: Option<u64>,
+    #[serde(default)]
     pub requires_privileges: bool,
     pub requires_confirmation: bool,
     pub queued_at: DateTime<Utc>,
@@ -20,6 +24,25 @@ pub struct InstallTask {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InstallPolicy {
     pub enforce_script_confirmation: bool,
+}
+
+impl InstallTask {
+    pub fn effective_timeout_sec(&self, configured_timeout_sec: u64) -> u64 {
+        let method_default = if self.method == InstallMethod::Cargo {
+            configured_timeout_sec.max(1_800)
+        } else {
+            configured_timeout_sec
+        };
+        self.install_timeout_sec
+            .map_or(method_default, |timeout| method_default.max(timeout))
+    }
+
+    pub fn check_commands(&self) -> impl Iterator<Item = &str> {
+        self.check_command
+            .iter()
+            .map(String::as_str)
+            .chain(self.additional_check_commands.iter().map(String::as_str))
+    }
 }
 
 impl Default for InstallPolicy {
@@ -49,15 +72,15 @@ pub fn build_install_task(
         bail!("script installer for {} must require confirmation", tool.id);
     }
 
+    let mut check_commands = tool.install_check_commands(installer.platform.clone());
+    let check_command = (!check_commands.is_empty()).then(|| check_commands.remove(0));
     Ok(InstallTask {
         tool_id: tool.id.clone(),
         method: installer.method.clone(),
         command,
-        check_command: installer
-            .executable
-            .clone()
-            .or_else(|| tool.checks.iter().find_map(|check| check.which.clone()))
-            .or_else(|| tool.run.cmd.split_whitespace().next().map(str::to_string)),
+        check_command,
+        additional_check_commands: check_commands,
+        install_timeout_sec: tool.install_timeout_sec,
         requires_privileges: !installer.system_packages.is_empty(),
         requires_confirmation,
         queued_at: Utc::now(),

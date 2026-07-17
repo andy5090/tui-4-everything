@@ -1956,6 +1956,8 @@ fn install_plan_changed(
     saved.command != current.command
         || saved.method != current.method
         || saved.check_command != current.check_command
+        || saved.additional_check_commands != current.additional_check_commands
+        || saved.install_timeout_sec != current.install_timeout_sec
         || saved.requires_privileges != current.requires_privileges
         || saved.requires_confirmation != current.requires_confirmation
 }

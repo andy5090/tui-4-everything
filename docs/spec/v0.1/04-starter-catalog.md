@@ -3,9 +3,11 @@
 ## 4.1 Pack 구성(v0.1)
 - Music Pack (6)
 - Video Pack (6)
-- Podcasts & Reading Pack (8)
+- Podcasts & Reading Pack (7)
+- Information Search Pack (1)
 - Files Pack (16)
-- Fun Pack (12)
+- Fun Pack (9)
+- Games Pack (3)
 - Editors & IDEs Pack (4)
 = 합계 52개 + (옵션 Search-only) Agents(3) = 총 55
 v0.1 목표 40~80 범위 충족.
@@ -28,17 +30,19 @@ v0.1 목표 40~80 범위 충족.
 5) streamlink
 6) mediainfo
 
-## 4.4 Podcasts & Reading Pack (8)
+## 4.4 Podcasts & Reading Pack (7)
 1) shellcast
 2) newsboat
 3) glow
-4) lynx
-5) jq
-6) yq
-7) tldr
-8) less
+4) jq
+5) yq
+6) tldr
+7) less
 
-## 4.5 Files Pack (16)
+## 4.5 Information Search Pack (1)
+1) lynx
+
+## 4.6 Files Pack (16)
 1) yazi
 2) bat
 3) eza
@@ -56,33 +60,35 @@ v0.1 목표 40~80 범위 충족.
 15) unzip
 16) rsync
 
-## 4.6 Fun Pack (12)
+## 4.7 Fun Pack (9)
 1) cmatrix
-2) bastet
-3) asciiquarium
-4) sl
-5) lolcat
-6) cowsay
-7) fortune
-8) tty-clock
-9) nyancat
-10) pipes.sh
-11) ninvaders
-12) nudoku
+2) asciiquarium
+3) sl
+4) lolcat
+5) cowsay
+6) fortune
+7) tty-clock
+8) nyancat
+9) pipes.sh
 
-## 4.7 Editors & IDEs Pack (4)
+## 4.8 Games Pack (3)
+1) bastet
+2) ninvaders
+3) nudoku
+
+## 4.9 Editors & IDEs Pack (4)
 1) micro
 2) helix
 3) neovim
 4) visidata
 
-## 4.8 Search-only (옵션)
+## 4.10 Search-only (옵션)
 ### Agents Pack
 - Claude Code
 - Codex CLI
 - OpenCode
 
-## 4.9 리스크 배지 권장값
+## 4.11 리스크 배지 권장값
 - 대부분: SAFE
 - yt-dlp: CAUTION
 - rsync: CAUTION

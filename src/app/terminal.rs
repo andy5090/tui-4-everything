@@ -52,15 +52,15 @@ pub fn run(mut app: AppState) -> Result<()> {
         .tools
         .iter()
         .filter_map(|tool| {
-            let command = tool
-                .run_command_for_current_platform()
-                .split_whitespace()
-                .next()?;
-            checker
-                .check(command)
-                .ok()
-                .filter(|result| result.installed)
-                .map(|_| tool.id.clone())
+            let platform = if cfg!(target_os = "macos") {
+                crate::catalog::models::Platform::Macos
+            } else {
+                crate::catalog::models::Platform::Linux
+            };
+            tool.install_check_commands(platform)
+                .iter()
+                .all(|command| checker.check(command).is_ok_and(|result| result.installed))
+                .then(|| tool.id.clone())
         })
         .collect::<BTreeSet<_>>();
     app.apply_installed_tools(installed);
@@ -179,11 +179,10 @@ fn process_effects(
                 let sender = event_sender.clone();
                 let output_tool_id = tool_id.clone();
                 let policy = ExecutionPolicy {
-                    timeout: Duration::from_secs(if job.task.method == InstallMethod::Cargo {
-                        app.settings.install_timeout_sec.max(1_800)
-                    } else {
-                        app.settings.install_timeout_sec
-                    }),
+                    timeout: Duration::from_secs(
+                        job.task
+                            .effective_timeout_sec(app.settings.install_timeout_sec),
+                    ),
                     max_attempts: if job.task.method == InstallMethod::Cargo {
                         1
                     } else {

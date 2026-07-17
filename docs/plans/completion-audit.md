@@ -6,7 +6,7 @@ Date: 2026-07-17
 
 | Requirement | Authoritative evidence | Result |
 | --- | --- | --- |
-| Engineering baseline | `scripts/gates/run_all.sh`, CI workflow, 101 default tests, Clippy warnings denied | Pass |
+| Engineering baseline | `scripts/gates/run_all.sh`, CI workflow, 102 default tests, Clippy warnings denied | Pass |
 | Pack-first app navigation and responsive rendering | `tests/tui_state.rs`, real single-app tmux lifecycle, 120x30 release PTY smoke | Pass |
 | Installation execution and recovery | `tests/install_execution.rs`, `tests/queue_state.rs`, `tests/storage_state.rs` | Pass |
 | Full Linux catalog install and launch | Local package/source/dependency live gate plus manual `catalog-install-gate.yml`, isolated Ubuntu runner and evidence per app | Source and dependency gate pass; full install matrix not yet run |

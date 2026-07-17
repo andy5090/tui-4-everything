@@ -75,6 +75,8 @@ fn task() -> InstallTask {
         method: InstallMethod::Apt,
         command: "install test-tool".to_string(),
         check_command: None,
+        additional_check_commands: Vec::new(),
+        install_timeout_sec: None,
         requires_privileges: false,
         requires_confirmation: false,
         queued_at: Utc::now(),
@@ -233,6 +235,43 @@ fn preflight_skips_install_when_executable_is_already_present() {
     assert_eq!(completed.item.attempts, 0);
     assert!(completed.attempts.is_empty());
     assert!(completed.preflight.expect("preflight result").installed);
+}
+
+#[test]
+fn preflight_requires_every_declared_executable() {
+    let log_dir = temp_dir("multi-preflight");
+    let runner = MockRunner {
+        outputs: Mutex::new(VecDeque::from([output(0, "installed\n", "")])),
+    };
+    let checker = MockChecker {
+        results: Mutex::new(VecDeque::from([true, false, true, true])),
+    };
+    let executor = InstallExecutor::with_checker(
+        runner,
+        checker,
+        ExecutionPolicy {
+            timeout: Duration::from_secs(1),
+            max_attempts: 1,
+            log_dir: log_dir.clone(),
+        },
+    );
+    let mut install_task = task();
+    install_task.check_command = Some("termusic".to_string());
+    install_task.additional_check_commands = vec!["termusic-server".to_string()];
+
+    let completed = executor.execute(
+        InstallJob::new(install_task, "cargo"),
+        Arc::new(AtomicBool::new(false)),
+        |_| {},
+    );
+
+    assert_eq!(completed.item.state, QueueState::Success);
+    assert_eq!(completed.item.attempts, 1);
+    assert!(!completed.preflight.expect("preflight result").installed);
+    let postflight = completed.postflight.expect("postflight result");
+    assert!(postflight.installed);
+    assert_eq!(postflight.command, "termusic, termusic-server");
+    let _ = fs::remove_dir_all(log_dir);
 }
 
 #[test]

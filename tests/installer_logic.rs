@@ -1,5 +1,6 @@
 use t4e::catalog::models::{
-    Audience, Exposure, InstallMethod, Installer, Platform, Risk, RunSpec, Tool, ToolCategory,
+    Audience, Check, Exposure, InstallMethod, Installer, Platform, Risk, RunSpec, Tool,
+    ToolCategory,
 };
 use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::resolver::{Candidate, PackageSearch, rank_candidates, resolve_with_fallback};
@@ -9,6 +10,7 @@ fn fake_tool(risk: Risk) -> Tool {
         id: "fake-tool".to_string(),
         name: "Fake Tool".to_string(),
         description: None,
+        install_timeout_sec: None,
         category: ToolCategory::Utility,
         tags: vec![],
         audience: Audience::General,
@@ -147,7 +149,20 @@ fn cargo_install_uses_the_published_lockfile() {
 
 #[test]
 fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
-    let tool = fake_tool(Risk::Safe);
+    let mut tool = fake_tool(Risk::Safe);
+    tool.install_timeout_sec = Some(3_600);
+    tool.checks = vec![
+        Check {
+            which: Some("termusic".to_string()),
+            version: None,
+            custom: None,
+        },
+        Check {
+            which: Some("termusic-server".to_string()),
+            version: None,
+            custom: None,
+        },
+    ];
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Cargo,
@@ -164,6 +179,9 @@ fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
     let task =
         build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert!(task.requires_privileges);
+    assert_eq!(task.check_command.as_deref(), Some("termusic"));
+    assert_eq!(task.additional_check_commands, ["termusic-server"]);
+    assert_eq!(task.effective_timeout_sec(1_080), 3_600);
     assert_eq!(
         task.command,
         "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y protobuf-compiler libasound2-dev && cargo install --locked termusic termusic-server"
