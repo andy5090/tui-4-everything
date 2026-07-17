@@ -63,6 +63,35 @@ fn registry_loads_and_validates() {
     }));
     assert_eq!(yewtube.checks[0].which.as_deref(), Some("yt"));
 
+    let youtube_tui = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "youtube-tui")
+        .expect("youtube-tui exists");
+    assert_eq!(youtube_tui.run.cmd, "youtube-tui");
+    assert!(youtube_tui.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::Cargo
+            && installer
+                .system_packages
+                .contains(&"libmpv-dev".to_string())
+    }));
+
+    let tplay = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "tplay")
+        .expect("tplay exists");
+    assert_eq!(tplay.run.cmd, "tplay");
+    assert!(tplay.launch_argument.is_some());
+    assert!(tplay.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::Cargo
+            && installer
+                .system_packages
+                .contains(&"libavcodec-dev".to_string())
+    }));
+
     let lynx = catalog
         .tools
         .iter()
@@ -74,15 +103,18 @@ fn registry_loads_and_validates() {
             && installer.method == InstallMethod::Apt
             && installer.package_hints == ["lynx"]
     }));
-    assert!(catalog.tools.iter().all(|tool| tool.id != "lazyvim"));
-    assert_eq!(
-        catalog
-            .tools
+    assert!(catalog.tools.iter().all(|tool| tool.id != "neovim"));
+    let lazyvim = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "lazyvim")
+        .expect("lazyvim exists");
+    assert_eq!(lazyvim.run.cmd, "t4e-lazyvim");
+    assert!(
+        lazyvim
+            .installers
             .iter()
-            .filter(|tool| tool.run.cmd == "nvim")
-            .count(),
-        1,
-        "Neovim must not be duplicated as a fake LazyVim installation"
+            .all(|installer| installer.method == InstallMethod::LazyVim)
     );
     let helix = catalog
         .tools

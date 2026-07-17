@@ -27,6 +27,7 @@ fn ubuntu_install_sources_resolve_every_catalog_package() {
                     command_succeeds("python3", &["-m", "pip", "index", "versions", package])
                 }
                 InstallMethod::NpmGlobal => command_succeeds("npm", &["view", package, "version"]),
+                InstallMethod::LazyVim => command_succeeds("snap", &["info", "nvim"]),
                 InstallMethod::Script => installer
                     .install_cmd
                     .as_deref()

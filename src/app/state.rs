@@ -77,6 +77,15 @@ pub struct LaunchOptionsState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaunchArgumentState {
+    pub tool_id: String,
+    pub tool_name: String,
+    pub label: String,
+    pub placeholder: String,
+    pub input: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AppInput {
     Text(String),
     Key(String),
@@ -162,6 +171,7 @@ pub struct AppState {
     pub workspace_missing_tools: Vec<String>,
     pub app_view: Option<AppViewState>,
     pub link_picker: Option<LinkPickerState>,
+    pub launch_argument: Option<LaunchArgumentState>,
     pub launch_options: Option<LaunchOptionsState>,
     pending_tool_launch: Option<ToolLaunchRequest>,
     return_after_app_close: bool,
@@ -246,6 +256,7 @@ impl AppState {
             workspace_missing_tools: Vec::new(),
             app_view: None,
             link_picker: None,
+            launch_argument: None,
             launch_options: None,
             pending_tool_launch: None,
             return_after_app_close: false,
@@ -285,6 +296,11 @@ impl AppState {
 
         if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
             self.should_quit = true;
+            return;
+        }
+
+        if self.launch_argument.is_some() {
+            self.handle_launch_argument_key(key.code);
             return;
         }
 
@@ -343,6 +359,7 @@ impl AppState {
         if !self.mouse_enabled
             || self.confirmation.is_some()
             || self.ai_confirmation.is_some()
+            || self.launch_argument.is_some()
             || self.launch_options.is_some()
             || self.uninstall_confirmation.is_some()
             || self.search_mode
@@ -1352,6 +1369,7 @@ impl AppState {
         let tool_id = tool.id.clone();
         let tool_name = tool.name.clone();
         let command = tool.run_command_for_current_platform().to_string();
+        let launch_argument = tool.launch_argument.clone();
         let options = tool.run_options.clone();
         if let Some(index) = self
             .app_view
@@ -1365,6 +1383,17 @@ impl AppState {
             }
             self.screen = Screen::AppView;
             self.status = format!("Returned to {tool_name}");
+            return;
+        }
+        if let Some(argument) = launch_argument {
+            self.launch_argument = Some(LaunchArgumentState {
+                tool_id,
+                tool_name,
+                label: argument.label,
+                placeholder: argument.placeholder,
+                input: String::new(),
+            });
+            self.status = "Enter the required launch value".to_string();
             return;
         }
         if options.is_empty() {
@@ -1394,6 +1423,56 @@ impl AppState {
             selections,
         });
         self.status = "Configure launch options".to_string();
+    }
+
+    fn handle_launch_argument_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                self.launch_argument = None;
+                self.status = "Launch cancelled".to_string();
+            }
+            KeyCode::Backspace => {
+                if let Some(argument) = &mut self.launch_argument {
+                    argument.input.pop();
+                }
+            }
+            KeyCode::Char(ch) => {
+                if let Some(argument) = &mut self.launch_argument {
+                    argument.input.push(ch);
+                }
+            }
+            KeyCode::Enter => {
+                let Some(argument) = self.launch_argument.take() else {
+                    return;
+                };
+                let value = argument.input.trim();
+                if value.is_empty() {
+                    self.launch_argument = Some(argument);
+                    self.status = "A launch value is required".to_string();
+                    return;
+                }
+                let Some(tool) = self
+                    .catalog
+                    .tools
+                    .iter()
+                    .find(|tool| tool.id == argument.tool_id)
+                else {
+                    self.status = "Launch tool is no longer available".to_string();
+                    return;
+                };
+                self.effects
+                    .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+                        tool_id: tool.id.clone(),
+                        command: format!(
+                            "{} {}",
+                            tool.run_command_for_current_platform(),
+                            shell_quote(value)
+                        ),
+                    }));
+                self.status = format!("Opening {}", tool.name);
+            }
+            _ => {}
+        }
     }
 
     fn handle_launch_options_key(&mut self, code: KeyCode) {
@@ -1979,6 +2058,7 @@ fn uninstall_command(method: &InstallMethod, package: &str) -> Option<String> {
         InstallMethod::Pipx => format!("pipx uninstall {package}"),
         InstallMethod::NpmGlobal => format!("npm uninstall --global {package}"),
         InstallMethod::Cargo => format!("cargo uninstall {package}"),
+        InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
         InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => return None,
     };
     Some(command)
@@ -2031,6 +2111,10 @@ fn app_input_from_key(key: KeyEvent) -> Option<AppInput> {
     Some(AppInput::Key(
         modifier.map_or(name.clone(), |prefix| format!("{prefix}-{name}")),
     ))
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn extract_urls(content: &str) -> Vec<String> {

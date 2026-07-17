@@ -26,7 +26,7 @@
 ## 6.5 Coding Desk 연결
 - Agent 실행 시 tmux/zellij workspace 열기
 - right-bottom pane에 선택 agent 실행
-- editor 우선순위: Neovim > Helix > Micro
+- editor 우선순위: LazyVim > Helix > Micro
 
 ## 6.6 v0.1 한계
 - 에이전트 내부 동작 강제 차단은 제공하지 않는다.

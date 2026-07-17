@@ -6,7 +6,7 @@ packs:
   - id: video-pack
     title: Video Pack
     exposure: starter
-    tool_ids: [mpv, yewtube, yt-dlp, ffmpeg, streamlink, mediainfo]
+    tool_ids: [mpv, yewtube, youtube-tui, tplay, yt-dlp, ffmpeg, streamlink, mediainfo]
   - id: podcasts-reading-pack
     title: Podcasts & Reading Pack
     exposure: starter
@@ -30,7 +30,7 @@ packs:
   - id: edit-pack
     title: Editors & IDEs Pack
     exposure: starter
-    tool_ids: [micro, helix, neovim, visidata]
+    tool_ids: [micro, helix, lazyvim, visidata]
   - id: agents-pack
     title: Agents Pack
     exposure: search_only
@@ -165,6 +165,47 @@ tools:
         package_hints: ["yewtube"]
     checks:
       - which: "yt"
+  - id: youtube-tui
+    name: "YouTube TUI"
+    description: "Browse and search YouTube in a configurable TUI with external video playback."
+    install_timeout_sec: 3600
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "youtube-tui"
+    installers:
+      - platform: macos
+        method: cargo
+        package_hints: ["youtube-tui"]
+      - platform: linux
+        method: cargo
+        package_hints: ["youtube-tui"]
+        system_packages: ["pkg-config", "libmpv-dev", "libsixel-dev", "libxcb1-dev", "mpv", "yt-dlp"]
+  - id: tplay
+    name: "tplay"
+    description: "Play local or online media, including YouTube, as colored terminal ASCII art."
+    install_timeout_sec: 3600
+    category: entertainment
+    tags: []
+    audience: general
+    risk: SAFE
+    exposure: starter
+    run:
+      cmd: "tplay"
+    launch_argument:
+      label: "Media URL or local path"
+      placeholder: "https://www.youtube.com/watch?v=..."
+    installers:
+      - platform: macos
+        method: cargo
+        package_hints: ["tplay"]
+      - platform: linux
+        method: cargo
+        package_hints: ["tplay"]
+        system_packages: ["libssl-dev", "ffmpeg", "libavfilter-dev", "libavdevice-dev", "libavformat-dev", "libavcodec-dev", "libswscale-dev", "libasound2-dev", "yt-dlp", "libmpv-dev", "clang"]
   - id: yt-dlp
     name: "yt-dlp"
     category: entertainment
@@ -945,23 +986,25 @@ tools:
       - platform: linux
         method: snap_classic
         package_hints: ["helix"]
-  - id: neovim
-    name: "Neovim"
-    description: "An extensible modal text editor for code and general editing."
-    category: edit
+  - id: lazyvim
+    name: "LazyVim"
+    description: "A full IDE configuration for Neovim, isolated from your existing Neovim setup."
+    category: ide
     tags: []
     audience: developer
     risk: SAFE
     exposure: starter
     run:
-      cmd: "nvim"
+      cmd: "t4e-lazyvim"
+    checks:
+      - which: "t4e-lazyvim"
     installers:
       - platform: macos
-        method: brew
-        package_hints: ["neovim"]
+        method: lazyvim
+        package_hints: ["lazyvim"]
       - platform: linux
-        method: apt
-        package_hints: ["neovim"]
+        method: lazyvim
+        package_hints: ["lazyvim"]
   - id: visidata
     name: "VisiData"
     description: "Interactively explore, transform, and analyze tabular data."

@@ -130,6 +130,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
             installer.package_hints.join(" ")
         ),
         InstallMethod::Go => format!("go install {}", hint),
+        InstallMethod::LazyVim => materialize_lazyvim_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
         InstallMethod::Other => {
             return Err(anyhow::anyhow!("unsupported install method"));
@@ -147,6 +148,18 @@ fn materialize_command(installer: &Installer) -> Result<String> {
     } else {
         bail!("system_packages are only supported by Linux installers")
     }
+}
+
+fn materialize_lazyvim_command(platform: &crate::catalog::models::Platform) -> String {
+    let dependencies = match platform {
+        crate::catalog::models::Platform::Linux => {
+            "sudo -n snap install nvim --classic && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y git ripgrep fd-find gcc"
+        }
+        crate::catalog::models::Platform::Macos => "brew install neovim git ripgrep fd",
+    };
+    format!(
+        "{dependencies} && config_dir=\"${{XDG_CONFIG_HOME:-$HOME/.config}}/t4e-lazyvim\" && if [ ! -f \"$config_dir/init.lua\" ]; then if [ -e \"$config_dir\" ]; then echo 'T4E LazyVim config path already exists' >&2; exit 1; fi; git clone --filter=blob:none https://github.com/LazyVim/starter \"$config_dir\" && rm -rf \"$config_dir/.git\"; fi && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'exec env NVIM_APPNAME=t4e-lazyvim nvim \"$@\"' > \"$HOME/.local/bin/t4e-lazyvim\" && chmod +x \"$HOME/.local/bin/t4e-lazyvim\""
+    )
 }
 
 fn validate_package_hint(hint: &str) -> Result<()> {

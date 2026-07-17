@@ -33,12 +33,20 @@ pub struct Tool {
     pub exposure: Exposure,
     pub run: RunSpec,
     #[serde(default)]
+    pub launch_argument: Option<LaunchArgument>,
+    #[serde(default)]
     pub run_options: Vec<RunOption>,
     #[serde(default)]
     pub installers: Vec<Installer>,
     #[serde(default)]
     pub checks: Vec<Check>,
     pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LaunchArgument {
+    pub label: String,
+    pub placeholder: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -207,6 +215,8 @@ pub enum InstallMethod {
     Cargo,
     #[serde(rename = "go")]
     Go,
+    #[serde(rename = "lazyvim")]
+    LazyVim,
     #[serde(rename = "script")]
     Script,
     #[serde(other)]
@@ -227,6 +237,7 @@ impl InstallMethod {
             Self::NpmGlobal => "npm_global",
             Self::Cargo => "cargo",
             Self::Go => "go",
+            Self::LazyVim => "lazyvim",
             Self::Script => "script",
             Self::Other => "other",
         }

@@ -19,6 +19,7 @@ fn fake_tool(risk: Risk) -> Tool {
         run: RunSpec {
             cmd: "fake".to_string(),
         },
+        launch_argument: None,
         run_options: Vec::new(),
         installers: vec![],
         checks: vec![],
@@ -223,6 +224,28 @@ fn classic_snap_command_uses_cached_sudo_noninteractively() {
     let task =
         build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert_eq!(task.command, "sudo -n snap install --classic yazi");
+    assert!(!task.requires_confirmation);
+}
+
+#[test]
+fn lazyvim_uses_an_isolated_managed_configuration() {
+    let tool = fake_tool(Risk::Safe);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::LazyVim,
+        package_hints: vec!["lazyvim".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert!(task.command.contains("snap install nvim --classic"));
+    assert!(task.command.contains("LazyVim/starter"));
+    assert!(task.command.contains("NVIM_APPNAME=t4e-lazyvim"));
+    assert!(!task.command.contains("/.config/nvim"));
     assert!(!task.requires_confirmation);
 }
 

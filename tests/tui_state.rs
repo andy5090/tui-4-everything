@@ -167,6 +167,34 @@ fn catalog_builds_launch_command_from_allowlisted_options() {
 }
 
 #[test]
+fn required_launch_argument_is_prompted_and_shell_quoted() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "tplay".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(app.launch_argument.is_some());
+    assert!(app.take_effect().is_none());
+
+    let media = "https://example.com/watch?q=a'b;echo unsafe";
+    for ch in media.chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request))
+            if request.tool_id == "tplay"
+                && request.command == "tplay 'https://example.com/watch?q=a'\"'\"'b;echo unsafe'"
+    ));
+}
+
+#[test]
 fn installed_app_can_emit_a_confirmed_package_manager_uninstall() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -194,6 +222,31 @@ fn installed_app_can_emit_a_confirmed_package_manager_uninstall() {
     app.apply_uninstall_result("ripgrep", true, "");
     assert!(!app.installed_tools.contains("ripgrep"));
     assert!(!app.uninstalling_tools.contains("ripgrep"));
+}
+
+#[test]
+fn lazyvim_uninstall_only_removes_the_t4e_profile() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "lazyvim".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.installed_tools.insert("lazyvim".to_string());
+
+    app.handle_key(key(KeyCode::Char('U')));
+    app.handle_key(key(KeyCode::Enter));
+
+    let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
+        panic!("uninstall request expected");
+    };
+    assert_eq!(request.tool_id, "lazyvim");
+    assert_eq!(request.method, InstallMethod::LazyVim);
+    assert!(request.command.contains("t4e-lazyvim"));
+    assert!(!request.command.contains("/.config/nvim"));
+    assert!(!request.command.contains("snap remove"));
+    assert_eq!(request.check_command, "t4e-lazyvim");
 }
 
 #[test]

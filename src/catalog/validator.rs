@@ -27,6 +27,11 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
         {
             bail!("tool {} has an invalid install timeout", tool.id);
         }
+        if tool.launch_argument.as_ref().is_some_and(|argument| {
+            argument.label.trim().is_empty() || argument.placeholder.trim().is_empty()
+        }) {
+            bail!("tool {} has an invalid launch argument", tool.id);
+        }
         let mut option_ids = HashSet::new();
         for option in &tool.run_options {
             if !option_ids.insert(option.id.as_str()) {

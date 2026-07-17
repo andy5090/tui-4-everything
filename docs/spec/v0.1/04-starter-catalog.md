@@ -2,14 +2,14 @@
 
 ## 4.1 Pack 구성(v0.1)
 - Music Pack (6)
-- Video Pack (6)
+- Video Pack (8)
 - Podcasts & Reading Pack (7)
 - Information Search Pack (1)
 - Files Pack (16)
 - Fun Pack (9)
 - Games Pack (3)
 - Editors & IDEs Pack (4)
-= 합계 52개 + (옵션 Search-only) Agents(3) = 총 55
+= 합계 54개 + (옵션 Search-only) Agents(3) = 총 57
 v0.1 목표 40~80 범위 충족.
 
 > NOTE: “패키지명/가용성”은 OS/배포판마다 달라, v0.1은 package_hints + resolver 기반으로 설치 성공률을 확보한다.
@@ -22,13 +22,15 @@ v0.1 목표 40~80 범위 충족.
 5) termusic
 6) mpv
 
-## 4.3 Video Pack (6)
+## 4.3 Video Pack (8)
 1) mpv
 2) yewtube
-3) yt-dlp
-4) ffmpeg
-5) streamlink
-6) mediainfo
+3) youtube-tui
+4) tplay
+5) yt-dlp
+6) ffmpeg
+7) streamlink
+8) mediainfo
 
 ## 4.4 Podcasts & Reading Pack (7)
 1) shellcast
@@ -79,7 +81,7 @@ v0.1 목표 40~80 범위 충족.
 ## 4.9 Editors & IDEs Pack (4)
 1) micro
 2) helix
-3) neovim
+3) lazyvim
 4) visidata
 
 ## 4.10 Search-only (옵션)

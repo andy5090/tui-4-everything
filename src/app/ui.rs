@@ -60,6 +60,8 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
 
     if app.show_help {
         render_help(frame, area);
+    } else if app.launch_argument.is_some() {
+        render_launch_argument(frame, app, area);
     } else if app.launch_options.is_some() {
         render_launch_options(frame, app, area);
     } else if app.uninstall_confirmation.is_some() {
@@ -861,6 +863,36 @@ fn render_launch_options(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     frame.render_widget(
         Paragraph::new(lines)
             .block(panel("Configure app"))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
+}
+
+fn render_launch_argument(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(state) = &app.launch_argument else {
+        return;
+    };
+    let popup = centered_rect(84, 9, area);
+    frame.render_widget(Clear, popup);
+    let value = if state.input.is_empty() {
+        Line::styled(&state.placeholder, Style::default().fg(MUTED))
+    } else {
+        Line::styled(format!("> {}_", state.input), selection_style())
+    };
+    let content = Text::from(vec![
+        Line::styled(
+            &state.tool_name,
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Line::from(""),
+        Line::from(state.label.as_str()),
+        value,
+        Line::from(""),
+        Line::styled("Enter launch   Esc cancel", Style::default().fg(MUTED)),
+    ]);
+    frame.render_widget(
+        Paragraph::new(content)
+            .block(panel("Launch input"))
             .wrap(Wrap { trim: false }),
         popup,
     );

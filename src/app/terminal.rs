@@ -309,7 +309,7 @@ fn process_effects(
                 if active.contains_key(&tool_id) {
                     continue;
                 }
-                if install_method_requires_privileges(&request.method)
+                if uninstall_method_requires_privileges(&request.method)
                     && let Err(error) = session.suspend_for(|| acquire_install_privileges(&tool_id))
                 {
                     app.apply_uninstall_result(&tool_id, false, &error.to_string());
@@ -569,6 +569,19 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::Snap
             | InstallMethod::SnapClassic
             | InstallMethod::Pipx
+            | InstallMethod::LazyVim
+    )
+}
+
+fn uninstall_method_requires_privileges(method: &InstallMethod) -> bool {
+    matches!(
+        method,
+        InstallMethod::Apt
+            | InstallMethod::Dnf
+            | InstallMethod::Pacman
+            | InstallMethod::Snap
+            | InstallMethod::SnapClassic
+            | InstallMethod::Pipx
     )
 }
 
@@ -705,7 +718,10 @@ impl Drop for TerminalSession {
 
 #[cfg(test)]
 mod tests {
-    use super::{frame_poll_interval, install_method_requires_privileges};
+    use super::{
+        frame_poll_interval, install_method_requires_privileges,
+        uninstall_method_requires_privileges,
+    };
     use crate::app::events::Screen;
     use crate::catalog::models::InstallMethod;
     use std::time::Duration;
@@ -732,7 +748,11 @@ mod tests {
             &InstallMethod::SnapClassic
         ));
         assert!(install_method_requires_privileges(&InstallMethod::Pipx));
+        assert!(install_method_requires_privileges(&InstallMethod::LazyVim));
         assert!(!install_method_requires_privileges(&InstallMethod::Brew));
         assert!(!install_method_requires_privileges(&InstallMethod::Cargo));
+        assert!(!uninstall_method_requires_privileges(
+            &InstallMethod::LazyVim
+        ));
     }
 }
