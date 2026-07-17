@@ -12,6 +12,32 @@ local Codex control surface. It uses the signed-in `codex` CLI account through
 - Codex CLI for AI Home
 - The relevant package manager (`apt`, Snap, Homebrew, Cargo, or pipx) for installs
 
+## Catalog Packs
+
+| Pack | Interactive apps |
+| --- | --- |
+| Music | Spotatui, Spotify Player, Ncspot, Cava, Termusic |
+| Video | Yewtube, YouTube TUI, tplay |
+| Podcasts & Reading | Shellcast, Newsboat, Glow |
+| Information Search | Lynx |
+| Files | Yazi, ncdu, broot |
+| Fun | cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
+| Games | bastet, ninvaders, nudoku |
+| Editors & IDEs | Micro, Helix, LazyVim, VisiData |
+| Agents | Claude Code, Codex CLI, OpenCode |
+
+Support commands such as `mpv`, `yt-dlp`, `ffmpeg`, `jq`, and `ripgrep` are
+installed as pack dependencies but are not launched without required input.
+LazyVim uses an isolated `t4e-lazyvim` profile, leaving an existing Neovim
+configuration untouched. YouTube TUI provides browsing and search; tplay asks
+for a media URL or local path before rendering the media as terminal ASCII.
+
+`starter` marks apps intended for the default curated experience.
+`search_only` marks optional or advanced apps that are excluded from default
+recommendations. `SAFE` uses a fixed, validated install plan; `HIGH` covers
+apps or installers capable of broad command and filesystem changes. SAFE may
+still request `sudo` when its package manager requires administrator access.
+
 ## Run
 
 ```bash
@@ -53,8 +79,10 @@ Important actions are intentionally explicit:
   the AI control plane as support tools, but are not launched without inputs.
 - Apps with registered flags open a launch-options dialog. Space enables an
   option, Left/Right chooses an allowlisted value, and Enter launches it.
-- Package-manager installations can be removed with `U`; removal requires
-  confirmation and verifies that the executable is gone.
+- Apps with a required positional value, such as tplay, open an input dialog.
+  The value is shell-quoted before launch rather than interpreted as a command.
+- Package-manager and T4E-managed installations can be removed with `U`;
+  removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
 - AI Home: `Enter` composes a request, `x` interrupts, and `A` reviews a
   proposed side effect.
@@ -69,7 +97,9 @@ system dependencies, T4E temporarily leaves the alternate screen and runs
 interactive `sudo -v`; after authentication it returns to the TUI and executes
 the approved install noninteractively. Install processes are serialized, apt
 waits for an existing dpkg lock, and Cargo apps receive one 30-minute build
-attempt. Cancelling the sudo prompt leaves the queue item unexecuted.
+attempt by default. Apps can declare a longer verified budget; Termusic uses
+60 minutes and requires both `termusic` and `termusic-server` to pass postflight
+checks. Cancelling the sudo prompt leaves the queue item unexecuted.
 
 ## CLI
 
