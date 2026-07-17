@@ -341,6 +341,49 @@ fn app_view_opens_and_copies_the_clean_preferred_auth_url() {
 }
 
 #[test]
+fn app_process_exit_keeps_remaining_apps_or_returns_to_t4e() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Enter));
+    app.open_app_view(
+        "t4e-exit".to_string(),
+        vec![
+            ManagedApp {
+                pane_id: "%60".to_string(),
+                window_index: 0,
+                window_name: "first".to_string(),
+                pane_index: 0,
+                process: "first".to_string(),
+            },
+            ManagedApp {
+                pane_id: "%61".to_string(),
+                window_index: 1,
+                window_name: "second".to_string(),
+                pane_index: 0,
+                process: "second".to_string(),
+            },
+        ],
+    );
+
+    app.update_app_view(
+        vec![ManagedApp {
+            pane_id: "%61".to_string(),
+            window_index: 1,
+            window_name: "second".to_string(),
+            pane_index: 0,
+            process: "second".to_string(),
+        }],
+        String::new(),
+    );
+    assert_eq!(app.screen, Screen::AppView);
+    assert_eq!(app.app_view.as_ref().expect("app view").apps.len(), 1);
+
+    app.update_app_view(Vec::new(), String::new());
+    assert_eq!(app.screen, Screen::Catalog);
+    assert!(app.app_view.is_none());
+    assert_eq!(app.status, "App closed");
+}
+
+#[test]
 fn alt_backspace_returns_to_the_previous_screen_without_closing_the_app() {
     let mut app = app();
     app.handle_key(key(KeyCode::Enter));

@@ -183,13 +183,13 @@ fn single_app_launch_creates_a_managed_background_session() {
             "-P",
             "-F",
             "#{pane_id}",
-            "bash",
+            "exec cmatrix -b",
         ]
     }));
     assert!(
-        calls
+        !calls
             .iter()
-            .any(|args| { args == &["send-keys", "-t", "%7", "--", "cmatrix -b", "C-m"] })
+            .any(|args| args.first().is_some_and(|arg| arg == "send-keys"))
     );
 }
 
@@ -222,18 +222,29 @@ fn real_single_app_lifecycle_works_when_tmux_and_cmatrix_are_available() {
         .launch_app(&session, "app-launcher", "cmatrix", "cmatrix -b")
         .expect("real app launches");
     assert!(outcome.created);
-    thread::sleep(Duration::from_millis(250));
-
     let apps = runtime.list_apps(&session).expect("real apps list");
     assert_eq!(apps.len(), 1);
     assert_eq!(apps[0].window_name, "cmatrix");
-    let content = runtime
-        .capture_app(&apps[0].pane_id)
-        .expect("real ANSI capture");
+    let mut content = String::new();
+    for _ in 0..20 {
+        thread::sleep(Duration::from_millis(50));
+        content = runtime
+            .capture_app(&apps[0].pane_id)
+            .expect("real ANSI capture");
+        if !content.is_empty() {
+            break;
+        }
+    }
     assert!(!content.is_empty());
     runtime
-        .close_app(&apps[0].pane_id)
-        .expect("real app closes");
+        .send_app_key(&apps[0].pane_id, "C-c")
+        .expect("Ctrl+C reaches app");
+    for _ in 0..20 {
+        if !runtime.session_exists(&session).expect("session probe") {
+            break;
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
     assert!(!runtime.session_exists(&session).expect("session probe"));
 }
 

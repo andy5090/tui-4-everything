@@ -496,7 +496,7 @@ fn refresh_app_view(app: &mut AppState, tmux: &TmuxRuntime<SystemTmuxRunner>) {
     };
     match tmux.capture_app(&current.pane_id) {
         Ok(content) => app.update_app_view(apps, content),
-        Err(error) => app.apply_app_view_error(&error),
+        Err(_) => reload_app_view(app, tmux),
     }
 }
 

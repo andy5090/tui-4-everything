@@ -176,6 +176,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         validate_identifier("workspace id", workspace_id)?;
         validate_identifier("app id", app_id)?;
         validate_command(command)?;
+        let app_command = format!("exec {command}");
 
         if self.session_exists(session_name)? {
             self.ensure_managed_session(session_name)?;
@@ -202,7 +203,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 "-P",
                 "-F",
                 "#{pane_id}",
-                "bash",
+                &app_command,
             ]))?;
             ensure_success(&format!("create app window {app_id}"), &create)?;
             let pane_id = create.stdout.trim().to_string();
@@ -210,7 +211,6 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 bail!("tmux returned no pane id for app window {app_id}");
             }
             self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
-            self.start_app(&pane_id, command, app_id)?;
             return Ok(LaunchOutcome {
                 workspace_id: workspace_id.to_string(),
                 session_name: session_name.to_string(),
@@ -229,7 +229,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             "-P",
             "-F",
             "#{pane_id}",
-            "bash",
+            &app_command,
         ]))?;
         ensure_success("create app session", &create)?;
         let pane_id = create.stdout.trim().to_string();
@@ -248,8 +248,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 workspace_id,
             ]))?;
             ensure_success("mark app session", &marker)?;
-            self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
-            self.start_app(&pane_id, command, app_id)
+            self.disable_automatic_rename(&format!("{session_name}:{app_id}"))
         })();
         if let Err(error) = setup {
             let _ = self

@@ -42,6 +42,8 @@ Important actions are intentionally explicit:
   for lists, app tabs, scrolling, and App View footer actions.
   `Alt+O` opens the most likely HTTP(S) link from the current app, and `Alt+C`
   copies the original unwrapped link without App View borders.
+  `Ctrl+C` is forwarded to the app; if it terminates, T4E removes the tmux
+  window and shows another running app or returns to the previous screen.
 - App rows show install readiness and live install state. The detail panel keeps
   the current attempt, channel, recent package-manager output, and failure
   summary visible without opening the install utility.
