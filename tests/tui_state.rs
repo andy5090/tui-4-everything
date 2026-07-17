@@ -41,7 +41,7 @@ fn key(code: KeyCode) -> KeyEvent {
 }
 
 #[test]
-fn tab_is_reserved_for_running_app_switching() {
+fn tab_switches_header_sections_outside_running_apps() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
     app.handle_key(key(KeyCode::Down));
@@ -49,8 +49,11 @@ fn tab_is_reserved_for_running_app_switching() {
     assert_eq!(app.catalog_index, 1);
 
     app.handle_key(key(KeyCode::Tab));
-    assert_eq!(app.screen, Screen::Catalog);
+    assert_eq!(app.screen, Screen::Workspace);
     assert_eq!(app.catalog_index, 1);
+
+    app.handle_key(key(KeyCode::BackTab));
+    assert_eq!(app.screen, Screen::Home);
 }
 
 #[test]
@@ -574,6 +577,35 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
 }
 
 #[test]
+fn mouse_clicks_header_navigation_tabs() {
+    let mut app = app();
+    app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT));
+    app.take_effect();
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 10,
+            row: 1,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+    assert_eq!(app.screen, Screen::Workspace);
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 2,
+            row: 1,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+    assert_eq!(app.screen, Screen::Home);
+}
+
+#[test]
 fn closing_an_app_returns_to_the_pack_it_was_launched_from() {
     let mut app = app();
     app.handle_key(key(KeyCode::Enter));
@@ -659,6 +691,10 @@ fn narrow_layout_keeps_every_screen_target_and_back_key_visible() {
         .collect::<String>();
 
     assert!(rendered.contains("T4E"));
+    assert!(rendered.contains("Packs"));
+    assert!(rendered.contains("Workspaces"));
+    assert!(rendered.contains("Activity"));
+    assert!(rendered.contains("Settings"));
     assert!(rendered.contains("Backspace back"));
 }
 

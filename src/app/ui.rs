@@ -10,7 +10,7 @@ use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
 
 use super::events::Screen;
-use super::state::{AppState, LinkAction};
+use super::state::{AppState, LinkAction, NAVIGATION_TAB_LABELS};
 
 const ACCENT: Color = Color::Cyan;
 const MUTED: Color = Color::DarkGray;
@@ -89,16 +89,31 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Screen::Logs => "Activity".to_string(),
         Screen::Settings => "Settings".to_string(),
     };
+    let titles = NAVIGATION_TAB_LABELS
+        .iter()
+        .map(|label| Line::from(*label))
+        .collect::<Vec<_>>();
     frame.render_widget(
-        Paragraph::new(Line::from(vec![
-            Span::styled(
-                "T4E",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("  /  "),
-            Span::raw(section),
-        ]))
-        .block(Block::default().borders(Borders::ALL)),
+        Tabs::new(titles)
+            .block(
+                Block::default()
+                    .title(Line::from(vec![
+                        Span::styled(
+                            " T4E",
+                            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(format!(" · {section} ")),
+                    ]))
+                    .borders(Borders::ALL),
+            )
+            .select(app.navigation_tab_index())
+            .style(Style::default().fg(Color::Gray))
+            .highlight_style(
+                Style::default()
+                    .fg(SELECTED)
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+            )
+            .divider(" | "),
         area,
     );
 }
@@ -165,9 +180,8 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             )),
         ]),
         Line::from(""),
-        Line::from("Enter open pack   I install pack"),
-        Line::from("c all apps   i installs   w workspaces"),
-        Line::from("a agents   l logs   s settings"),
+        Line::from("Enter open pack   I install pack   c all apps"),
+        Line::from("Tab / Shift-Tab switch sections"),
     ];
     frame.render_widget(
         Paragraph::new(summary)
@@ -751,7 +765,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
         ),
         Line::from("arrows / j k  move selection"),
         Line::from("Enter         open pack or run app"),
-        Line::from("Tab           switch running apps"),
+        Line::from("Tab / BTab    switch sections or running apps"),
         Line::from("Backspace     back / keep app running"),
         Line::from("Alt+M         toggle text selection / mouse controls"),
         Line::from("/             search catalog"),

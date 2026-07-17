@@ -19,6 +19,12 @@ use crate::storage::{
 
 use super::events::Screen;
 
+pub const NAVIGATION_TAB_LABELS: [&str; 5] = ["Packs", "Workspaces", "AI", "Activity", "Settings"];
+
+fn navigation_tab_label(index: usize) -> &'static str {
+    NAVIGATION_TAB_LABELS.get(index).copied().unwrap_or("Packs")
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallConfirmation {
     pub tool_id: String,
@@ -342,6 +348,8 @@ impl AppState {
         match key.code {
             KeyCode::Char('?') => self.show_help = true,
             KeyCode::Backspace | KeyCode::Esc => self.return_to_main(),
+            KeyCode::Tab => self.move_navigation_tab(1),
+            KeyCode::BackTab => self.move_navigation_tab(-1),
             KeyCode::Char('q') if self.screen == Screen::Home => self.should_quit = true,
             KeyCode::Char('q') => self.screen = Screen::Home,
             KeyCode::Char('1') => self.screen = Screen::Home,
@@ -374,8 +382,51 @@ impl AppState {
             MouseEventKind::Down(MouseButton::Left) if self.screen == Screen::AppView => {
                 self.handle_app_view_click(mouse.column, mouse.row, terminal_height);
             }
+            MouseEventKind::Down(MouseButton::Left) if mouse.row < 3 => {
+                self.select_navigation_tab_at(mouse.column);
+            }
             MouseEventKind::Down(MouseButton::Left) => self.select_list_row(mouse.row),
             _ => {}
+        }
+    }
+
+    pub fn navigation_tab_index(&self) -> usize {
+        match self.screen {
+            Screen::Home | Screen::Catalog | Screen::Install => 0,
+            Screen::Workspace => 1,
+            Screen::Agents => 2,
+            Screen::Logs => 3,
+            Screen::Settings => 4,
+            Screen::AppView => 0,
+        }
+    }
+
+    fn move_navigation_tab(&mut self, delta: isize) {
+        let index = move_index(self.navigation_tab_index(), 5, delta);
+        self.open_navigation_tab(index);
+    }
+
+    fn open_navigation_tab(&mut self, index: usize) {
+        self.screen = match index {
+            0 => Screen::Home,
+            1 => Screen::Workspace,
+            2 => Screen::Agents,
+            3 => Screen::Logs,
+            4 => Screen::Settings,
+            _ => return,
+        };
+        self.status = format!("Opened {}", navigation_tab_label(index));
+    }
+
+    fn select_navigation_tab_at(&mut self, column: u16) {
+        let mut start = 1_u16;
+        for (index, label) in NAVIGATION_TAB_LABELS.iter().enumerate() {
+            let end = start.saturating_add(label.len() as u16);
+            if column >= start && column < end {
+                self.open_navigation_tab(index);
+                return;
+            }
+            start = end.saturating_add(3);
         }
     }
 
