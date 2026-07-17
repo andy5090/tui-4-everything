@@ -35,6 +35,7 @@ packs:
 tools:
   - id: spotatui
     name: "Spotatui"
+    description: "A Spotify TUI focused on browsing, discovery, and playback control."
     category: entertainment
     tags: []
     audience: general
@@ -52,6 +53,7 @@ tools:
         system_packages: ["pkg-config", "libssl-dev", "xorg-dev", "libpipewire-0.3-dev", "libspa-0.2-dev"]
   - id: spotify-player
     name: "Spotify Player"
+    description: "A full-featured Spotify client with library, playlist, search, and playback views."
     category: entertainment
     tags: []
     audience: general
@@ -69,6 +71,7 @@ tools:
         system_packages: ["libssl-dev", "libasound2-dev", "libdbus-1-dev"]
   - id: ncspot
     name: "Ncspot"
+    description: "A lightweight, keyboard-focused Spotify client inspired by ncurses players."
     category: entertainment
     tags: []
     audience: general
@@ -86,6 +89,7 @@ tools:
         system_packages: ["pkg-config", "libssl-dev", "libasound2-dev", "libdbus-1-dev", "libpulse-dev"]
   - id: cava
     name: "Cava"
+    description: "A real-time terminal audio spectrum visualizer."
     category: entertainment
     tags: []
     audience: general
@@ -102,6 +106,7 @@ tools:
         package_hints: ["cava"]
   - id: termusic
     name: "Termusic"
+    description: "A terminal music player for local audio libraries."
     category: entertainment
     tags: []
     audience: prosumer
@@ -135,6 +140,7 @@ tools:
         package_hints: ["mpv"]
   - id: yewtube
     name: "Yewtube"
+    description: "Search and play YouTube content from an interactive terminal client."
     category: entertainment
     tags: []
     audience: general
@@ -217,6 +223,7 @@ tools:
         package_hints: ["mediainfo"]
   - id: shellcast
     name: "Shellcast"
+    description: "Browse, subscribe to, and play podcasts from the terminal."
     category: reading
     tags: []
     audience: general
@@ -234,6 +241,7 @@ tools:
         system_packages: ["pkg-config", "libssl-dev", "libasound2-dev"]
   - id: newsboat
     name: "Newsboat"
+    description: "A keyboard-driven RSS and Atom feed reader."
     category: reading
     tags: []
     audience: prosumer
@@ -250,6 +258,7 @@ tools:
         package_hints: ["newsboat"]
   - id: glow
     name: "Glow"
+    description: "Read and browse Markdown files with terminal formatting."
     category: reading
     tags: []
     audience: general
@@ -330,6 +339,7 @@ tools:
         package_hints: ["less"]
   - id: yazi
     name: "Yazi"
+    description: "A fast terminal file manager with previews and bulk operations."
     category: files
     tags: []
     audience: general
@@ -476,6 +486,7 @@ tools:
         package_hints: ["duf"]
   - id: ncdu
     name: "ncdu"
+    description: "Interactively inspect disk usage and remove large files."
     category: files
     tags: []
     audience: general
@@ -492,6 +503,7 @@ tools:
         package_hints: ["ncdu"]
   - id: broot
     name: "broot"
+    description: "Navigate directory trees, search files, and run file operations."
     category: files
     tags: []
     audience: general
@@ -588,6 +600,7 @@ tools:
         package_hints: ["rsync"]
   - id: cmatrix
     name: "cmatrix"
+    description: "Display an animated digital-rain terminal effect."
     category: fun
     tags: []
     audience: general
@@ -627,6 +640,7 @@ tools:
         package_hints: ["cmatrix"]
   - id: bastet
     name: "bastet"
+    description: "Play an adversarial terminal block-stacking game."
     category: fun
     tags: []
     audience: general
@@ -643,6 +657,7 @@ tools:
         package_hints: ["bastet"]
   - id: asciiquarium
     name: "Asciiquarium"
+    description: "Display an animated ASCII aquarium in the terminal."
     category: fun
     tags: []
     audience: general
@@ -660,6 +675,7 @@ tools:
     notes: "Linux uses the unofficial Snap Store package maintained at github.com/brlin-tw/asciiquarium-snap."
   - id: sl
     name: "sl"
+    description: "Run a brief animated steam locomotive across the terminal."
     category: fun
     tags: []
     audience: general
@@ -676,6 +692,7 @@ tools:
         package_hints: ["sl"]
   - id: lolcat
     name: "lolcat"
+    description: "Render piped text with animated rainbow coloring."
     category: fun
     tags: []
     audience: general
@@ -692,6 +709,7 @@ tools:
         package_hints: ["lolcat"]
   - id: cowsay
     name: "cowsay"
+    description: "Display text in a configurable ASCII speech bubble."
     category: fun
     tags: []
     audience: general
@@ -708,6 +726,7 @@ tools:
         package_hints: ["cowsay"]
   - id: fortune
     name: "fortune"
+    description: "Print a random quotation or short message."
     category: fun
     tags: []
     audience: general
@@ -724,6 +743,7 @@ tools:
         package_hints: ["fortune-mod"]
   - id: tty-clock
     name: "tty-clock"
+    description: "Show a large configurable digital clock in the terminal."
     category: fun
     tags: []
     audience: general
@@ -770,6 +790,7 @@ tools:
         package_hints: ["tty-clock"]
   - id: nyancat
     name: "nyancat"
+    description: "Play the colorful Nyan Cat terminal animation."
     category: fun
     tags: []
     audience: general
@@ -786,6 +807,7 @@ tools:
         package_hints: ["nyancat"]
   - id: pipes-sh
     name: "pipes.sh"
+    description: "Generate animated terminal pipes with configurable colors and styles."
     category: fun
     tags: []
     audience: general
@@ -832,6 +854,7 @@ tools:
     notes: "Ubuntu installs the pipes-sh executable as /usr/games/pipes."
   - id: ninvaders
     name: "ninvaders"
+    description: "Play a terminal adaptation of the classic space shooter."
     category: fun
     tags: []
     audience: general
@@ -848,6 +871,7 @@ tools:
         package_hints: ["ninvaders"]
   - id: nudoku
     name: "nudoku"
+    description: "Play and solve Sudoku puzzles in a terminal interface."
     category: fun
     tags: []
     audience: general
@@ -864,6 +888,7 @@ tools:
         package_hints: ["nudoku"]
   - id: micro
     name: "Micro"
+    description: "A straightforward terminal text editor with familiar shortcuts."
     category: edit
     tags: []
     audience: general
@@ -880,6 +905,7 @@ tools:
         package_hints: ["micro"]
   - id: helix
     name: "Helix"
+    description: "A modal code editor with built-in language-server support."
     category: edit
     tags: []
     audience: prosumer
@@ -896,6 +922,7 @@ tools:
         package_hints: ["helix"]
   - id: neovim
     name: "Neovim"
+    description: "An extensible modal text editor for code and general editing."
     category: edit
     tags: []
     audience: developer
@@ -912,6 +939,7 @@ tools:
         package_hints: ["neovim"]
   - id: visidata
     name: "VisiData"
+    description: "Interactively explore, transform, and analyze tabular data."
     category: edit
     tags: []
     audience: prosumer
@@ -928,6 +956,7 @@ tools:
         package_hints: ["visidata"]
   - id: lazyvim
     name: "LazyVim"
+    description: "A preconfigured Neovim environment with IDE-oriented workflows."
     category: ide
     tags: []
     audience: developer
@@ -944,6 +973,7 @@ tools:
         package_hints: ["neovim"]
   - id: claude-code
     name: "Claude Code"
+    description: "An agentic coding assistant that works inside the terminal."
     category: agents
     tags: ["agent"]
     audience: developer
@@ -963,6 +993,7 @@ tools:
 
   - id: codex-cli
     name: "Codex CLI"
+    description: "OpenAI's terminal coding agent for repository-aware development tasks."
     category: agents
     tags: ["agent"]
     audience: developer
@@ -980,6 +1011,7 @@ tools:
 
   - id: opencode
     name: "OpenCode"
+    description: "An open-source terminal coding agent with multiple model providers."
     category: agents
     tags: ["agent"]
     audience: developer

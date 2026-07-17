@@ -310,7 +310,7 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
 }
 
 #[test]
-fn app_view_opens_and_copies_the_clean_preferred_auth_url() {
+fn app_view_selects_recent_or_older_clean_urls() {
     let mut app = app();
     app.open_app_view(
         "t4e-links".to_string(),
@@ -323,20 +323,28 @@ fn app_view_opens_and_copies_the_clean_preferred_auth_url() {
         }],
     );
     let auth_url = "https://accounts.spotify.com/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A8989%2Flogin&client_id=test&code_challenge=long-value";
+    let latest_url = "https://example.com/authorization-complete";
     app.app_view.as_mut().expect("app view").content = format!(
-        "Using redirect URI: http://127.0.0.1:8989/login\nOpen this URL:\n{auth_url}\nWaiting..."
+        "Using redirect URI: http://127.0.0.1:8989/login\nOpen this URL:\n{auth_url}\nNew URL:\n{latest_url}\nWaiting..."
     );
 
+    app.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::ALT));
+    let picker = app.link_picker.as_ref().expect("link picker");
+    assert_eq!(picker.urls[0], latest_url);
+    assert_eq!(picker.selected, 0);
+    assert!(app.take_effect().is_none());
+    app.handle_key(key(KeyCode::Enter));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::OpenUrl(url)) if url == latest_url
+    ));
+
     app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT));
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Enter));
     assert!(matches!(
         app.take_effect(),
         Some(AppEffect::CopyUrl(url)) if url == auth_url
-    ));
-
-    app.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::ALT));
-    assert!(matches!(
-        app.take_effect(),
-        Some(AppEffect::OpenUrl(url)) if url == auth_url
     ));
 }
 

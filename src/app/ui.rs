@@ -10,7 +10,7 @@ use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
 
 use super::events::Screen;
-use super::state::AppState;
+use super::state::{AppState, LinkAction};
 
 const ACCENT: Color = Color::Cyan;
 const MUTED: Color = Color::DarkGray;
@@ -30,6 +30,9 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
 
     if app.screen == Screen::AppView {
         render_app_view(frame, app, area);
+        if app.link_picker.is_some() {
+            render_link_picker(frame, app, area);
+        }
         return;
     }
 
@@ -223,6 +226,12 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         |tool| {
             let mut lines = vec![
                 Line::styled(&tool.name, Style::default().add_modifier(Modifier::BOLD)),
+                Line::from(
+                    tool.description
+                        .as_deref()
+                        .unwrap_or("No description available"),
+                ),
+                Line::from(""),
                 Line::from(format!("id: {}", tool.id)),
                 Line::from(format!("risk: {}", AppState::risk_label(&tool.risk))),
                 Line::from(format!("run: {}", tool.run_command_for_current_platform())),
@@ -848,6 +857,47 @@ fn render_launch_options(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             .block(panel("Configure app"))
             .wrap(Wrap { trim: false }),
         popup,
+    );
+}
+
+fn render_link_picker(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(picker) = &app.link_picker else {
+        return;
+    };
+    let popup = centered_rect(100, (picker.urls.len() as u16 + 6).min(18), area);
+    frame.render_widget(Clear, popup);
+    let items = picker
+        .urls
+        .iter()
+        .enumerate()
+        .map(|(index, url)| {
+            let prefix = if index == 0 { "Latest  " } else { "        " };
+            ListItem::new(format!("{prefix}{url}"))
+        })
+        .collect::<Vec<_>>();
+    let mut state = ListState::default().with_selected(Some(picker.selected));
+    let action = match picker.action {
+        LinkAction::Open => "Open link",
+        LinkAction::Copy => "Copy link",
+    };
+    frame.render_stateful_widget(
+        List::new(items)
+            .block(panel(action))
+            .highlight_style(selection_style())
+            .highlight_symbol("> "),
+        popup,
+        &mut state,
+    );
+    let hint = Rect {
+        x: popup.x + 2,
+        y: popup.y + popup.height.saturating_sub(2),
+        width: popup.width.saturating_sub(4),
+        height: 1,
+    };
+    frame.render_widget(
+        Paragraph::new("Up/Down select   Enter confirm   Esc cancel")
+            .style(Style::default().fg(MUTED)),
+        hint,
     );
 }
 

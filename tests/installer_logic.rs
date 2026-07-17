@@ -8,6 +8,7 @@ fn fake_tool(risk: Risk) -> Tool {
     Tool {
         id: "fake-tool".to_string(),
         name: "Fake Tool".to_string(),
+        description: None,
         category: ToolCategory::Utility,
         tags: vec![],
         audience: Audience::General,

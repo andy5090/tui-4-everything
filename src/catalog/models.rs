@@ -20,6 +20,8 @@ pub struct Pack {
 pub struct Tool {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
     pub category: ToolCategory,
     #[serde(default)]
     pub tags: Vec<String>,

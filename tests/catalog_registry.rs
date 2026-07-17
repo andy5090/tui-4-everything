@@ -30,6 +30,19 @@ fn registry_loads_and_validates() {
             .iter()
             .all(|tool| matches!(tool.exposure, Exposure::SearchOnly))
     );
+    let missing_descriptions = catalog
+        .tools
+        .iter()
+        .filter(|tool| {
+            tool.is_launchable_app() && tool.description.as_deref().is_none_or(str::is_empty)
+        })
+        .map(|tool| tool.id.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        missing_descriptions.is_empty(),
+        "launchable apps need descriptions: {}",
+        missing_descriptions.join(", ")
+    );
     let asciiquarium = catalog
         .tools
         .iter()

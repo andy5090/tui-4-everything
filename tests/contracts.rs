@@ -21,6 +21,7 @@ fn agents_and_script_installs_are_high_risk() {
     let agent = Tool {
         id: "codex-cli".to_string(),
         name: "Codex CLI".to_string(),
+        description: None,
         category: ToolCategory::Agents,
         tags: vec![],
         audience: Audience::Developer,
@@ -39,6 +40,7 @@ fn agents_and_script_installs_are_high_risk() {
     let script_tool = Tool {
         id: "custom".to_string(),
         name: "Custom".to_string(),
+        description: None,
         category: ToolCategory::Utility,
         tags: vec![],
         audience: Audience::General,

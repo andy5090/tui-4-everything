@@ -92,6 +92,19 @@ pub struct AppViewState {
     pub content: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkAction {
+    Open,
+    Copy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkPickerState {
+    pub urls: Vec<String>,
+    pub selected: usize,
+    pub action: LinkAction,
+}
+
 #[derive(Debug, Clone)]
 pub struct WorkspaceLaunchRequest {
     pub workspace: Workspace,
@@ -148,6 +161,7 @@ pub struct AppState {
     pub managed_sessions: Vec<ManagedSession>,
     pub workspace_missing_tools: Vec<String>,
     pub app_view: Option<AppViewState>,
+    pub link_picker: Option<LinkPickerState>,
     pub launch_options: Option<LaunchOptionsState>,
     pending_tool_launch: Option<ToolLaunchRequest>,
     return_after_app_close: bool,
@@ -231,6 +245,7 @@ impl AppState {
             managed_sessions: Vec::new(),
             workspace_missing_tools: Vec::new(),
             app_view: None,
+            link_picker: None,
             launch_options: None,
             pending_tool_launch: None,
             return_after_app_close: false,
@@ -680,6 +695,7 @@ impl AppState {
             selected: 0,
             content: String::new(),
         });
+        self.link_picker = None;
         self.screen = Screen::AppView;
         self.return_after_app_close = false;
         self.status = "App controls are available in the T4E toolbar".to_string();
@@ -697,6 +713,7 @@ impl AppState {
             selected: 0,
             content: String::new(),
         });
+        self.link_picker = None;
     }
 
     pub fn focus_app(&mut self, app_id: &str) {
@@ -1013,6 +1030,10 @@ impl AppState {
     }
 
     fn handle_app_view_key(&mut self, key: KeyEvent) {
+        if self.link_picker.is_some() {
+            self.handle_link_picker_key(key.code);
+            return;
+        }
         match key.code {
             KeyCode::BackTab | KeyCode::F(6) => self.move_app_view(-1),
             KeyCode::Tab | KeyCode::F(7) => self.move_app_view(1),
@@ -1058,18 +1079,66 @@ impl AppState {
     }
 
     fn request_app_url(&mut self, open: bool) {
-        let Some(url) = self
-            .app_view
-            .as_ref()
-            .and_then(|view| preferred_url(&view.content))
-        else {
-            self.status = "No HTTP(S) link found in the current app".to_string();
+        let Some(content) = self.app_view.as_ref().map(|view| view.content.as_str()) else {
             return;
         };
-        self.effects.push_back(if open {
-            AppEffect::OpenUrl(url)
+        let mut urls = extract_urls(content);
+        urls.reverse();
+        let mut seen = BTreeSet::new();
+        urls.retain(|url| seen.insert(url.clone()));
+        if urls.is_empty() {
+            self.status = "No HTTP(S) link found in the current app".to_string();
+            return;
+        }
+        let action = if open {
+            LinkAction::Open
         } else {
-            AppEffect::CopyUrl(url)
+            LinkAction::Copy
+        };
+        if urls.len() == 1 {
+            self.apply_link_action(action, urls.remove(0));
+        } else {
+            self.link_picker = Some(LinkPickerState {
+                urls,
+                selected: 0,
+                action,
+            });
+            self.status = "Select a link from the current app".to_string();
+        }
+    }
+
+    fn handle_link_picker_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(picker) = &mut self.link_picker {
+                    picker.selected = picker.selected.saturating_sub(1);
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if let Some(picker) = &mut self.link_picker {
+                    picker.selected = (picker.selected + 1).min(picker.urls.len() - 1);
+                }
+            }
+            KeyCode::Enter => {
+                let Some(picker) = self.link_picker.take() else {
+                    return;
+                };
+                if let Some(url) = picker.urls.get(picker.selected).cloned() {
+                    self.apply_link_action(picker.action, url);
+                }
+            }
+            KeyCode::Esc => {
+                self.link_picker = None;
+                self.status = "Link selection cancelled".to_string();
+            }
+            _ => {}
+        }
+    }
+
+    fn apply_link_action(&mut self, action: LinkAction, url: String) {
+        self.effects.push_back(match action {
+            LinkAction::Open => AppEffect::OpenUrl(url),
+            LinkAction::Copy => AppEffect::CopyUrl(url),
         });
     }
 
@@ -1079,6 +1148,7 @@ impl AppState {
             .as_ref()
             .map_or(Screen::Home, |view| view.return_screen);
         self.app_view = None;
+        self.link_picker = None;
         self.return_after_app_close = false;
         self.screen = return_screen;
         self.status = status.to_string();
@@ -1961,15 +2031,6 @@ fn app_input_from_key(key: KeyEvent) -> Option<AppInput> {
     ))
 }
 
-fn preferred_url(content: &str) -> Option<String> {
-    extract_urls(content).into_iter().max_by_key(|url| {
-        (
-            usize::from(url.starts_with("https://")),
-            url.chars().count(),
-        )
-    })
-}
-
 fn extract_urls(content: &str) -> Vec<String> {
     let mut urls = Vec::new();
     let mut offset = 0;
@@ -1995,7 +2056,7 @@ fn extract_urls(content: &str) -> Vec<String> {
         let url = tail[..end]
             .trim_end_matches(['.', ',', ';', ':', '!', '?', ')', '}'])
             .to_string();
-        if !url.is_empty() && !urls.contains(&url) {
+        if !url.is_empty() {
             urls.push(url);
         }
         offset = absolute_start + end.max(1);
