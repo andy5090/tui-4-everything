@@ -305,11 +305,13 @@ tools:
       cmd: "newsboat"
     installers:
       - platform: macos
-        method: brew
+        method: newsboat
         package_hints: ["newsboat"]
+        executable: "t4e-newsboat"
       - platform: linux
-        method: snap
+        method: newsboat
         package_hints: ["newsboat"]
+        executable: "t4e-newsboat"
   - id: glow
     name: "Glow"
     description: "Read and browse Markdown files with terminal formatting."

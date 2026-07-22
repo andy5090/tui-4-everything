@@ -132,6 +132,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::Go => format!("go install {}", hint),
         InstallMethod::LazyVim => materialize_lazyvim_command(&installer.platform),
         InstallMethod::Tplay => materialize_tplay_command(&installer.platform),
+        InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
         InstallMethod::Other => {
             return Err(anyhow::anyhow!("unsupported install method"));
@@ -149,6 +150,22 @@ fn materialize_command(installer: &Installer) -> Result<String> {
     } else {
         bail!("system_packages are only supported by Linux installers")
     }
+}
+
+fn materialize_newsboat_command(platform: &crate::catalog::models::Platform) -> String {
+    let (install, data_dir) = match platform {
+        crate::catalog::models::Platform::Linux => (
+            "sudo -n snap install newsboat",
+            "$HOME/snap/newsboat/common/t4e",
+        ),
+        crate::catalog::models::Platform::Macos => (
+            "brew install newsboat",
+            "${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat",
+        ),
+    };
+    format!(
+        "{install} && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'data_dir=\"{data_dir}\"' 'urls=\"$data_dir/urls\"' 'mkdir -p \"$data_dir\"' 'while [ ! -s \"$urls\" ]; do' '  printf \"Newsboat needs at least one RSS or Atom feed.\\nFeed URL (Ctrl+C to cancel): \"' '  IFS= read -r feed || exit 0' '  [ -n \"$feed\" ] || continue' '  printf \"%s\\n\" \"$feed\" > \"$urls\"' 'done' 'exec newsboat -u \"$urls\" \"$@\"' > \"$HOME/.local/bin/t4e-newsboat\" && chmod +x \"$HOME/.local/bin/t4e-newsboat\""
+    )
 }
 
 fn materialize_tplay_command(platform: &crate::catalog::models::Platform) -> String {

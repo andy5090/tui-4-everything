@@ -580,6 +580,7 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::Pipx
             | InstallMethod::LazyVim
             | InstallMethod::Tplay
+            | InstallMethod::Newsboat
     )
 }
 
@@ -592,6 +593,7 @@ fn uninstall_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::Snap
             | InstallMethod::SnapClassic
             | InstallMethod::Pipx
+            | InstallMethod::Newsboat
     )
 }
 
@@ -760,10 +762,14 @@ mod tests {
         assert!(install_method_requires_privileges(&InstallMethod::Pipx));
         assert!(install_method_requires_privileges(&InstallMethod::LazyVim));
         assert!(install_method_requires_privileges(&InstallMethod::Tplay));
+        assert!(install_method_requires_privileges(&InstallMethod::Newsboat));
         assert!(!install_method_requires_privileges(&InstallMethod::Brew));
         assert!(!install_method_requires_privileges(&InstallMethod::Cargo));
         assert!(!uninstall_method_requires_privileges(
             &InstallMethod::LazyVim
+        ));
+        assert!(uninstall_method_requires_privileges(
+            &InstallMethod::Newsboat
         ));
     }
 }

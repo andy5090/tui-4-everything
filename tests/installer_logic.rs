@@ -219,6 +219,32 @@ fn tplay_install_uses_an_isolated_current_yt_dlp() {
 }
 
 #[test]
+fn newsboat_install_creates_a_first_feed_launcher() {
+    let mut tool = fake_tool(Risk::Safe);
+    tool.id = "newsboat".to_string();
+    tool.run.cmd = "newsboat".to_string();
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Newsboat,
+        package_hints: vec!["newsboat".to_string()],
+        system_packages: vec![],
+        executable: Some("t4e-newsboat".to_string()),
+        install_cmd: None,
+        requires_confirm: false,
+    };
+    tool.installers = vec![installer.clone()];
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert!(task.command.starts_with("sudo -n snap install newsboat"));
+    assert!(task.command.contains("t4e-newsboat"));
+    assert!(task.command.contains("snap/newsboat/common/t4e"));
+    assert!(task.command.contains("Feed URL (Ctrl+C to cancel)"));
+    assert!(task.command.contains("exec newsboat -u"));
+    assert_eq!(task.check_command.as_deref(), Some("t4e-newsboat"));
+}
+
+#[test]
 fn snap_command_uses_cached_sudo_noninteractively() {
     let tool = fake_tool(Risk::Safe);
     let installer = Installer {

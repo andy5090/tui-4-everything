@@ -97,6 +97,17 @@ fn registry_loads_and_validates() {
             && !installer.system_packages.contains(&"yt-dlp".to_string())
     }));
 
+    let newsboat = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "newsboat")
+        .expect("newsboat exists");
+    assert_eq!(newsboat.run_command_for(Platform::Linux), "t4e-newsboat");
+    assert!(newsboat.installers.iter().all(|installer| {
+        installer.method == InstallMethod::Newsboat
+            && installer.executable.as_deref() == Some("t4e-newsboat")
+    }));
+
     let lynx = catalog
         .tools
         .iter()
