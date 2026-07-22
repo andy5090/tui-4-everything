@@ -62,7 +62,7 @@ Important actions are intentionally explicit:
 - Install queue: `x` runs one item, `X` runs queued items sequentially.
 - Workspaces: `Enter` starts and opens, `a` reopens, `x` stops all apps, `h`
   hashes a live snapshot, and `I` queues missing tools. The main flow is pack ->
-  app -> run. In App View, `Tab`/`Shift-Tab` switches apps, `Alt+Backspace`
+  app -> run. In App View, `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
   returns to the previous screen while keeping apps running, and `Alt+Q` closes
   the current app. `Backspace` and `Esc` are forwarded to the running app.
   Text selection is the default mouse mode; `Alt+M` toggles T4E mouse controls

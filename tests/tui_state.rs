@@ -429,10 +429,25 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
     ));
 
     app.handle_key(key(KeyCode::Tab));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::SendAppInput { pane_id, input: t4e::app::state::AppInput::Key(key) })
+            if pane_id == "%1" && key == "Tab"
+    ));
+    assert_eq!(app.app_view.as_ref().expect("app view").selected, 0);
+    app.handle_key(key(KeyCode::BackTab));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::SendAppInput { pane_id, input: t4e::app::state::AppInput::Key(key) })
+            if pane_id == "%1" && key == "BTab"
+    ));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
     assert_eq!(app.app_view.as_ref().expect("app view").selected, 1);
+    app.handle_key(KeyEvent::new(KeyCode::Left, KeyModifiers::ALT));
+    assert_eq!(app.app_view.as_ref().expect("app view").selected, 0);
     app.focus_app("video");
     assert_eq!(app.app_view.as_ref().expect("app view").selected, 0);
-    app.handle_key(key(KeyCode::Tab));
+    app.handle_key(KeyEvent::new(KeyCode::Right, KeyModifiers::ALT));
     app.handle_key(key(KeyCode::Char('j')));
     assert!(matches!(
         app.take_effect(),

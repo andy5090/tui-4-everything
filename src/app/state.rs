@@ -1124,8 +1124,8 @@ impl AppState {
             return;
         }
         match key.code {
-            KeyCode::BackTab | KeyCode::F(6) => self.move_app_view(-1),
-            KeyCode::Tab | KeyCode::F(7) => self.move_app_view(1),
+            KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => self.move_app_view(-1),
+            KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => self.move_app_view(1),
             KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::ALT) => {
                 self.request_close_current_app();
             }

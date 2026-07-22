@@ -562,7 +562,7 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     );
     frame.render_widget(
         Paragraph::new(vec![
-            Line::from("[Tab] Next  [Shift-Tab] Previous  [Alt-BS] Background  [Alt-Q] Close"),
+            Line::from("[Alt-Left/Right] Switch  [Alt-BS] Background  [Alt-Q] Close"),
             Line::from("[Alt-O] Open link  [Alt-C] Copy clean link"),
         ])
         .style(Style::default().fg(Color::Gray)),
@@ -765,7 +765,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
         ),
         Line::from("arrows / j k  move selection"),
         Line::from("Enter         open pack or run app"),
-        Line::from("Tab / BTab    switch sections or running apps"),
+        Line::from("Tab / BTab    switch sections"),
+        Line::from("Alt+Left/Right switch running apps"),
         Line::from("Backspace     back / keep app running"),
         Line::from("Alt+M         toggle text selection / mouse controls"),
         Line::from("/             search catalog"),
