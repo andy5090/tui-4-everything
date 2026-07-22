@@ -189,6 +189,25 @@ fn launchable_apps_belong_to_exactly_one_pack() {
 }
 
 #[test]
+fn glow_and_read_only_helpers_belong_to_the_viewers_pack() {
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+    let viewers = catalog
+        .packs
+        .iter()
+        .find(|pack| pack.id == "viewers-pack")
+        .expect("viewers pack exists");
+    assert_eq!(viewers.tool_ids, ["glow", "bat", "less", "mediainfo"]);
+
+    let podcasts = catalog
+        .packs
+        .iter()
+        .find(|pack| pack.id == "podcasts-reading-pack")
+        .expect("podcasts and news pack exists");
+    assert_eq!(podcasts.title, "Podcasts & News Pack");
+    assert!(!podcasts.tool_ids.contains(&"glow".to_string()));
+}
+
+#[test]
 fn workspaces_load_and_have_tmux_minimum() {
     let workspaces =
         load_workspaces(Path::new("registry/workspaces.yaml")).expect("workspace loads");

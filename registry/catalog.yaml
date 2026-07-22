@@ -6,19 +6,23 @@ packs:
   - id: video-pack
     title: Video Pack
     exposure: starter
-    tool_ids: [mpv, yewtube, youtube-tui, tplay, yt-dlp, ffmpeg, streamlink, mediainfo]
+    tool_ids: [mpv, yewtube, youtube-tui, tplay, yt-dlp, ffmpeg, streamlink]
   - id: podcasts-reading-pack
-    title: Podcasts & Reading Pack
+    title: Podcasts & News Pack
     exposure: starter
-    tool_ids: [shellcast, newsboat, glow, jq, yq, tldr, less]
+    tool_ids: [shellcast, newsboat, jq, yq, tldr]
   - id: information-search-pack
     title: Information Search Pack
     exposure: starter
     tool_ids: [lynx]
+  - id: viewers-pack
+    title: Viewers Pack
+    exposure: starter
+    tool_ids: [glow, bat, less, mediainfo]
   - id: files-pack
     title: Files Pack
     exposure: starter
-    tool_ids: [yazi, bat, eza, fd, ripgrep, fzf, zoxide, dust, duf, ncdu, broot, tree, file, p7zip, unzip, rsync]
+    tool_ids: [yazi, eza, fd, ripgrep, fzf, zoxide, dust, duf, ncdu, broot, tree, file, p7zip, unzip, rsync]
   - id: fun-pack
     title: Fun Pack
     exposure: starter

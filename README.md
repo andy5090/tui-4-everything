@@ -18,8 +18,9 @@ local Codex control surface. It uses the signed-in `codex` CLI account through
 | --- | --- |
 | Music | Spotatui, Spotify Player, Ncspot, Cava, Termusic |
 | Video | Yewtube, YouTube TUI, tplay |
-| Podcasts & Reading | Shellcast, Newsboat, Glow |
+| Podcasts & News | Shellcast, Newsboat |
 | Information Search | Lynx |
+| Viewers | Glow (with bat, less, and MediaInfo support tools) |
 | Files | Yazi, ncdu, broot |
 | Fun | cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
 | Games | bastet, ninvaders, nudoku |
