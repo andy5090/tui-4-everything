@@ -166,7 +166,7 @@ fn single_app_launch_creates_a_managed_background_session() {
     let runtime = TmuxRuntime::new(runner);
 
     let outcome = runtime
-        .launch_app("t4e-apps", "app-launcher", "cmatrix", "cmatrix -b")
+        .launch_app_at_size("t4e-apps", "app-launcher", "cmatrix", "cmatrix -b", 132, 36)
         .expect("app launches");
 
     assert!(outcome.created);
@@ -176,6 +176,10 @@ fn single_app_launch_creates_a_managed_background_session() {
         args == &[
             "new-session",
             "-d",
+            "-x",
+            "132",
+            "-y",
+            "36",
             "-s",
             "t4e-apps",
             "-n",

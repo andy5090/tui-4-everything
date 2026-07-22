@@ -226,21 +226,26 @@ fn process_effects(
                     Ok(preflight) if !preflight.missing_commands.is_empty() => {
                         app.install_then_launch(request);
                     }
-                    Ok(_) => match tmux.launch_app(
-                        "t4e-apps",
-                        "app-launcher",
-                        &request.tool_id,
-                        &request.command,
-                    ) {
-                        Ok(_) => match tmux.list_apps("t4e-apps") {
-                            Ok(apps) => {
-                                app.open_app_view("t4e-apps".to_string(), apps);
-                                app.focus_app(&request.tool_id);
-                            }
-                            Err(error) => app.apply_workspace_error("open app", &error),
-                        },
-                        Err(error) => app.apply_workspace_error("app launch", &error),
-                    },
+                    Ok(_) => {
+                        let (width, height) = app_viewport_size(session).unwrap_or((80, 17));
+                        match tmux.launch_app_at_size(
+                            "t4e-apps",
+                            "app-launcher",
+                            &request.tool_id,
+                            &request.command,
+                            width,
+                            height,
+                        ) {
+                            Ok(_) => match tmux.list_apps("t4e-apps") {
+                                Ok(apps) => {
+                                    app.open_app_view("t4e-apps".to_string(), apps);
+                                    app.focus_app(&request.tool_id);
+                                }
+                                Err(error) => app.apply_workspace_error("open app", &error),
+                            },
+                            Err(error) => app.apply_workspace_error("app launch", &error),
+                        }
+                    }
                     Err(error) => app.apply_workspace_error("app preflight", &error),
                 }
             }
@@ -521,10 +526,9 @@ fn sync_app_viewport(
     else {
         return;
     };
-    let Ok(size) = session.terminal.size() else {
+    let Some(viewport) = app_viewport_size(session) else {
         return;
     };
-    let viewport = (size.width.saturating_sub(2), size.height.saturating_sub(7));
     if app_sizes.get(&pane_id) == Some(&viewport) {
         return;
     }
@@ -534,6 +538,11 @@ fn sync_app_viewport(
         }
         Err(error) => app.apply_app_view_error(&error),
     }
+}
+
+fn app_viewport_size(session: &TerminalSession) -> Option<(u16, u16)> {
+    let size = session.terminal.size().ok()?;
+    Some((size.width.saturating_sub(2), size.height.saturating_sub(7)))
 }
 
 fn reload_app_view(app: &mut AppState, tmux: &TmuxRuntime<SystemTmuxRunner>) {

@@ -172,10 +172,23 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         app_id: &str,
         command: &str,
     ) -> Result<LaunchOutcome> {
+        self.launch_app_at_size(session_name, workspace_id, app_id, command, 80, 24)
+    }
+
+    pub fn launch_app_at_size(
+        &self,
+        session_name: &str,
+        workspace_id: &str,
+        app_id: &str,
+        command: &str,
+        width: u16,
+        height: u16,
+    ) -> Result<LaunchOutcome> {
         validate_identifier("session name", session_name)?;
         validate_identifier("workspace id", workspace_id)?;
         validate_identifier("app id", app_id)?;
         validate_command(command)?;
+        validate_app_viewport(width, height)?;
         let app_command = format!("exec {command}");
 
         if self.session_exists(session_name)? {
@@ -203,14 +216,22 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 "-P",
                 "-F",
                 "#{pane_id}",
-                &app_command,
+                "bash",
             ]))?;
             ensure_success(&format!("create app window {app_id}"), &create)?;
             let pane_id = create.stdout.trim().to_string();
             if pane_id.is_empty() {
                 bail!("tmux returned no pane id for app window {app_id}");
             }
-            self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
+            let setup = (|| {
+                self.resize_window(&pane_id, width, height)?;
+                self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
+                self.start_app(&pane_id, &app_command, app_id)
+            })();
+            if let Err(error) = setup {
+                let _ = self.runner.run(&strings(["kill-pane", "-t", &pane_id]));
+                return Err(error);
+            }
             return Ok(LaunchOutcome {
                 workspace_id: workspace_id.to_string(),
                 session_name: session_name.to_string(),
@@ -222,6 +243,10 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         let create = self.runner.run(&strings([
             "new-session",
             "-d",
+            "-x",
+            &width.to_string(),
+            "-y",
+            &height.to_string(),
             "-s",
             session_name,
             "-n",
@@ -478,9 +503,11 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
 
     pub fn resize_app(&self, pane_id: &str, width: u16, height: u16) -> Result<()> {
         self.ensure_managed_pane(pane_id)?;
-        if width < 20 || height < 5 {
-            bail!("app viewport is too small: {width}x{height}");
-        }
+        self.resize_window(pane_id, width, height)
+    }
+
+    fn resize_window(&self, pane_id: &str, width: u16, height: u16) -> Result<()> {
+        validate_app_viewport(width, height)?;
         let width = width.to_string();
         let height = height.to_string();
         let output = self.runner.run(&strings([
@@ -690,6 +717,13 @@ fn validate_command(command: &str) -> Result<()> {
             .any(|ch| matches!(ch, ';' | '|' | '&' | '`' | '$' | '<' | '>' | '\n' | '\r'))
     {
         bail!("app command contains forbidden shell syntax");
+    }
+    Ok(())
+}
+
+fn validate_app_viewport(width: u16, height: u16) -> Result<()> {
+    if width < 20 || height < 5 {
+        bail!("app viewport is too small: {width}x{height}");
     }
     Ok(())
 }
