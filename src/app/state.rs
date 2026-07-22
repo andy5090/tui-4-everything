@@ -648,8 +648,8 @@ impl AppState {
 
     pub fn record_output(&mut self, tool_id: &str, chunk: OutputChunk) {
         let stream = match chunk.stream {
-            OutputStream::Stdout => "out",
-            OutputStream::Stderr => "err",
+            OutputStream::Stdout => "output",
+            OutputStream::Stderr => "progress",
         };
         for line in chunk.text.lines().filter(|line| !line.trim().is_empty()) {
             self.logs

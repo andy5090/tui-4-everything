@@ -856,6 +856,13 @@ fn catalog_shows_inline_install_state_and_recent_progress_output() {
             text: "Downloading package\n".to_string(),
         },
     );
+    app.record_output(
+        &tool_id,
+        t4e::installer::execution::OutputChunk {
+            stream: t4e::installer::execution::OutputStream::Stderr,
+            text: "Compiling dependency\n".to_string(),
+        },
+    );
 
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).expect("test terminal");
@@ -873,6 +880,8 @@ fn catalog_shows_inline_install_state_and_recent_progress_output() {
     assert!(rendered.contains("attempts: 1/"));
     assert!(rendered.contains("Live install output"));
     assert!(rendered.contains("Downloading package"));
+    assert!(rendered.contains("[progress]"));
+    assert!(!rendered.contains("[err]"));
 }
 
 #[test]
