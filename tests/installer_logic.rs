@@ -190,6 +190,35 @@ fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
 }
 
 #[test]
+fn tplay_install_uses_an_isolated_current_yt_dlp() {
+    let mut tool = fake_tool(Risk::Safe);
+    tool.id = "tplay".to_string();
+    tool.run.cmd = "tplay".to_string();
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Tplay,
+        package_hints: vec!["tplay".to_string()],
+        system_packages: vec!["python3-venv".to_string()],
+        executable: Some("t4e-tplay".to_string()),
+        install_cmd: None,
+        requires_confirm: false,
+    };
+    tool.installers = vec![installer.clone()];
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert!(task.command.contains("cargo install --locked tplay"));
+    assert!(task.command.contains("python3 -m venv"));
+    assert!(
+        task.command
+            .contains("pip install --upgrade 'yt-dlp[default]'")
+    );
+    assert!(task.command.contains("t4e-tplay"));
+    assert_eq!(task.check_command.as_deref(), Some("t4e-tplay"));
+    assert!(task.requires_privileges);
+}
+
+#[test]
 fn snap_command_uses_cached_sudo_noninteractively() {
     let tool = fake_tool(Risk::Safe);
     let installer = Installer {

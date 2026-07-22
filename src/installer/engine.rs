@@ -131,6 +131,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         ),
         InstallMethod::Go => format!("go install {}", hint),
         InstallMethod::LazyVim => materialize_lazyvim_command(&installer.platform),
+        InstallMethod::Tplay => materialize_tplay_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
         InstallMethod::Other => {
             return Err(anyhow::anyhow!("unsupported install method"));
@@ -147,6 +148,15 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         ))
     } else {
         bail!("system_packages are only supported by Linux installers")
+    }
+}
+
+fn materialize_tplay_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Linux => {
+            "cargo install --locked tplay && data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && python3 -m venv \"$data_dir/yt-dlp\" && \"$data_dir/yt-dlp/bin/python\" -m pip install --upgrade 'yt-dlp[default]' && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\"' 'exec env PATH=\"$data_dir/yt-dlp/bin:$PATH\" tplay \"$@\"' > \"$HOME/.local/bin/t4e-tplay\" && chmod +x \"$HOME/.local/bin/t4e-tplay\"".to_string()
+        }
+        crate::catalog::models::Platform::Macos => "cargo install --locked tplay".to_string(),
     }
 }
 

@@ -217,6 +217,8 @@ pub enum InstallMethod {
     Go,
     #[serde(rename = "lazyvim")]
     LazyVim,
+    #[serde(rename = "tplay")]
+    Tplay,
     #[serde(rename = "script")]
     Script,
     #[serde(other)]
@@ -238,6 +240,7 @@ impl InstallMethod {
             Self::Cargo => "cargo",
             Self::Go => "go",
             Self::LazyVim => "lazyvim",
+            Self::Tplay => "tplay",
             Self::Script => "script",
             Self::Other => "other",
         }

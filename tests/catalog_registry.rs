@@ -83,13 +83,18 @@ fn registry_loads_and_validates() {
         .find(|tool| tool.id == "tplay")
         .expect("tplay exists");
     assert_eq!(tplay.run.cmd, "tplay");
+    assert_eq!(tplay.run_command_for(Platform::Linux), "t4e-tplay");
     assert!(tplay.launch_argument.is_some());
     assert!(tplay.installers.iter().any(|installer| {
         installer.platform == Platform::Linux
-            && installer.method == InstallMethod::Cargo
+            && installer.method == InstallMethod::Tplay
             && installer
                 .system_packages
                 .contains(&"libavcodec-dev".to_string())
+            && installer
+                .system_packages
+                .contains(&"python3-venv".to_string())
+            && !installer.system_packages.contains(&"yt-dlp".to_string())
     }));
 
     let lynx = catalog

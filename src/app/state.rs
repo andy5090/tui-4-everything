@@ -2110,6 +2110,7 @@ fn uninstall_command(method: &InstallMethod, package: &str) -> Option<String> {
         InstallMethod::NpmGlobal => format!("npm uninstall --global {package}"),
         InstallMethod::Cargo => format!("cargo uninstall {package}"),
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
+        InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && cargo uninstall tplay".to_string(),
         InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => return None,
     };
     Some(command)

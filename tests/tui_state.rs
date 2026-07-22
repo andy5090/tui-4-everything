@@ -193,8 +193,32 @@ fn required_launch_argument_is_prompted_and_shell_quoted() {
         app.take_effect(),
         Some(AppEffect::LaunchTool(request))
             if request.tool_id == "tplay"
-                && request.command == "tplay 'https://example.com/watch?q=a'\"'\"'b;echo unsafe'"
+                && request.command == "t4e-tplay 'https://example.com/watch?q=a'\"'\"'b;echo unsafe'"
     ));
+}
+
+#[test]
+fn tplay_uninstall_removes_managed_runtime_and_cargo_binary() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "tplay".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.installed_tools.insert("tplay".to_string());
+
+    app.handle_key(key(KeyCode::Char('U')));
+    app.handle_key(key(KeyCode::Enter));
+
+    let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
+        panic!("uninstall request expected");
+    };
+    assert_eq!(request.method, InstallMethod::Tplay);
+    assert!(request.command.contains("t4e-tplay"));
+    assert!(request.command.contains("/t4e/tplay"));
+    assert!(request.command.contains("cargo uninstall tplay"));
+    assert_eq!(request.check_command, "t4e-tplay");
 }
 
 #[test]

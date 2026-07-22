@@ -570,6 +570,7 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::SnapClassic
             | InstallMethod::Pipx
             | InstallMethod::LazyVim
+            | InstallMethod::Tplay
     )
 }
 
@@ -749,6 +750,7 @@ mod tests {
         ));
         assert!(install_method_requires_privileges(&InstallMethod::Pipx));
         assert!(install_method_requires_privileges(&InstallMethod::LazyVim));
+        assert!(install_method_requires_privileges(&InstallMethod::Tplay));
         assert!(!install_method_requires_privileges(&InstallMethod::Brew));
         assert!(!install_method_requires_privileges(&InstallMethod::Cargo));
         assert!(!uninstall_method_requires_privileges(

@@ -203,9 +203,10 @@ tools:
         method: cargo
         package_hints: ["tplay"]
       - platform: linux
-        method: cargo
+        method: tplay
         package_hints: ["tplay"]
-        system_packages: ["libssl-dev", "ffmpeg", "libavfilter-dev", "libavdevice-dev", "libavformat-dev", "libavcodec-dev", "libswscale-dev", "libasound2-dev", "yt-dlp", "libmpv-dev", "clang"]
+        system_packages: ["libssl-dev", "ffmpeg", "libavfilter-dev", "libavdevice-dev", "libavformat-dev", "libavcodec-dev", "libswscale-dev", "libasound2-dev", "libmpv-dev", "clang", "python3-venv"]
+        executable: "t4e-tplay"
   - id: yt-dlp
     name: "yt-dlp"
     category: entertainment
