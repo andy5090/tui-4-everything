@@ -316,7 +316,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             lines.extend([
                 Line::from(""),
                 Line::styled(
-                    "Enter run  I install  U uninstall  f favorite  Backspace packs",
+                    "Enter run  I install  U remove  R reinstall  f favorite  Backspace packs",
                     Style::default().fg(MUTED),
                 ),
             ]);
@@ -959,22 +959,37 @@ fn render_uninstall_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Re
     };
     let popup = centered_rect(76, 12, area);
     frame.render_widget(Clear, popup);
+    let (heading, explanation, action, title) = if request.reinstall {
+        (
+            "Reset and reinstall app",
+            "T4E will remove the current package, clear its queue item, and reinstall it.",
+            "Enter reset and reinstall   Esc cancel",
+            "Reinstall confirmation",
+        )
+    } else {
+        (
+            "Remove installed app",
+            "The package manager will remove this app.",
+            "Enter uninstall   Esc cancel",
+            "Uninstall confirmation",
+        )
+    };
     let content = Text::from(vec![
         Line::styled(
-            "Remove installed app",
+            heading,
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
         Line::from(""),
         Line::from(format!("app: {}", request.tool_id)),
         Line::from(format!("command: {}", request.command)),
         Line::from(""),
-        Line::from("The package manager will remove this app."),
+        Line::from(explanation),
         Line::from(""),
-        Line::styled("Enter uninstall   Esc cancel", Style::default().fg(MUTED)),
+        Line::styled(action, Style::default().fg(MUTED)),
     ]);
     frame.render_widget(
         Paragraph::new(content)
-            .block(panel("Uninstall confirmation"))
+            .block(panel(title))
             .wrap(Wrap { trim: false }),
         popup,
     );

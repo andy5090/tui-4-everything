@@ -60,6 +60,7 @@ pub struct UninstallRequest {
     pub command: String,
     pub check_command: String,
     pub method: InstallMethod,
+    pub reinstall: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -697,16 +698,35 @@ impl AppState {
         self.trim_logs();
     }
 
-    pub fn apply_uninstall_result(&mut self, tool_id: &str, success: bool, error: &str) {
+    pub fn apply_uninstall_result(
+        &mut self,
+        tool_id: &str,
+        success: bool,
+        error: &str,
+        reinstall: bool,
+    ) {
         self.uninstalling_tools.remove(tool_id);
         if success {
             self.installed_tools.remove(tool_id);
             self.queue.retain(|job| job.item.tool_id != tool_id);
             self.install_index = self.install_index.min(self.queue.len().saturating_sub(1));
-            self.status = format!("Uninstalled {tool_id}");
             self.logs.push(format!("uninstall: completed {tool_id}"));
+            if reinstall {
+                self.queue_tool_ids(vec![tool_id.to_string()]);
+                self.logs.push(format!("reinstall: queued {tool_id}"));
+                self.request_execute_selected();
+                if self.confirmation.is_none() {
+                    self.status = format!("Reset {tool_id}; reinstalling now");
+                }
+            } else {
+                self.status = format!("Uninstalled {tool_id}");
+            }
         } else {
-            self.status = format!("Uninstall failed for {tool_id}: {error}");
+            self.status = if reinstall {
+                format!("Could not reset {tool_id}: {error}")
+            } else {
+                format!("Uninstall failed for {tool_id}: {error}")
+            };
             self.logs
                 .push(format!("uninstall: failed {tool_id}: {error}"));
         }
@@ -1040,6 +1060,7 @@ impl AppState {
                 KeyCode::Enter => self.request_selected_tool_launch(),
                 KeyCode::Char('I') => self.queue_selected_tool(),
                 KeyCode::Char('U') => self.request_selected_uninstall(),
+                KeyCode::Char('R') => self.request_selected_reinstall(),
                 KeyCode::Char('f') => self.toggle_favorite(),
                 KeyCode::Char('p') => {
                     self.active_pack = None;
@@ -1355,46 +1376,25 @@ impl AppState {
             self.status = format!("{tool_id} is not installed");
             return;
         }
-        let platform = if cfg!(target_os = "macos") {
-            Platform::Macos
-        } else {
-            Platform::Linux
-        };
-        let Some(installer) = tool
-            .installers
-            .iter()
-            .find(|installer| installer.platform == platform)
-        else {
+        let Some(request) = uninstall_request_for_tool(tool, false) else {
             self.status = format!("No uninstall method for {tool_id}");
             return;
         };
-        let packages = if installer.method == InstallMethod::Cargo {
-            installer.package_hints.join(" ")
-        } else {
-            installer.package_hints[0].clone()
-        };
-        let Some(command) = uninstall_command(&installer.method, &packages) else {
-            self.status = format!("Uninstall is unavailable for {tool_id}");
+        self.uninstall_confirmation = Some(request);
+        self.status = "Confirm app uninstall".to_string();
+    }
+
+    fn request_selected_reinstall(&mut self) {
+        let Some(tool) = self.selected_catalog_tool() else {
             return;
         };
-        let check_command = installer
-            .executable
-            .clone()
-            .or_else(|| tool.checks.iter().find_map(|check| check.which.clone()))
-            .or_else(|| {
-                tool.run_command_for_current_platform()
-                    .split_whitespace()
-                    .next()
-                    .map(str::to_string)
-            })
-            .unwrap_or_else(|| tool_id.clone());
-        self.uninstall_confirmation = Some(UninstallRequest {
-            tool_id,
-            command,
-            check_command,
-            method: installer.method.clone(),
-        });
-        self.status = "Confirm app uninstall".to_string();
+        let tool_id = tool.id.clone();
+        let Some(request) = uninstall_request_for_tool(tool, true) else {
+            self.status = format!("Reset and reinstall is unavailable for {tool_id}");
+            return;
+        };
+        self.uninstall_confirmation = Some(request);
+        self.status = format!("Confirm reset and reinstall of {tool_id}");
     }
 
     fn handle_uninstall_confirmation_key(&mut self, code: KeyCode) {
@@ -2092,25 +2092,91 @@ fn install_plan_changed(
         || saved.requires_confirmation != current.requires_confirmation
 }
 
-fn uninstall_command(method: &InstallMethod, package: &str) -> Option<String> {
+fn uninstall_request_for_tool(tool: &Tool, reinstall: bool) -> Option<UninstallRequest> {
+    let platform = if cfg!(target_os = "macos") {
+        Platform::Macos
+    } else {
+        Platform::Linux
+    };
+    let installer = tool
+        .installers
+        .iter()
+        .find(|installer| installer.platform == platform)?;
+    let packages = if installer.method == InstallMethod::Cargo {
+        installer.package_hints.join(" ")
+    } else {
+        installer.package_hints.first()?.clone()
+    };
+    let command = uninstall_command(&installer.method, &packages, reinstall)?;
+    let check_command = installer
+        .executable
+        .clone()
+        .or_else(|| tool.checks.iter().find_map(|check| check.which.clone()))
+        .or_else(|| {
+            tool.run_command_for_current_platform()
+                .split_whitespace()
+                .next()
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| tool.id.clone());
+    Some(UninstallRequest {
+        tool_id: tool.id.clone(),
+        command,
+        check_command,
+        method: installer.method.clone(),
+        reinstall,
+    })
+}
+
+fn uninstall_command(
+    method: &InstallMethod,
+    package: &str,
+    tolerate_missing: bool,
+) -> Option<String> {
     let command = match method {
+        InstallMethod::Brew if tolerate_missing => format!(
+            "if brew list --formula {package} >/dev/null 2>&1; then brew uninstall {package}; fi"
+        ),
         InstallMethod::Brew => format!("brew uninstall {package}"),
+        InstallMethod::BrewCask if tolerate_missing => format!(
+            "if brew list --cask {package} >/dev/null 2>&1; then brew uninstall --cask {package}; fi"
+        ),
         InstallMethod::BrewCask => format!("brew uninstall --cask {package}"),
+        InstallMethod::Apt if tolerate_missing => format!(
+            "if dpkg-query -W -f='${{db:Status-Abbrev}}' {package} 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y {package}; fi"
+        ),
         InstallMethod::Apt => {
             format!(
                 "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y {package}"
             )
         }
+        InstallMethod::Dnf if tolerate_missing => format!(
+            "if rpm -q {package} >/dev/null 2>&1; then sudo -n dnf remove -y {package}; fi"
+        ),
         InstallMethod::Dnf => format!("sudo -n dnf remove -y {package}"),
+        InstallMethod::Pacman if tolerate_missing => format!(
+            "if pacman -Q {package} >/dev/null 2>&1; then sudo -n pacman -Rns --noconfirm {package}; fi"
+        ),
         InstallMethod::Pacman => format!("sudo -n pacman -Rns --noconfirm {package}"),
+        InstallMethod::Snap | InstallMethod::SnapClassic if tolerate_missing => format!(
+            "if snap list {package} >/dev/null 2>&1; then sudo -n snap remove {package}; fi"
+        ),
         InstallMethod::Snap | InstallMethod::SnapClassic => {
             format!("sudo -n snap remove {package}")
         }
+        InstallMethod::Pipx if tolerate_missing => format!(
+            "if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq {package}; then pipx uninstall {package}; fi"
+        ),
         InstallMethod::Pipx => format!("pipx uninstall {package}"),
+        InstallMethod::NpmGlobal if tolerate_missing => format!(
+            "if npm list --global --depth=0 {package} >/dev/null 2>&1; then npm uninstall --global {package}; fi"
+        ),
         InstallMethod::NpmGlobal => format!("npm uninstall --global {package}"),
-        InstallMethod::Cargo => format!("cargo uninstall {package}"),
+        InstallMethod::Cargo => format!(
+            "for package in {package}; do cargo uninstall \"$package\" || ! command -v \"$package\" >/dev/null 2>&1 || exit 1; done"
+        ),
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
-        InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && cargo uninstall tplay".to_string(),
+        InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && (cargo uninstall tplay || ! command -v tplay >/dev/null 2>&1)".to_string(),
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
         InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => return None,
     };

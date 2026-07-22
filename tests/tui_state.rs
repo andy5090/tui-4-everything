@@ -222,6 +222,106 @@ fn tplay_uninstall_removes_managed_runtime_and_cargo_binary() {
 }
 
 #[test]
+fn newsboat_uninstall_removes_managed_feeds_and_snap() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "newsboat".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.installed_tools.insert("newsboat".to_string());
+
+    app.handle_key(key(KeyCode::Char('U')));
+    app.handle_key(key(KeyCode::Enter));
+
+    let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
+        panic!("uninstall request expected");
+    };
+    assert_eq!(request.method, InstallMethod::Newsboat);
+    assert!(request.command.contains("t4e-newsboat"));
+    assert!(request.command.contains("snap/newsboat/common/t4e"));
+    assert!(request.command.contains("snap remove newsboat"));
+    assert_eq!(request.check_command, "t4e-newsboat");
+}
+
+#[test]
+fn reset_reinstall_recovers_a_partial_termusic_install_and_stale_queue_item() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "termusic".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Char('I')));
+    assert_eq!(app.queue.len(), 1);
+
+    app.handle_key(key(KeyCode::Char('R')));
+    let confirmation = app
+        .uninstall_confirmation
+        .as_ref()
+        .expect("reinstall confirmation opens");
+    assert!(confirmation.reinstall);
+    assert!(
+        confirmation
+            .command
+            .contains("cargo uninstall \"$package\"")
+    );
+    assert!(confirmation.command.contains("termusic termusic-server"));
+
+    app.handle_key(key(KeyCode::Enter));
+    let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
+        panic!("reset uninstall request expected");
+    };
+    assert!(request.reinstall);
+
+    app.apply_uninstall_result("termusic", true, "", true);
+
+    assert_eq!(app.queue.len(), 1);
+    assert_eq!(app.queue[0].item.tool_id, "termusic");
+    assert_eq!(app.queue[0].item.state, QueueState::Queued);
+    assert_eq!(
+        app.queue[0].task.additional_check_commands,
+        ["termusic-server"]
+    );
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::Execute(job)) if job.item.tool_id == "termusic"
+    ));
+}
+
+#[test]
+fn reset_reinstall_tolerates_missing_packages_across_install_channels() {
+    for (tool_id, installed_probe) in [
+        ("lynx", "dpkg-query"),
+        ("asciiquarium", "snap list"),
+        ("yewtube", "pipx list --short"),
+        ("youtube-tui", "cargo uninstall"),
+    ] {
+        let mut app = app();
+        app.handle_key(key(KeyCode::Char('2')));
+        app.handle_key(key(KeyCode::Char('/')));
+        for ch in tool_id.chars() {
+            app.handle_key(key(KeyCode::Char(ch)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Char('R')));
+
+        let request = app
+            .uninstall_confirmation
+            .as_ref()
+            .unwrap_or_else(|| panic!("{tool_id} supports reset and reinstall"));
+        assert!(request.reinstall);
+        assert!(
+            request.command.contains(installed_probe),
+            "{tool_id} reset command should probe its install channel: {}",
+            request.command
+        );
+    }
+}
+
+#[test]
 fn installed_app_can_emit_a_confirmed_package_manager_uninstall() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -246,7 +346,7 @@ fn installed_app_can_emit_a_confirmed_package_manager_uninstall() {
     );
     assert_eq!(request.check_command, "rg");
     app.mark_uninstall_started("ripgrep");
-    app.apply_uninstall_result("ripgrep", true, "");
+    app.apply_uninstall_result("ripgrep", true, "", false);
     assert!(!app.installed_tools.contains("ripgrep"));
     assert!(!app.uninstalling_tools.contains("ripgrep"));
 }

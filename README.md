@@ -102,6 +102,10 @@ attempt by default. Apps can declare a longer verified budget; Termusic uses
 60 minutes and requires both `termusic` and `termusic-server` to pass postflight
 checks. Cancelling the sudo prompt leaves the queue item unexecuted.
 
+From the catalog, `R` resets a broken or partial installation and immediately
+requeues the current verified install plan. This works even when the primary
+binary exists but a required companion binary is missing.
+
 ## CLI
 
 ```bash

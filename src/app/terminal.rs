@@ -144,6 +144,7 @@ enum RuntimeEvent {
         tool_id: String,
         success: bool,
         error: String,
+        reinstall: bool,
     },
 }
 
@@ -311,13 +312,14 @@ fn process_effects(
             },
             AppEffect::Uninstall(request) => {
                 let tool_id = request.tool_id.clone();
+                let reinstall = request.reinstall;
                 if active.contains_key(&tool_id) {
                     continue;
                 }
                 if uninstall_method_requires_privileges(&request.method)
                     && let Err(error) = session.suspend_for(|| acquire_install_privileges(&tool_id))
                 {
-                    app.apply_uninstall_result(&tool_id, false, &error.to_string());
+                    app.apply_uninstall_result(&tool_id, false, &error.to_string(), reinstall);
                     continue;
                 }
                 let cancel = Arc::new(AtomicBool::new(false));
@@ -361,6 +363,7 @@ fn process_effects(
                         tool_id,
                         success,
                         error,
+                        reinstall,
                     });
                 });
                 active.insert(active_tool_id, ActiveInstall { cancel, handle });
@@ -644,8 +647,9 @@ fn drain_runtime_events(
                 tool_id,
                 success,
                 error,
+                reinstall,
             } => {
-                app.apply_uninstall_result(&tool_id, success, &error);
+                app.apply_uninstall_result(&tool_id, success, &error, reinstall);
                 if let Some(uninstall) = active.remove(&tool_id) {
                     let _ = uninstall.handle.join();
                 }
