@@ -1,7 +1,7 @@
 # 06. Agents (Claude Code / Codex CLI / OpenCode)
 
 ## 6.1 원칙
-- Agents는 HIGH risk 고정
+- Agents는 COMMANDS/AUTONOMOUS capability 필수이며 DANGER로 계산
 - 기본 노출은 Search-only
 - 설치는 위험 경고 필수
 - script 설치는 명시적 확인 + 명령 프리뷰 필수
@@ -30,4 +30,4 @@
 
 ## 6.6 v0.1 한계
 - 에이전트 내부 동작 강제 차단은 제공하지 않는다.
-- HIGH 경고 + 민감 경로 주의 가이드 중심.
+- DANGER 경고 + 민감 경로 주의 가이드 중심.

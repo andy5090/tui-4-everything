@@ -61,7 +61,7 @@ enum Command {
         catalog: PathBuf,
         #[arg(long, default_value = "linux")]
         platform: String,
-        #[arg(long, default_value = "all", value_parser = ["all", "starter", "search_only", "labs"])]
+        #[arg(long, default_value = "all", value_parser = ["all", "starter", "labs"])]
         exposure: String,
     },
     Install {
@@ -205,7 +205,6 @@ fn main() -> Result<()> {
             for tool in &catalog_model.tools {
                 let exposure_name = match tool.exposure {
                     Exposure::Starter => "starter",
-                    Exposure::SearchOnly => "search_only",
                     Exposure::Labs => "labs",
                 };
                 if exposure != "all" && exposure != exposure_name {

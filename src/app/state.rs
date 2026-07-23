@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
-use crate::catalog::models::{CatalogRegistry, InstallMethod, Platform, Risk, Tool, ToolCategory};
+use crate::catalog::models::{
+    CatalogRegistry, InstallMethod, Platform, RiskLevel, Tool, ToolCategory,
+};
 use crate::codex::service::CodexEvent;
 use crate::installer::diagnostics::FailureDiagnostics;
 use crate::installer::engine::{InstallPolicy, build_install_task};
@@ -19,7 +21,8 @@ use crate::storage::{
 
 use super::events::Screen;
 
-pub const NAVIGATION_TAB_LABELS: [&str; 5] = ["Packs", "Workspaces", "AI", "Activity", "Settings"];
+pub const NAVIGATION_TAB_LABELS: [&str; 6] =
+    ["Packs", "Workspaces", "AI", "Activity", "Settings", "Help"];
 
 fn navigation_tab_label(index: usize) -> &'static str {
     NAVIGATION_TAB_LABELS.get(index).copied().unwrap_or("Packs")
@@ -159,7 +162,6 @@ pub struct AppState {
     pub settings_index: usize,
     pub search_query: String,
     pub search_mode: bool,
-    pub show_help: bool,
     pub should_quit: bool,
     pub mouse_enabled: bool,
     pub queue: Vec<InstallJob>,
@@ -244,7 +246,6 @@ impl AppState {
             settings_index: 0,
             search_query: String::new(),
             search_mode: false,
-            show_help: false,
             should_quit: false,
             mouse_enabled: false,
             queue: saved.queue,
@@ -331,11 +332,6 @@ impl AppState {
             return;
         }
 
-        if self.show_help {
-            self.show_help = false;
-            return;
-        }
-
         if self.search_mode {
             self.handle_search_key(key.code);
             return;
@@ -347,7 +343,7 @@ impl AppState {
         }
 
         match key.code {
-            KeyCode::Char('?') => self.show_help = true,
+            KeyCode::Char('?') => self.screen = Screen::Help,
             KeyCode::Backspace | KeyCode::Esc => self.return_to_main(),
             KeyCode::Tab => self.move_navigation_tab(1),
             KeyCode::BackTab => self.move_navigation_tab(-1),
@@ -360,6 +356,7 @@ impl AppState {
             KeyCode::Char('5') => self.screen = Screen::Agents,
             KeyCode::Char('6') => self.screen = Screen::Logs,
             KeyCode::Char('7') => self.screen = Screen::Settings,
+            KeyCode::Char('8') => self.screen = Screen::Help,
             _ => self.handle_screen_key(key.code),
         }
     }
@@ -398,12 +395,17 @@ impl AppState {
             Screen::Agents => 2,
             Screen::Logs => 3,
             Screen::Settings => 4,
+            Screen::Help => 5,
             Screen::AppView => 0,
         }
     }
 
     fn move_navigation_tab(&mut self, delta: isize) {
-        let index = move_index(self.navigation_tab_index(), 5, delta);
+        let index = move_index(
+            self.navigation_tab_index(),
+            NAVIGATION_TAB_LABELS.len(),
+            delta,
+        );
         self.open_navigation_tab(index);
     }
 
@@ -414,6 +416,7 @@ impl AppState {
             2 => Screen::Agents,
             3 => Screen::Logs,
             4 => Screen::Settings,
+            5 => Screen::Help,
             _ => return,
         };
         self.status = format!("Opened {}", navigation_tab_label(index));
@@ -540,13 +543,8 @@ impl AppState {
         )
     }
 
-    pub fn risk_label(risk: &Risk) -> &'static str {
-        match risk {
-            Risk::Safe => "SAFE",
-            Risk::Caution => "CAUTION",
-            Risk::Admin => "ADMIN",
-            Risk::High => "HIGH",
-        }
+    pub fn risk_label(risk: RiskLevel) -> &'static str {
+        risk.label()
     }
 
     pub fn take_effect(&mut self) -> Option<AppEffect> {
@@ -1115,6 +1113,7 @@ impl AppState {
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => self.adjust_setting(1),
                 _ => {}
             },
+            Screen::Help => {}
         }
     }
 
@@ -1289,7 +1288,7 @@ impl AppState {
             Screen::AppView => self.move_app_view(delta),
             Screen::Agents => self.move_agent(delta),
             Screen::Settings => self.move_setting(delta),
-            Screen::Logs => {}
+            Screen::Logs | Screen::Help => {}
         }
     }
 
@@ -1315,7 +1314,8 @@ impl AppState {
             | Screen::Install
             | Screen::Workspace
             | Screen::Agents
-            | Screen::Settings => {}
+            | Screen::Settings
+            | Screen::Help => {}
         }
     }
 
@@ -1773,7 +1773,7 @@ impl AppState {
             self.status = if typed {
                 "Type the confirmation phrase exactly".to_string()
             } else {
-                "Press Enter to approve this SAFE installation".to_string()
+                "Press Enter to approve this installation".to_string()
             };
         } else {
             self.effects

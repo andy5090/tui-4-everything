@@ -17,12 +17,12 @@
 | Success Criteria Clarity | 0.79 | Release gating tests defined with measurable thresholds. |
 
 ## Goal
-Deliver t4e v0.1 as a terminal-first dashboard that lets users discover, install, and run curated tools and launch tmux/zellij workspaces, with starter-first UX and optional search-only agent tooling.
+Deliver t4e v0.1 as a terminal-first dashboard that lets users discover, install, and run curated tools and launch tmux/zellij workspaces, with agents included in the starter catalog.
 
 ## Constraints
 - v0.1 supports external mux backend only (`tmux`/`zellij`), not built-in PTY split.
 - Starter packs emphasize general user value (entertainment/files/fun/edit).
-- Agents remain `search_only` by default, with `HIGH` risk warning UX.
+- Agents are starter apps with `COMMANDS` and `AUTONOMOUS` capabilities, producing `DANGER`.
 - Script-based installers must require explicit confirmation plus command preview.
 - Package-manager-first installation strategy with resolver fallback is mandatory.
 
@@ -51,7 +51,7 @@ Deliver t4e v0.1 as a terminal-first dashboard that lets users discover, install
 
 5. Agent safety/visibility policy
 - Scope: Claude/Codex/OpenCode listing and install flow.
-- Pass: agents default to search-only exposure and display `HIGH` risk warning with required confirmation flow for risky/script installs.
+- Pass: agents are included in starter, declare `COMMANDS` and `AUTONOMOUS`, display `DANGER`, and require confirmation for DANGER or script installs.
 
 ## Assumptions Exposed and Resolutions
 - Assumption: Existing candidate acceptance tests were directionally correct.

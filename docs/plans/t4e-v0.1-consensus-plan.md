@@ -230,8 +230,8 @@ Required fields:
 |---|---|---|
 | package-manager install + no risky tags | LOW | no extra confirmation |
 | package-manager install + `risk_tags` contains `system`/`privileged` | MEDIUM | warning banner + single confirm |
-| script install (`curl|wget` piped to shell, direct script URL, `sh -c`) | HIGH | command preview + explicit typed confirmation |
-| agent tools (`Claude`, `Codex`, `OpenCode`) in v0.1 | HIGH | show as `search_only`; execution disabled |
+| script install (`curl|wget` piped to shell, direct script URL, `sh -c`) | install policy | command preview + explicit typed confirmation |
+| agent tools (`Claude`, `Codex`, `OpenCode`) in v0.1 | COMMANDS + AUTONOMOUS = DANGER | include in starter; require explicit approval |
 
 ### D) Screen Event Map (`src/app/events.rs` and screen reducers)
 | Screen | Key/Event | Action |

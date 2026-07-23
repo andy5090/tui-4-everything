@@ -5,7 +5,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap};
 
-use crate::catalog::models::{Exposure, Risk};
+use crate::catalog::models::RiskLevel;
 use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
 
@@ -55,12 +55,11 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         Screen::Agents => render_agents(frame, app, sections[1]),
         Screen::Logs => render_logs(frame, app, sections[1]),
         Screen::Settings => render_settings(frame, app, sections[1]),
+        Screen::Help => render_help(frame, sections[1]),
     }
     render_footer(frame, app, sections[2]);
 
-    if app.show_help {
-        render_help(frame, area);
-    } else if app.launch_argument.is_some() {
+    if app.launch_argument.is_some() {
         render_launch_argument(frame, app, area);
     } else if app.launch_options.is_some() {
         render_launch_options(frame, app, area);
@@ -88,6 +87,7 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Screen::Agents => "AI".to_string(),
         Screen::Logs => "Activity".to_string(),
         Screen::Settings => "Settings".to_string(),
+        Screen::Help => "Help".to_string(),
     };
     let titles = NAVIGATION_TAB_LABELS
         .iter()
@@ -113,6 +113,7 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
                     .fg(SELECTED)
                     .add_modifier(Modifier::BOLD | Modifier::REVERSED),
             )
+            .padding("", "")
             .divider(" | "),
         area,
     );
@@ -131,24 +132,18 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 .filter_map(|id| app.catalog.tools.iter().find(|tool| &tool.id == id))
                 .filter(|tool| tool.is_launchable_app())
                 .count();
-            let visibility = match pack.exposure {
-                Exposure::Starter => "starter",
-                Exposure::SearchOnly => "search",
-                Exposure::Labs => "labs",
-            };
             ListItem::new(format!(
-                "{:<24} {:>2} apps / {:>2} tools  {}",
+                "{:<24} {:>2} apps / {:>2} tools",
                 pack.title,
                 app_count,
-                pack.tool_ids.len(),
-                visibility
+                pack.tool_ids.len()
             ))
         })
         .collect::<Vec<_>>();
     let mut pack_state = ListState::default().with_selected(Some(app.pack_index));
     frame.render_stateful_widget(
         List::new(pack_items)
-            .block(panel("Starter packs"))
+            .block(panel("App packs"))
             .highlight_style(selection_style())
             .highlight_symbol("> "),
         chunks[0],
@@ -209,8 +204,8 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 )),
                 Span::raw(format!("{:<20}", tool.name)),
                 Span::styled(
-                    format!("{:<10}", AppState::risk_label(&tool.risk)),
-                    risk_style(&tool.risk),
+                    format!("{:<10}", AppState::risk_label(tool.risk_level())),
+                    risk_style(tool.risk_level()),
                 ),
                 Span::styled(install_status, install_style),
             ]))
@@ -249,7 +244,19 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 ),
                 Line::from(""),
                 Line::from(format!("id: {}", tool.id)),
-                Line::from(format!("risk: {}", AppState::risk_label(&tool.risk))),
+                Line::from(format!("risk: {}", AppState::risk_label(tool.risk_level()))),
+                Line::from(format!(
+                    "capabilities: {}",
+                    if tool.capabilities.is_empty() {
+                        "NONE".to_string()
+                    } else {
+                        tool.capabilities
+                            .iter()
+                            .map(|capability| capability.label())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    }
+                )),
                 Line::from(format!("run: {}", tool.run_command_for_current_platform())),
                 Line::from(format!("launch options: {}", tool.run_options.len())),
                 Line::from(""),
@@ -756,30 +763,82 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 }
 
 fn render_help(frame: &mut Frame<'_>, area: Rect) {
-    let popup = centered_rect(64, 16, area);
-    frame.render_widget(Clear, popup);
-    let help = Text::from(vec![
-        Line::styled(
-            "Navigation",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
-        ),
-        Line::from("arrows / j k  move selection"),
-        Line::from("Enter         open pack or run app"),
-        Line::from("Tab / BTab    switch sections"),
-        Line::from("Alt+Left/Right switch running apps"),
-        Line::from("Backspace     back / keep app running"),
-        Line::from("Alt+M         toggle text selection / mouse controls"),
-        Line::from("/             search catalog"),
-        Line::from("q / Esc       main, then quit"),
-        Line::from("Ctrl-C        quit immediately"),
-        Line::from(""),
-        Line::styled("Press any key to close", Style::default().fg(MUTED)),
-    ]);
+    let compact = area.height <= 12;
+    let lines = if compact {
+        vec![
+            Line::styled(
+                "Risk from capabilities",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Line::from("SAFE none | LOW network, account, or file read"),
+            Line::from("HIGH file write or delete"),
+            Line::from("DANGER system, commands, or autonomous operation"),
+            Line::from("Highest capability level becomes the app risk level"),
+            Line::styled(
+                "App details list every declared capability.",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Line::from("Scripts always need approval; installs get postflight checks"),
+            Line::from("Enter run | I install | U uninstall | R reinstall"),
+            Line::from("? Help | Tab sections | Alt+Q close | Alt+BS background"),
+        ]
+    } else {
+        vec![
+            Line::styled(
+                "Capabilities and derived risk",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(
+                "SAFE     no declared capability beyond app-owned configuration, cache, and local UI state",
+            ),
+            Line::from(
+                "LOW      NETWORK, ACCOUNT, or FILE_READ: remote access, sign-in, or reading selected files",
+            ),
+            Line::from(
+                "HIGH     FILE_WRITE or DELETE: can create, change, synchronize, or remove selected files",
+            ),
+            Line::from(
+                "DANGER   SYSTEM, COMMANDS, or AUTONOMOUS: system changes, general commands, or agentic action",
+            ),
+            Line::styled(
+                "An app receives the highest level among its capabilities. Details show the complete capability list.",
+                Style::default().fg(MUTED),
+            ),
+            Line::styled(
+                "Installation policy",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Line::from(
+                "Package-manager installs use a generated catalog plan and verify required executables afterward.",
+            ),
+            Line::styled(
+                "Script installers always show the command and require explicit approval, regardless of app risk.",
+                Style::default().fg(MUTED),
+            ),
+            Line::from(""),
+            Line::styled(
+                "Using T4E",
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Line::from("arrows / j k       move selection"),
+            Line::from("Enter               open a pack or run an app"),
+            Line::from("I / U / R           install / uninstall / reset and reinstall"),
+            Line::from("Tab / Shift+Tab     switch dashboard tabs"),
+            Line::from("/                   search all catalog apps"),
+            Line::from("Alt+Left / Right    switch running apps"),
+            Line::from("Alt+Backspace       leave an app running in the background"),
+            Line::from("Alt+Q               close the current app"),
+            Line::from("Alt+M               toggle text selection and T4E mouse controls"),
+            Line::from("Alt+O / Alt+C       open or copy a link from the current app"),
+            Line::from("Backspace / Esc     return to Packs outside a running app"),
+            Line::from("q                   return to Packs, then quit"),
+        ]
+    };
     frame.render_widget(
-        Paragraph::new(help)
+        Paragraph::new(Text::from(lines))
             .block(panel("Help"))
             .wrap(Wrap { trim: true }),
-        popup,
+        area,
     );
 }
 
@@ -807,7 +866,9 @@ fn render_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         ));
         lines.push(Line::from(""));
     } else {
-        lines.push(Line::from("SAFE app: no confirmation phrase is required."));
+        lines.push(Line::from(
+            "This install does not require a typed confirmation phrase.",
+        ));
         lines.push(Line::from(""));
     }
     lines.push(Line::styled(
@@ -1067,12 +1128,12 @@ fn selection_style() -> Style {
     Style::default().fg(SELECTED).add_modifier(Modifier::BOLD)
 }
 
-fn risk_style(risk: &Risk) -> Style {
+fn risk_style(risk: RiskLevel) -> Style {
     let color = match risk {
-        Risk::Safe => Color::Green,
-        Risk::Caution => Color::Yellow,
-        Risk::Admin => Color::Magenta,
-        Risk::High => Color::Red,
+        RiskLevel::Safe => Color::Green,
+        RiskLevel::Low => Color::Cyan,
+        RiskLevel::High => Color::Yellow,
+        RiskLevel::Danger => Color::Red,
     };
     Style::default().fg(color).add_modifier(Modifier::BOLD)
 }

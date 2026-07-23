@@ -742,6 +742,17 @@ fn mouse_clicks_header_navigation_tabs() {
         24,
     );
     assert_eq!(app.screen, Screen::Home);
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 50,
+            row: 1,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+    assert_eq!(app.screen, Screen::Help);
 }
 
 #[test]
@@ -790,7 +801,7 @@ fn every_screen_renders_at_supported_terminal_sizes() {
     let sizes = [(60, 16), (70, 20), (80, 24), (120, 35)];
 
     for (width, height) in sizes {
-        for screen_key in ['1', '2', '3', '4', '5', '6', '7'] {
+        for screen_key in ['1', '2', '3', '4', '5', '6', '7', '8'] {
             let mut app = app();
             app.handle_key(key(KeyCode::Char(screen_key)));
             let backend = TestBackend::new(width, height);
@@ -834,7 +845,39 @@ fn narrow_layout_keeps_every_screen_target_and_back_key_visible() {
     assert!(rendered.contains("Workspaces"));
     assert!(rendered.contains("Activity"));
     assert!(rendered.contains("Settings"));
+    assert!(rendered.contains("Help"));
     assert!(rendered.contains("Backspace back"));
+}
+
+#[test]
+fn help_tab_explains_capabilities_and_derived_risk() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('?')));
+    assert_eq!(app.screen, Screen::Help);
+
+    let backend = TestBackend::new(120, 35);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("help renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    for label in ["SAFE", "LOW", "HIGH", "DANGER", "Installation policy"] {
+        assert!(rendered.contains(label), "missing help label {label}");
+    }
+    assert!(rendered.contains("NETWORK"));
+    assert!(rendered.contains("AUTONOMOUS"));
+
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(app.screen, Screen::Home);
+    app.handle_key(key(KeyCode::BackTab));
+    assert_eq!(app.screen, Screen::Help);
 }
 
 #[test]
@@ -1240,7 +1283,7 @@ fn confirm_all_uses_one_key_approval_for_safe_tools() {
 }
 
 #[test]
-fn high_risk_tool_requires_typed_confirmation() {
+fn danger_tool_requires_typed_confirmation() {
     let mut app = app();
     let platform = if cfg!(target_os = "macos") {
         Platform::Macos

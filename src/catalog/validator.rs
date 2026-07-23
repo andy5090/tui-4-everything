@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail};
 
-use crate::catalog::models::{CatalogRegistry, InstallMethod, Platform};
+use crate::catalog::models::{Capability, CatalogRegistry, InstallMethod, Platform, ToolCategory};
 use crate::mux::workspace::WorkspaceRegistry;
 
 pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
@@ -10,6 +10,20 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
     for tool in &catalog.tools {
         if !tool_ids.insert(tool.id.clone()) {
             bail!("duplicate tool id: {}", tool.id);
+        }
+
+        let unique_capabilities = tool.capabilities.iter().collect::<HashSet<_>>();
+        if unique_capabilities.len() != tool.capabilities.len() {
+            bail!("tool {} has duplicate capabilities", tool.id);
+        }
+        if tool.category == ToolCategory::Agents
+            && (!tool.capabilities.contains(&Capability::Commands)
+                || !tool.capabilities.contains(&Capability::Autonomous))
+        {
+            bail!(
+                "agent tool {} must declare COMMANDS and AUTONOMOUS",
+                tool.id
+            );
         }
 
         if tool.run.cmd.trim().is_empty()

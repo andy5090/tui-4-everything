@@ -28,7 +28,8 @@ pub struct Tool {
     #[serde(default)]
     pub tags: Vec<String>,
     pub audience: Audience,
-    pub risk: Risk,
+    #[serde(default)]
+    pub capabilities: Vec<Capability>,
     #[serde(default = "default_exposure")]
     pub exposure: Exposure,
     pub run: RunSpec,
@@ -92,6 +93,15 @@ pub struct Check {
 impl Tool {
     pub fn is_launchable_app(&self) -> bool {
         !self.tags.iter().any(|tag| tag == "support")
+    }
+
+    pub fn risk_level(&self) -> RiskLevel {
+        self.capabilities
+            .iter()
+            .copied()
+            .map(Capability::risk_level)
+            .max()
+            .unwrap_or(RiskLevel::Safe)
     }
 
     pub fn run_command_for(&self, platform: Platform) -> &str {
@@ -161,8 +171,6 @@ pub enum Audience {
 pub enum Exposure {
     #[serde(rename = "starter")]
     Starter,
-    #[serde(rename = "search_only")]
-    SearchOnly,
     #[serde(rename = "labs")]
     Labs,
 }
@@ -171,16 +179,59 @@ fn default_exposure() -> Exposure {
     Exposure::Starter
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub enum Risk {
-    #[serde(rename = "SAFE")]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum Capability {
+    Network,
+    Account,
+    FileRead,
+    FileWrite,
+    Delete,
+    System,
+    Commands,
+    Autonomous,
+}
+
+impl Capability {
+    pub fn risk_level(self) -> RiskLevel {
+        match self {
+            Self::Network | Self::Account | Self::FileRead => RiskLevel::Low,
+            Self::FileWrite | Self::Delete => RiskLevel::High,
+            Self::System | Self::Commands | Self::Autonomous => RiskLevel::Danger,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Network => "NETWORK",
+            Self::Account => "ACCOUNT",
+            Self::FileRead => "FILE_READ",
+            Self::FileWrite => "FILE_WRITE",
+            Self::Delete => "DELETE",
+            Self::System => "SYSTEM",
+            Self::Commands => "COMMANDS",
+            Self::Autonomous => "AUTONOMOUS",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RiskLevel {
     Safe,
-    #[serde(rename = "CAUTION")]
-    Caution,
-    #[serde(rename = "ADMIN")]
-    Admin,
-    #[serde(rename = "HIGH")]
+    Low,
     High,
+    Danger,
+}
+
+impl RiskLevel {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Safe => "SAFE",
+            Self::Low => "LOW",
+            Self::High => "HIGH",
+            Self::Danger => "DANGER",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

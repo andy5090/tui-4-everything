@@ -33,11 +33,24 @@ LazyVim uses an isolated `t4e-lazyvim` profile, leaving an existing Neovim
 configuration untouched. YouTube TUI provides browsing and search; tplay asks
 for a media URL or local path before rendering the media as terminal ASCII.
 
-`starter` marks apps intended for the default curated experience.
-`search_only` marks optional or advanced apps that are excluded from default
-recommendations. `SAFE` uses a fixed, validated install plan; `HIGH` covers
-apps or installers capable of broad command and filesystem changes. SAFE may
-still request `sudo` when its package manager requires administrator access.
+Catalog exposure is internal release metadata: `starter` participates in the
+default curated release checks and `labs` is experimental. Every current pack,
+including Agents, is `starter`. Exposure is hidden from the TUI because it is
+not an installation or permission decision.
+
+Each app declares any combination of `NETWORK`, `ACCOUNT`, `FILE_READ`,
+`FILE_WRITE`, `DELETE`, `SYSTEM`, `COMMANDS`, and `AUTONOMOUS` capabilities.
+The TUI displays the full list and derives one risk level from the most
+impactful capability:
+
+- `SAFE`: no declared capability beyond app-owned configuration, cache, and UI state.
+- `LOW`: `NETWORK`, `ACCOUNT`, or `FILE_READ`.
+- `HIGH`: `FILE_WRITE` or `DELETE`.
+- `DANGER`: `SYSTEM`, `COMMANDS`, or `AUTONOMOUS`.
+
+Installation trust is separate. Package-manager installs use generated catalog
+plans and postflight executable checks. Script installers always show the
+command and require explicit approval, regardless of the app risk level.
 
 ## Run
 
@@ -55,7 +68,8 @@ scripts/dev-watch.sh
 The script requires `cargo-watch` and restores the terminal screen and cursor
 when it exits.
 
-Main screens use `1` through `7`. Press `?` for navigation help.
+Main screens use `1` through `8`. Press `?` to open the persistent Help tab,
+which explains controls, capabilities, and derived risk levels.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.
@@ -88,7 +102,7 @@ Important actions are intentionally explicit:
 - AI Home: `Enter` composes a request, `x` interrupts, and `A` reviews a
   proposed side effect.
 
-Script, HIGH-risk, and AI-proposed side effects require an exact typed
+Script installers, DANGER apps, and AI-proposed side effects require an exact typed
 confirmation. Codex runs in a read-only sandbox with app-server approvals set
 to `never`; T4E remains authoritative for installation and process lifecycle.
 

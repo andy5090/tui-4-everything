@@ -8,6 +8,7 @@ pub enum Screen {
     Agents,
     Logs,
     Settings,
+    Help,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,6 +50,7 @@ pub fn map_key(screen: Screen, key: char) -> EventAction {
         (Screen::AppView, _) => EventAction::Noop,
         (Screen::Agents, '\n') => EventAction::OpenDetail,
         (Screen::Logs, '/') => EventAction::FilterLogs,
+        (Screen::Help, _) => EventAction::Noop,
         (_, 'q') => EventAction::QuitOrBack,
         _ => EventAction::Noop,
     }

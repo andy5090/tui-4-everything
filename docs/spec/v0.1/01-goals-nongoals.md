@@ -6,7 +6,7 @@
 3. 설치 엔진은 "패키지 매니저 우선" 전략을 적용
 4. tmux 워크스페이스 3개 이상 제공 및 실행 성공
 5. Agents(Claude/Codex/OpenCode)는 Search-only로 제공(옵션 설치 가능)
-6. 리스크 배지(SAFE/CAUTION/ADMIN/HIGH) 기반 UX 경고 제공
+6. capability 기반 파생 리스크 배지(SAFE/LOW/HIGH/DANGER) 제공
 
 ## 1.2 Non-goals (v0.1에서 제외)
 - t4e 자체 PTY 분할(내장 멀티플렉서)

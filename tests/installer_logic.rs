@@ -1,11 +1,11 @@
 use t4e::catalog::models::{
-    Audience, Check, Exposure, InstallMethod, Installer, Platform, Risk, RunSpec, Tool,
+    Audience, Capability, Check, Exposure, InstallMethod, Installer, Platform, RunSpec, Tool,
     ToolCategory,
 };
 use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::resolver::{Candidate, PackageSearch, rank_candidates, resolve_with_fallback};
 
-fn fake_tool(risk: Risk) -> Tool {
+fn fake_tool(capabilities: Vec<Capability>) -> Tool {
     Tool {
         id: "fake-tool".to_string(),
         name: "Fake Tool".to_string(),
@@ -14,7 +14,7 @@ fn fake_tool(risk: Risk) -> Tool {
         category: ToolCategory::Utility,
         tags: vec![],
         audience: Audience::General,
-        risk,
+        capabilities,
         exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "fake".to_string(),
@@ -55,7 +55,7 @@ fn resolver_prefers_exact_then_prefix_then_contains() {
 
 #[test]
 fn script_installers_always_require_confirmation() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Script,
@@ -72,8 +72,8 @@ fn script_installers_always_require_confirmation() {
 }
 
 #[test]
-fn high_risk_tools_require_confirmation_even_for_pkg_manager() {
-    let tool = fake_tool(Risk::High);
+fn danger_tools_require_confirmation_even_for_pkg_manager() {
+    let tool = fake_tool(vec![Capability::Commands]);
     let installer = Installer {
         platform: Platform::Macos,
         method: InstallMethod::Brew,
@@ -92,7 +92,7 @@ fn high_risk_tools_require_confirmation_even_for_pkg_manager() {
 
 #[test]
 fn apt_command_uses_cached_sudo_noninteractively() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
@@ -113,7 +113,7 @@ fn apt_command_uses_cached_sudo_noninteractively() {
 
 #[test]
 fn pipx_install_bootstraps_the_package_manager() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Pipx,
@@ -132,7 +132,7 @@ fn pipx_install_bootstraps_the_package_manager() {
 
 #[test]
 fn cargo_install_uses_the_published_lockfile() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Cargo,
@@ -150,7 +150,7 @@ fn cargo_install_uses_the_published_lockfile() {
 
 #[test]
 fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
-    let mut tool = fake_tool(Risk::Safe);
+    let mut tool = fake_tool(vec![]);
     tool.install_timeout_sec = Some(3_600);
     tool.checks = vec![
         Check {
@@ -191,7 +191,7 @@ fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
 
 #[test]
 fn tplay_install_uses_an_isolated_current_yt_dlp() {
-    let mut tool = fake_tool(Risk::Safe);
+    let mut tool = fake_tool(vec![]);
     tool.id = "tplay".to_string();
     tool.run.cmd = "tplay".to_string();
     let installer = Installer {
@@ -220,7 +220,7 @@ fn tplay_install_uses_an_isolated_current_yt_dlp() {
 
 #[test]
 fn newsboat_install_creates_a_first_feed_launcher() {
-    let mut tool = fake_tool(Risk::Safe);
+    let mut tool = fake_tool(vec![]);
     tool.id = "newsboat".to_string();
     tool.run.cmd = "newsboat".to_string();
     let installer = Installer {
@@ -246,7 +246,7 @@ fn newsboat_install_creates_a_first_feed_launcher() {
 
 #[test]
 fn snap_command_uses_cached_sudo_noninteractively() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Snap,
@@ -265,7 +265,7 @@ fn snap_command_uses_cached_sudo_noninteractively() {
 
 #[test]
 fn classic_snap_command_uses_cached_sudo_noninteractively() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::SnapClassic,
@@ -284,7 +284,7 @@ fn classic_snap_command_uses_cached_sudo_noninteractively() {
 
 #[test]
 fn lazyvim_uses_an_isolated_managed_configuration() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::LazyVim,
@@ -347,7 +347,7 @@ fn resolver_keeps_local_candidates_when_search_returns_empty() {
 
 #[test]
 fn unsafe_package_hint_is_rejected() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
@@ -363,7 +363,7 @@ fn unsafe_package_hint_is_rejected() {
 
 #[test]
 fn non_script_installer_cannot_override_the_generated_command() {
-    let tool = fake_tool(Risk::Safe);
+    let tool = fake_tool(vec![]);
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,

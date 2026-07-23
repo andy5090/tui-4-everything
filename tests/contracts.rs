@@ -1,7 +1,8 @@
-use t4e::agents::risk::{RiskLevel, classify};
+use t4e::agents::risk::classify;
 use t4e::app::events::{EventAction, Screen, map_key};
 use t4e::catalog::models::{
-    Audience, Exposure, InstallMethod, Installer, Risk, RunSpec, Tool, ToolCategory,
+    Audience, Capability, Exposure, InstallMethod, Installer, RiskLevel, RunSpec, Tool,
+    ToolCategory,
 };
 
 #[test]
@@ -17,7 +18,7 @@ fn event_map_matches_spec_subset() {
 }
 
 #[test]
-fn agents_and_script_installs_are_high_risk() {
+fn runtime_risk_is_derived_only_from_capabilities() {
     let agent = Tool {
         id: "codex-cli".to_string(),
         name: "Codex CLI".to_string(),
@@ -26,8 +27,13 @@ fn agents_and_script_installs_are_high_risk() {
         category: ToolCategory::Agents,
         tags: vec![],
         audience: Audience::Developer,
-        risk: Risk::High,
-        exposure: Exposure::SearchOnly,
+        capabilities: vec![
+            Capability::FileRead,
+            Capability::FileWrite,
+            Capability::Commands,
+            Capability::Autonomous,
+        ],
+        exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "codex".to_string(),
         },
@@ -37,7 +43,7 @@ fn agents_and_script_installs_are_high_risk() {
         checks: vec![],
         notes: None,
     };
-    assert_eq!(classify(&agent), RiskLevel::High);
+    assert_eq!(classify(&agent), RiskLevel::Danger);
 
     let script_tool = Tool {
         id: "custom".to_string(),
@@ -47,7 +53,7 @@ fn agents_and_script_installs_are_high_risk() {
         category: ToolCategory::Utility,
         tags: vec![],
         audience: Audience::General,
-        risk: Risk::Safe,
+        capabilities: vec![],
         exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "custom".to_string(),
@@ -66,5 +72,36 @@ fn agents_and_script_installs_are_high_risk() {
         checks: vec![],
         notes: None,
     };
-    assert_eq!(classify(&script_tool), RiskLevel::High);
+    assert_eq!(classify(&script_tool), RiskLevel::Safe);
+}
+
+#[test]
+fn risk_level_uses_the_highest_declared_capability() {
+    let mut tool = Tool {
+        id: "capability-test".to_string(),
+        name: "Capability Test".to_string(),
+        description: None,
+        install_timeout_sec: None,
+        category: ToolCategory::Utility,
+        tags: vec![],
+        audience: Audience::General,
+        capabilities: vec![],
+        exposure: Exposure::Starter,
+        run: RunSpec {
+            cmd: "capability-test".to_string(),
+        },
+        launch_argument: None,
+        run_options: Vec::new(),
+        installers: vec![],
+        checks: vec![],
+        notes: None,
+    };
+
+    assert_eq!(tool.risk_level(), RiskLevel::Safe);
+    tool.capabilities.push(Capability::Network);
+    assert_eq!(tool.risk_level(), RiskLevel::Low);
+    tool.capabilities.push(Capability::Delete);
+    assert_eq!(tool.risk_level(), RiskLevel::High);
+    tool.capabilities.push(Capability::Autonomous);
+    assert_eq!(tool.risk_level(), RiskLevel::Danger);
 }

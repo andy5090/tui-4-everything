@@ -91,7 +91,7 @@ v0.1 목표 40~80 범위 충족.
 - OpenCode
 
 ## 4.11 리스크 배지 권장값
-- 대부분: SAFE
-- yt-dlp: CAUTION
-- rsync: CAUTION
-- Agents: HIGH
+- capability가 없는 앱: SAFE
+- NETWORK/ACCOUNT/FILE_READ: LOW
+- FILE_WRITE/DELETE: HIGH
+- SYSTEM/COMMANDS/AUTONOMOUS: DANGER

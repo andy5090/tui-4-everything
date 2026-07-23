@@ -17,8 +17,8 @@ v0.2+에서 tool/packs 분리 파일 및 원격 동기화 고려.
 - category: entertainment|files|fun|edit|utility|agents|reading|ide
 - tags: string[]
 - audience: general|prosumer|developer|ops|security
-- risk: SAFE|CAUTION|ADMIN|HIGH
-- exposure: starter|search_only|labs (default: starter)
+- capabilities: NETWORK|ACCOUNT|FILE_READ|FILE_WRITE|DELETE|SYSTEM|COMMANDS|AUTONOMOUS[]
+- exposure: starter|labs (default: starter)
 - run: { cmd: string }
 - installers: Installer[]
 - checks: Check[] (optional)
@@ -60,7 +60,7 @@ Installer:
 
 ### 안전 규칙
 - script 설치는 항상 명시적 확인 + 명령 프리뷰
-- agents(HIGH)는 기본적으로 search_only 노출
+- agents는 starter에 포함하고 COMMANDS/AUTONOMOUS capability를 필수로 선언
 
 ## 3.5 Check 스키마(v0.1)
 - which: command -v <bin>

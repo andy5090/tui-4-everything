@@ -2,7 +2,7 @@ use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::models::{InstallMethod, Installer, Risk, Tool};
+use crate::catalog::models::{InstallMethod, Installer, RiskLevel, Tool};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InstallTask {
@@ -65,7 +65,7 @@ pub fn build_install_task(
             let _ = policy.enforce_script_confirmation;
             true
         }
-        _ => installer.requires_confirm || matches!(tool.risk, Risk::Admin | Risk::High),
+        _ => installer.requires_confirm || tool.risk_level() == RiskLevel::Danger,
     };
 
     if matches!(installer.method, InstallMethod::Script) && !requires_confirmation {

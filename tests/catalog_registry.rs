@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
-use t4e::catalog::models::{Exposure, InstallMethod, Platform, Risk, ToolCategory};
+use t4e::catalog::models::{
+    Capability, Exposure, InstallMethod, Platform, RiskLevel, ToolCategory,
+};
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
 #[test]
@@ -14,22 +16,20 @@ fn registry_loads_and_validates() {
         catalog.tools.len() >= 40,
         "expected at least 40 starter tools"
     );
-    assert!(
-        catalog.packs.len() >= 6,
-        "expected starter packs and optional packs"
-    );
+    assert!(catalog.packs.len() >= 6, "expected starter packs");
 
     let agent_tools: Vec<_> = catalog
         .tools
         .iter()
-        .filter(|tool| matches!(tool.risk, Risk::High))
+        .filter(|tool| tool.category == ToolCategory::Agents)
         .collect();
-    assert_eq!(agent_tools.len(), 3, "exactly three high-risk agent tools");
-    assert!(
-        agent_tools
-            .iter()
-            .all(|tool| matches!(tool.exposure, Exposure::SearchOnly))
-    );
+    assert_eq!(agent_tools.len(), 3, "exactly three agent tools");
+    assert!(agent_tools.iter().all(|tool| {
+        matches!(tool.exposure, Exposure::Starter)
+            && tool.risk_level() == RiskLevel::Danger
+            && tool.capabilities.contains(&Capability::Commands)
+            && tool.capabilities.contains(&Capability::Autonomous)
+    }));
     let missing_descriptions = catalog
         .tools
         .iter()

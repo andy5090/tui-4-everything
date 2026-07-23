@@ -124,7 +124,8 @@ fn call_tool(
                     json!({
                         "id": tool.id,
                         "name": tool.name,
-                        "risk": tool.risk,
+                        "risk": tool.risk_level().label(),
+                        "capabilities": tool.capabilities,
                         "runCommand": tool.run_command_for_current_platform()
                     })
                 })
@@ -155,7 +156,12 @@ fn call_tool(
                 .find(|installer| installer.platform == platform)
                 .ok_or_else(|| anyhow::anyhow!("no installer for {tool_id}"))?;
             let task = build_install_task(tool, installer, &InstallPolicy::default())?;
-            json!({ "toolId": tool_id, "risk": tool.risk, "task": task })
+            json!({
+                "toolId": tool_id,
+                "risk": tool.risk_level().label(),
+                "capabilities": tool.capabilities,
+                "task": task
+            })
         }
         "workspace_list" => {
             let managed = TmuxRuntime::default().list_managed().unwrap_or_default();

@@ -37,7 +37,7 @@ packs:
     tool_ids: [micro, helix, lazyvim, visidata]
   - id: agents-pack
     title: Agents Pack
-    exposure: search_only
+    exposure: starter
     tool_ids: [claude-code, codex-cli, opencode]
 
 tools:
@@ -47,7 +47,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK, ACCOUNT]
     exposure: starter
     run:
       cmd: "spotatui"
@@ -65,7 +65,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK, ACCOUNT]
     exposure: starter
     run:
       cmd: "spotify_player"
@@ -83,7 +83,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK, ACCOUNT]
     exposure: starter
     run:
       cmd: "ncspot"
@@ -101,7 +101,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "cava"
@@ -119,7 +119,7 @@ tools:
     category: entertainment
     tags: []
     audience: prosumer
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "termusic"
@@ -139,7 +139,7 @@ tools:
     category: entertainment
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK, FILE_READ]
     exposure: starter
     run:
       cmd: "mpv"
@@ -156,7 +156,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK]
     exposure: starter
     run:
       cmd: "yt"
@@ -176,7 +176,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK]
     exposure: starter
     run:
       cmd: "youtube-tui"
@@ -195,7 +195,7 @@ tools:
     category: entertainment
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK, FILE_READ]
     exposure: starter
     run:
       cmd: "tplay"
@@ -216,7 +216,7 @@ tools:
     category: entertainment
     tags: [support]
     audience: general
-    risk: CAUTION
+    capabilities: [NETWORK, FILE_WRITE]
     exposure: starter
     run:
       cmd: "yt-dlp"
@@ -232,7 +232,7 @@ tools:
     category: utility
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "ffmpeg"
@@ -248,7 +248,7 @@ tools:
     category: entertainment
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK]
     exposure: starter
     run:
       cmd: "streamlink"
@@ -264,7 +264,7 @@ tools:
     category: utility
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "mediainfo"
@@ -281,7 +281,7 @@ tools:
     category: reading
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK]
     exposure: starter
     run:
       cmd: "shellcast"
@@ -299,7 +299,7 @@ tools:
     category: reading
     tags: []
     audience: prosumer
-    risk: SAFE
+    capabilities: [NETWORK]
     exposure: starter
     run:
       cmd: "newsboat"
@@ -318,7 +318,7 @@ tools:
     category: reading
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "glow"
@@ -335,7 +335,7 @@ tools:
     category: reading
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK, FILE_WRITE]
     exposure: starter
     run:
       cmd: "lynx"
@@ -351,7 +351,7 @@ tools:
     category: utility
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "jq"
@@ -367,7 +367,7 @@ tools:
     category: utility
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "yq"
@@ -383,7 +383,7 @@ tools:
     category: reading
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [NETWORK]
     exposure: starter
     run:
       cmd: "tldr"
@@ -399,7 +399,7 @@ tools:
     category: reading
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "less"
@@ -416,7 +416,7 @@ tools:
     category: files
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE, DELETE]
     exposure: starter
     run:
       cmd: "yazi"
@@ -432,7 +432,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "bat"
@@ -449,7 +449,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "eza"
@@ -465,7 +465,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "fd"
@@ -482,7 +482,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "rg"
@@ -498,7 +498,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "fzf"
@@ -514,7 +514,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "zoxide"
@@ -530,7 +530,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "dust"
@@ -546,7 +546,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "duf"
@@ -563,7 +563,7 @@ tools:
     category: files
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, DELETE]
     exposure: starter
     run:
       cmd: "ncdu"
@@ -580,7 +580,7 @@ tools:
     category: files
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE, DELETE]
     exposure: starter
     run:
       cmd: "broot"
@@ -596,7 +596,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "tree"
@@ -612,7 +612,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ]
     exposure: starter
     run:
       cmd: "file"
@@ -628,7 +628,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "7z"
@@ -644,7 +644,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "unzip"
@@ -660,7 +660,7 @@ tools:
     category: files
     tags: [support]
     audience: general
-    risk: CAUTION
+    capabilities: [NETWORK, FILE_READ, FILE_WRITE, DELETE]
     exposure: starter
     run:
       cmd: "rsync"
@@ -677,7 +677,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "cmatrix"
@@ -717,7 +717,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "bastet"
@@ -734,7 +734,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "asciiquarium"
@@ -752,7 +752,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "sl"
@@ -769,7 +769,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "lolcat"
@@ -786,7 +786,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "cowsay"
@@ -803,7 +803,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "fortune"
@@ -820,7 +820,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "tty-clock"
@@ -867,7 +867,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "nyancat"
@@ -884,7 +884,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "pipes.sh"
@@ -931,7 +931,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "ninvaders"
@@ -948,7 +948,7 @@ tools:
     category: fun
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: []
     exposure: starter
     run:
       cmd: "nudoku"
@@ -965,7 +965,7 @@ tools:
     category: edit
     tags: []
     audience: general
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "micro"
@@ -982,7 +982,7 @@ tools:
     category: ide
     tags: []
     audience: prosumer
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "hx"
@@ -999,7 +999,7 @@ tools:
     category: ide
     tags: []
     audience: developer
-    risk: SAFE
+    capabilities: [NETWORK, FILE_READ, FILE_WRITE, COMMANDS]
     exposure: starter
     run:
       cmd: "t4e-lazyvim"
@@ -1018,7 +1018,7 @@ tools:
     category: edit
     tags: []
     audience: prosumer
-    risk: SAFE
+    capabilities: [FILE_READ, FILE_WRITE]
     exposure: starter
     run:
       cmd: "vd"
@@ -1035,8 +1035,8 @@ tools:
     category: agents
     tags: ["agent"]
     audience: developer
-    risk: HIGH
-    exposure: search_only
+    capabilities: [NETWORK, ACCOUNT, FILE_READ, FILE_WRITE, COMMANDS, AUTONOMOUS]
+    exposure: starter
     run:
       cmd: "claude"
     installers:
@@ -1055,8 +1055,8 @@ tools:
     category: agents
     tags: ["agent"]
     audience: developer
-    risk: HIGH
-    exposure: search_only
+    capabilities: [NETWORK, ACCOUNT, FILE_READ, FILE_WRITE, COMMANDS, AUTONOMOUS]
+    exposure: starter
     run:
       cmd: "codex"
     installers:
@@ -1073,8 +1073,8 @@ tools:
     category: agents
     tags: ["agent"]
     audience: developer
-    risk: HIGH
-    exposure: search_only
+    capabilities: [NETWORK, ACCOUNT, FILE_READ, FILE_WRITE, COMMANDS, AUTONOMOUS]
+    exposure: starter
     run:
       cmd: "opencode"
     installers:
