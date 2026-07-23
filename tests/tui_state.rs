@@ -514,7 +514,7 @@ fn workspace_action_emits_a_bounded_launch_request() {
     assert_eq!(
         request.required_tools,
         [
-            ("yewtube".to_string(), "yt".to_string()),
+            ("yewtube".to_string(), "t4e-yewtube".to_string()),
             ("mpv".to_string(), "mpv".to_string()),
             ("yazi".to_string(), "yazi".to_string()),
         ]
@@ -644,11 +644,18 @@ fn app_view_selects_recent_or_older_clean_urls() {
     );
     let auth_url = "https://accounts.spotify.com/authorize?redirect_uri=http%3A%2F%2F127.0.0.1%3A8989%2Flogin&client_id=test&code_challenge=long-value";
     let latest_url = "https://example.com/authorization-complete";
-    app.app_view.as_mut().expect("app view").content = format!(
+    let content = format!(
         "Using redirect URI: http://127.0.0.1:8989/login\nOpen this URL:\n{auth_url}\nNew URL:\n{latest_url}\nWaiting..."
     );
+    app.app_view.as_mut().expect("app view").content = content.clone();
 
     app.handle_key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::ALT));
+    let Some(AppEffect::ReadAppLinks { pane_id, action }) = app.take_effect() else {
+        panic!("joined link capture should be requested");
+    };
+    assert_eq!(pane_id, "%50");
+    assert_eq!(action, t4e::app::state::LinkAction::Open);
+    app.apply_app_links(action, &content);
     let picker = app.link_picker.as_ref().expect("link picker");
     assert_eq!(picker.urls[0], latest_url);
     assert_eq!(picker.selected, 0);
@@ -660,6 +667,12 @@ fn app_view_selects_recent_or_older_clean_urls() {
     ));
 
     app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::ALT));
+    let Some(AppEffect::ReadAppLinks { pane_id, action }) = app.take_effect() else {
+        panic!("joined link capture should be requested");
+    };
+    assert_eq!(pane_id, "%50");
+    assert_eq!(action, t4e::app::state::LinkAction::Copy);
+    app.apply_app_links(action, &content);
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Enter));
     assert!(matches!(

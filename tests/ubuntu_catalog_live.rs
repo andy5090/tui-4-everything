@@ -29,6 +29,10 @@ fn ubuntu_install_sources_resolve_every_catalog_package() {
                 InstallMethod::NpmGlobal => command_succeeds("npm", &["view", package, "version"]),
                 InstallMethod::LazyVim => command_succeeds("snap", &["info", "nvim"]),
                 InstallMethod::Tplay => cargo_package_exists(package),
+                InstallMethod::YoutubeTui => cargo_package_exists(package),
+                InstallMethod::Yewtube => {
+                    command_succeeds("python3", &["-m", "pip", "index", "versions", package])
+                }
                 InstallMethod::Newsboat => command_succeeds("snap", &["info", package]),
                 InstallMethod::Fastfetch => command_succeeds(
                     "curl",

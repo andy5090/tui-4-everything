@@ -133,6 +133,46 @@ fn pipx_install_bootstraps_the_package_manager() {
 }
 
 #[test]
+fn yewtube_install_defaults_an_invalid_player_to_mpv() {
+    let mut tool = fake_tool(vec![Capability::Network]);
+    tool.id = "yewtube".to_string();
+    tool.run.cmd = "yt".to_string();
+    tool.checks = vec![
+        Check {
+            which: Some("yt".to_string()),
+            version: None,
+            custom: None,
+        },
+        Check {
+            which: Some("t4e-yewtube".to_string()),
+            version: None,
+            custom: None,
+        },
+    ];
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Yewtube,
+        package_hints: vec!["yewtube".to_string()],
+        system_packages: vec!["mpv".to_string(), "python3".to_string()],
+        executable: Some("t4e-yewtube".to_string()),
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+
+    assert!(task.command.contains("pipx install --force yewtube"));
+    assert!(task.command.contains("mps-youtube"));
+    assert!(task.command.contains("command -v \"$player\""));
+    assert!(task.command.contains("d[\\\"PLAYER\\\"]=\\\"mpv\\\""));
+    assert!(task.command.contains("t4e-yewtube"));
+    assert_eq!(task.check_command.as_deref(), Some("yt"));
+    assert_eq!(task.additional_check_commands, ["t4e-yewtube"]);
+    assert!(task.requires_privileges);
+}
+
+#[test]
 fn cargo_install_uses_the_published_lockfile() {
     let tool = fake_tool(vec![]);
     let installer = Installer {
@@ -218,6 +258,50 @@ fn tplay_install_uses_an_isolated_current_yt_dlp() {
     assert!(task.command.contains("t4e-tplay"));
     assert_eq!(task.check_command.as_deref(), Some("t4e-tplay"));
     assert!(task.requires_privileges);
+}
+
+#[test]
+fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
+    let mut tool = fake_tool(vec![Capability::Network]);
+    tool.id = "youtube-tui".to_string();
+    tool.run.cmd = "youtube-tui".to_string();
+    tool.checks = vec![
+        Check {
+            which: Some("youtube-tui".to_string()),
+            version: None,
+            custom: None,
+        },
+        Check {
+            which: Some("t4e-youtube-tui".to_string()),
+            version: None,
+            custom: None,
+        },
+    ];
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::YoutubeTui,
+        package_hints: vec!["youtube-tui".to_string()],
+        system_packages: vec!["mpv".to_string(), "python3-venv".to_string()],
+        executable: Some("t4e-youtube-tui".to_string()),
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+
+    assert!(task.command.contains("cargo install --locked youtube-tui"));
+    assert!(task.command.contains("python3 -m venv"));
+    assert!(
+        task.command
+            .contains("pip install --upgrade 'yt-dlp[default]'")
+    );
+    assert!(task.command.contains("PATH=\"$data_dir/yt-dlp/bin:$PATH\""));
+    assert!(task.command.contains("t4e-youtube-tui"));
+    assert_eq!(task.check_command.as_deref(), Some("youtube-tui"));
+    assert_eq!(task.additional_check_commands, ["t4e-youtube-tui"]);
+    assert!(task.requires_privileges);
+    assert!(!task.requires_confirmation);
 }
 
 #[test]

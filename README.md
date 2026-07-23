@@ -32,6 +32,10 @@ installed as pack dependencies but are not launched without required input.
 LazyVim uses an isolated `t4e-lazyvim` profile, leaving an existing Neovim
 configuration untouched. YouTube TUI provides browsing and search; tplay asks
 for a media URL or local path before rendering the media as terminal ASCII.
+On Linux, both media paths use T4E-managed current `yt-dlp` environments rather
+than the frequently outdated Ubuntu repository build. T4E also configures
+Yewtube to use `mpv` when its saved player is missing or unavailable, while
+preserving any working custom player.
 
 Catalog exposure is internal release metadata: `starter` participates in the
 default curated release checks and `labs` is experimental. Every current pack,

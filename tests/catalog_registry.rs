@@ -58,10 +58,14 @@ fn registry_loads_and_validates() {
         .find(|tool| tool.id == "yewtube")
         .expect("yewtube exists");
     assert_eq!(yewtube.run.cmd, "yt");
+    assert_eq!(yewtube.run_command_for(Platform::Linux), "t4e-yewtube");
     assert!(yewtube.installers.iter().any(|installer| {
-        installer.platform == Platform::Linux && installer.method == InstallMethod::Pipx
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::Yewtube
+            && installer.system_packages.contains(&"mpv".to_string())
     }));
     assert_eq!(yewtube.checks[0].which.as_deref(), Some("yt"));
+    assert_eq!(yewtube.checks[1].which.as_deref(), Some("t4e-yewtube"));
     assert!(!yewtube.key_hints.is_empty());
 
     let youtube_tui = catalog
@@ -70,12 +74,20 @@ fn registry_loads_and_validates() {
         .find(|tool| tool.id == "youtube-tui")
         .expect("youtube-tui exists");
     assert_eq!(youtube_tui.run.cmd, "youtube-tui");
+    assert_eq!(
+        youtube_tui.run_command_for(Platform::Linux),
+        "t4e-youtube-tui"
+    );
     assert!(youtube_tui.installers.iter().any(|installer| {
         installer.platform == Platform::Linux
-            && installer.method == InstallMethod::Cargo
+            && installer.method == InstallMethod::YoutubeTui
             && installer
                 .system_packages
                 .contains(&"libmpv-dev".to_string())
+            && installer
+                .system_packages
+                .contains(&"python3-venv".to_string())
+            && !installer.system_packages.contains(&"yt-dlp".to_string())
     }));
 
     let tplay = catalog

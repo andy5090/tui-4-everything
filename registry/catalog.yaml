@@ -166,15 +166,18 @@ tools:
     exposure: starter
     run:
       cmd: "yt"
+    checks:
+      - which: "yt"
+      - which: "t4e-yewtube"
     installers:
       - platform: macos
         method: brew
         package_hints: ["yewtube"]
       - platform: linux
-        method: pipx
+        method: yewtube
         package_hints: ["yewtube"]
-    checks:
-      - which: "yt"
+        system_packages: ["mpv", "python3"]
+        executable: "t4e-yewtube"
   - id: youtube-tui
     name: "YouTube TUI"
     description: "Browse and search YouTube in a configurable TUI with external video playback."
@@ -187,14 +190,18 @@ tools:
     exposure: starter
     run:
       cmd: "youtube-tui"
+    checks:
+      - which: "youtube-tui"
+      - which: "t4e-youtube-tui"
     installers:
       - platform: macos
         method: cargo
         package_hints: ["youtube-tui"]
       - platform: linux
-        method: cargo
+        method: youtube_tui
         package_hints: ["youtube-tui"]
-        system_packages: ["pkg-config", "libmpv-dev", "libsixel-dev", "libxcb1-dev", "mpv", "yt-dlp"]
+        system_packages: ["pkg-config", "libmpv-dev", "libsixel-dev", "libxcb1-dev", "mpv", "python3-venv"]
+        executable: "t4e-youtube-tui"
   - id: tplay
     name: "tplay"
     description: "Play local or online media, including YouTube, as colored terminal ASCII art."

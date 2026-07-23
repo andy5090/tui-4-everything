@@ -211,15 +211,30 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         validate_identifier("app id", app_id)?;
         validate_command(command)?;
         validate_app_viewport(width, height)?;
-        let app_command = format!("exec {command}");
+        let app_command = if keep_open {
+            persistent_output_command(command)
+        } else {
+            format!("exec {command}")
+        };
 
         if self.session_exists(session_name)? {
             self.ensure_managed_session(session_name)?;
-            if self
-                .list_apps(session_name)?
+            let listed_apps = self.list_apps_including_dead(session_name)?;
+            if let Some((app, dead)) = listed_apps
                 .iter()
-                .any(|app| app.window_name == app_id)
+                .find(|(app, _)| app.window_name == app_id)
             {
+                if *dead {
+                    self.resize_window(&app.pane_id, width, height)?;
+                    self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
+                    self.spawn_app(&app.pane_id, &app_command, app_id)?;
+                    return Ok(LaunchOutcome {
+                        workspace_id: workspace_id.to_string(),
+                        session_name: session_name.to_string(),
+                        created: true,
+                        pane_ids: vec![app.pane_id.clone()],
+                    });
+                }
                 return Ok(LaunchOutcome {
                     workspace_id: workspace_id.to_string(),
                     session_name: session_name.to_string(),
@@ -248,9 +263,6 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             let setup = (|| {
                 self.resize_window(&pane_id, width, height)?;
                 self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
-                if keep_open {
-                    self.enable_remain_on_exit(&pane_id)?;
-                }
                 self.spawn_app(&pane_id, &app_command, app_id)
             })();
             if let Err(error) = setup {
@@ -299,9 +311,6 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             ]))?;
             ensure_success("mark app session", &marker)?;
             self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
-            if keep_open {
-                self.enable_remain_on_exit(&pane_id)?;
-            }
             self.spawn_app(&pane_id, &app_command, app_id)
         })();
         if let Err(error) = setup {
@@ -395,17 +404,6 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             "off",
         ]))?;
         ensure_success("preserve app window name", &output)
-    }
-
-    fn enable_remain_on_exit(&self, target: &str) -> Result<()> {
-        let output = self.runner.run(&strings([
-            "set-window-option",
-            "-t",
-            target,
-            "remain-on-exit",
-            "on",
-        ]))?;
-        ensure_success("keep one-shot app output visible", &output)
     }
 
     fn start_app(&self, target: &str, command: &str, app_id: &str) -> Result<()> {
@@ -510,6 +508,14 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
     }
 
     pub fn list_apps(&self, session_name: &str) -> Result<Vec<ManagedApp>> {
+        Ok(self
+            .list_apps_including_dead(session_name)?
+            .into_iter()
+            .filter_map(|(app, dead)| (!dead).then_some(app))
+            .collect())
+    }
+
+    fn list_apps_including_dead(&self, session_name: &str) -> Result<Vec<(ManagedApp, bool)>> {
         validate_identifier("session name", session_name)?;
         self.ensure_managed_session(session_name)?;
         let output = self.runner.run(&strings([
@@ -518,7 +524,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             "-t",
             session_name,
             "-F",
-            "#{pane_id}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_current_command}",
+            "#{pane_id}\t#{window_index}\t#{window_name}\t#{pane_index}\t#{pane_current_command}\t#{pane_dead}",
         ]))?;
         ensure_success("list workspace apps", &output)?;
         let mut apps = output
@@ -526,7 +532,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             .lines()
             .map(parse_managed_app)
             .collect::<Result<Vec<_>>>()?;
-        apps.sort_by_key(|app| (app.window_index, app.pane_index));
+        apps.sort_by_key(|(app, _)| (app.window_index, app.pane_index));
         let mut managed_panes = self
             .managed_panes
             .lock()
@@ -534,16 +540,28 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         managed_panes.retain(|_, session| session != session_name);
         managed_panes.extend(
             apps.iter()
-                .map(|app| (app.pane_id.clone(), session_name.to_string())),
+                .filter(|(_, dead)| !dead)
+                .map(|(app, _)| (app.pane_id.clone(), session_name.to_string())),
         );
         Ok(apps)
     }
 
     pub fn capture_app(&self, pane_id: &str) -> Result<String> {
+        self.capture_app_with_join(pane_id, false)
+    }
+
+    pub fn capture_app_joined(&self, pane_id: &str) -> Result<String> {
+        self.capture_app_with_join(pane_id, true)
+    }
+
+    fn capture_app_with_join(&self, pane_id: &str, join_wrapped: bool) -> Result<String> {
         self.ensure_managed_pane(pane_id)?;
-        let output =
-            self.runner
-                .run(&strings(["capture-pane", "-p", "-e", "-J", "-t", pane_id]))?;
+        let mut args = strings(["capture-pane", "-p", "-e"]);
+        if join_wrapped {
+            args.push("-J".to_string());
+        }
+        args.extend(strings(["-t", pane_id]));
+        let output = self.runner.run(&args)?;
         ensure_success("capture app screen", &output)?;
         Ok(normalize_dec_graphics(output.stdout.trim_end_matches('\n')))
     }
@@ -709,16 +727,19 @@ fn parse_managed_session(line: &str) -> Option<Result<ManagedSession>> {
     })())
 }
 
-fn parse_managed_app(line: &str) -> Result<ManagedApp> {
-    let fields = split_fields(line, 5, "managed app")?;
+fn parse_managed_app(line: &str) -> Result<(ManagedApp, bool)> {
+    let fields = split_fields(line, 6, "managed app")?;
     validate_pane_id(fields[0])?;
-    Ok(ManagedApp {
-        pane_id: fields[0].to_string(),
-        window_index: fields[1].parse()?,
-        window_name: fields[2].to_string(),
-        pane_index: fields[3].parse()?,
-        process: fields[4].to_string(),
-    })
+    Ok((
+        ManagedApp {
+            pane_id: fields[0].to_string(),
+            window_index: fields[1].parse()?,
+            window_name: fields[2].to_string(),
+            pane_index: fields[3].parse()?,
+            process: fields[4].to_string(),
+        },
+        fields[5] == "1",
+    ))
 }
 
 fn parse_window(line: &str) -> Result<WindowSnapshot> {
@@ -831,6 +852,20 @@ fn validate_command(command: &str) -> Result<()> {
         bail!("app command contains forbidden shell syntax");
     }
     Ok(())
+}
+
+fn persistent_output_command(command: &str) -> String {
+    let script = format!(
+        "{command}; status=$?; \
+         if [ \"$status\" -ne 0 ]; then \
+         printf '\\n[T4E] command exited with status %s\\n' \"$status\"; fi; \
+         trap 'exit 0' INT TERM; while :; do sleep 86400; done"
+    );
+    format!("exec bash -lc {}", shell_quote(&script))
+}
+
+fn shell_quote(value: &str) -> String {
+    format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
 fn validate_app_viewport(width: u16, height: u16) -> Result<()> {

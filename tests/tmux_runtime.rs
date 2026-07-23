@@ -198,7 +198,7 @@ fn single_app_launch_creates_a_managed_background_session() {
 }
 
 #[test]
-fn one_shot_app_enables_remain_on_exit_before_launch() {
+fn one_shot_app_uses_a_live_output_holder() {
     let runner = MockRunner {
         outputs: Mutex::new(VecDeque::from([
             output(false, "", "missing"),
@@ -226,15 +226,53 @@ fn one_shot_app_enables_remain_on_exit_before_launch() {
         .expect("one-shot app launches");
 
     let calls = calls.lock().expect("calls lock");
-    let remain = calls
-        .iter()
-        .position(|args| args == &["set-window-option", "-t", "%8", "remain-on-exit", "on"])
-        .expect("remain-on-exit call");
+    assert!(!calls.iter().flatten().any(|arg| arg == "remain-on-exit"));
     let launch = calls
         .iter()
-        .position(|args| args.first().is_some_and(|arg| arg == "respawn-pane"))
+        .find(|args| args.first().is_some_and(|arg| arg == "respawn-pane"))
         .expect("launch call");
-    assert!(remain < launch);
+    assert!(launch[4].contains("exec bash -lc"));
+    assert!(launch[4].contains("fortune; status=$?"));
+    assert!(launch[4].contains("while :; do sleep 86400; done"));
+}
+
+#[test]
+fn relaunch_reuses_and_revives_a_legacy_dead_pane() {
+    let runner = MockRunner {
+        outputs: Mutex::new(VecDeque::from([
+            output(true, "", ""),
+            output(true, "t4e-apps\t0\t1\tapp-launcher\n", ""),
+            output(true, "t4e-apps\t0\t1\tapp-launcher\n", ""),
+            output(true, "%8\t0\tlolcat\t0\tlolcat\t1\n", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+        ])),
+        calls: Arc::new(Mutex::new(Vec::new())),
+    };
+    let calls = Arc::clone(&runner.calls);
+    let runtime = TmuxRuntime::new(runner);
+
+    let outcome = runtime
+        .launch_app_at_size_with_mode(
+            "t4e-apps",
+            "app-launcher",
+            "lolcat",
+            "lolcat /etc/hosts",
+            80,
+            24,
+            true,
+        )
+        .expect("dead pane is revived");
+
+    assert!(outcome.created);
+    assert_eq!(outcome.pane_ids, ["%8"]);
+    let calls = calls.lock().expect("calls lock");
+    assert!(!calls.iter().flatten().any(|arg| arg == "new-window"));
+    assert!(calls.iter().any(|args| {
+        args.first().is_some_and(|arg| arg == "respawn-pane")
+            && args.get(3).is_some_and(|target| target == "%8")
+    }));
 }
 
 #[test]
@@ -329,9 +367,15 @@ fn real_one_shot_fun_apps_leave_visible_output_when_available() {
                 break;
             }
         }
+        let pane_state = Command::new("tmux")
+            .args(["display-message", "-p", "-t", &pane_id, "#{pane_dead}"])
+            .output()
+            .expect("pane state is readable");
         runtime.close_app(&pane_id).expect("one-shot app closes");
 
         assert!(!content.trim().is_empty(), "{app_id} output is visible");
+        assert!(!content.contains("Pane is dead"));
+        assert_eq!(String::from_utf8_lossy(&pane_state.stdout).trim(), "0");
         assert!(
             expected.is_empty() || content.contains(expected),
             "{app_id} output contains {expected}"
@@ -379,8 +423,9 @@ fn embedded_app_controls_use_structured_tmux_arguments() {
     let runner = MockRunner {
         outputs: Mutex::new(VecDeque::from([
             output(true, "t4e-apps\t0\t2\truntime-test\n", ""),
-            output(true, "%3\t0\tright\t0\tprintf\n", ""),
-            output(true, "\u{1b}[31mapp output\u{1b}[0m\n", ""),
+            output(true, "%3\t0\tright\t0\tprintf\t0\n", ""),
+            output(true, "\u{1b}[31mrow one\u{1b}[0m\nrow two\n", ""),
+            output(true, "joined app output\n", ""),
             output(true, "", ""),
             output(true, "", ""),
             output(true, "", ""),
@@ -397,7 +442,11 @@ fn embedded_app_controls_use_structured_tmux_arguments() {
     assert_eq!(apps[0].window_name, "right");
     assert_eq!(
         runtime.capture_app("%3").expect("capture"),
-        "\u{1b}[31mapp output\u{1b}[0m"
+        "\u{1b}[31mrow one\u{1b}[0m\nrow two"
+    );
+    assert_eq!(
+        runtime.capture_app_joined("%3").expect("joined capture"),
+        "joined app output"
     );
     runtime.resize_app("%3", 100, 30).expect("resize app");
     runtime.send_app_text("%3", "hello").expect("send text");
@@ -405,6 +454,16 @@ fn embedded_app_controls_use_structured_tmux_arguments() {
     runtime.close_app("%3").expect("close app");
 
     let calls = calls.lock().expect("calls lock");
+    assert!(
+        calls
+            .iter()
+            .any(|args| { args == &["capture-pane", "-p", "-e", "-t", "%3"] })
+    );
+    assert!(
+        calls
+            .iter()
+            .any(|args| { args == &["capture-pane", "-p", "-e", "-J", "-t", "%3"] })
+    );
     assert!(
         calls
             .iter()

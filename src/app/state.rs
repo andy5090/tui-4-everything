@@ -48,6 +48,7 @@ pub enum AppEffect {
     SendAppInput { pane_id: String, input: AppInput },
     CloseApp(String),
     SetMouseCapture(bool),
+    ReadAppLinks { pane_id: String, action: LinkAction },
     CopyUrl(String),
     OpenUrl(String),
     Uninstall(UninstallRequest),
@@ -1206,9 +1207,25 @@ impl AppState {
     }
 
     fn request_app_url(&mut self, open: bool) {
-        let Some(content) = self.app_view.as_ref().map(|view| view.content.as_str()) else {
+        let Some(pane_id) = self
+            .app_view
+            .as_ref()
+            .and_then(|view| view.apps.get(view.selected))
+            .map(|app| app.pane_id.clone())
+        else {
             return;
         };
+        self.effects.push_back(AppEffect::ReadAppLinks {
+            pane_id,
+            action: if open {
+                LinkAction::Open
+            } else {
+                LinkAction::Copy
+            },
+        });
+    }
+
+    pub fn apply_app_links(&mut self, action: LinkAction, content: &str) {
         let mut urls = extract_urls(content);
         urls.reverse();
         let mut seen = BTreeSet::new();
@@ -1217,11 +1234,6 @@ impl AppState {
             self.status = "No HTTP(S) link found in the current app".to_string();
             return;
         }
-        let action = if open {
-            LinkAction::Open
-        } else {
-            LinkAction::Copy
-        };
         if urls.len() == 1 {
             self.apply_link_action(action, urls.remove(0));
         } else {
@@ -2287,6 +2299,8 @@ fn uninstall_command(
         ),
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
         InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && (cargo uninstall tplay || ! command -v tplay >/dev/null 2>&1)".to_string(),
+        InstallMethod::YoutubeTui => "rm -f \"$HOME/.local/bin/t4e-youtube-tui\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && (cargo uninstall youtube-tui || ! command -v youtube-tui >/dev/null 2>&1)".to_string(),
+        InstallMethod::Yewtube => "rm -f \"$HOME/.local/bin/t4e-yewtube\" && if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq yewtube; then pipx uninstall yewtube; fi".to_string(),
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
         InstallMethod::Fastfetch if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' fastfetch 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch; fi".to_string(),
         InstallMethod::Fastfetch => "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch".to_string(),

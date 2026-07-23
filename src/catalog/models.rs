@@ -274,6 +274,10 @@ pub enum InstallMethod {
     LazyVim,
     #[serde(rename = "tplay")]
     Tplay,
+    #[serde(rename = "youtube_tui")]
+    YoutubeTui,
+    #[serde(rename = "yewtube")]
+    Yewtube,
     #[serde(rename = "newsboat")]
     Newsboat,
     #[serde(rename = "fastfetch")]
@@ -300,6 +304,8 @@ impl InstallMethod {
             Self::Go => "go",
             Self::LazyVim => "lazyvim",
             Self::Tplay => "tplay",
+            Self::YoutubeTui => "youtube_tui",
+            Self::Yewtube => "yewtube",
             Self::Newsboat => "newsboat",
             Self::Fastfetch => "fastfetch",
             Self::Script => "script",

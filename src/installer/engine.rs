@@ -132,6 +132,8 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::Go => format!("go install {}", hint),
         InstallMethod::LazyVim => materialize_lazyvim_command(&installer.platform),
         InstallMethod::Tplay => materialize_tplay_command(&installer.platform),
+        InstallMethod::YoutubeTui => materialize_youtube_tui_command(&installer.platform),
+        InstallMethod::Yewtube => materialize_yewtube_command(&installer.platform),
         InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
         InstallMethod::Fastfetch => materialize_fastfetch_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
@@ -193,6 +195,39 @@ fn materialize_tplay_command(platform: &crate::catalog::models::Platform) -> Str
             "cargo install --locked tplay && data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && python3 -m venv \"$data_dir/yt-dlp\" && \"$data_dir/yt-dlp/bin/python\" -m pip install --upgrade 'yt-dlp[default]' && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\"' 'exec env PATH=\"$data_dir/yt-dlp/bin:$PATH\" tplay \"$@\"' > \"$HOME/.local/bin/t4e-tplay\" && chmod +x \"$HOME/.local/bin/t4e-tplay\"".to_string()
         }
         crate::catalog::models::Platform::Macos => "cargo install --locked tplay".to_string(),
+    }
+}
+
+fn materialize_youtube_tui_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Linux => {
+            "cargo install --locked youtube-tui && data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && python3 -m venv \"$data_dir/yt-dlp\" && \"$data_dir/yt-dlp/bin/python\" -m pip install --upgrade 'yt-dlp[default]' && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\"' 'exec env PATH=\"$data_dir/yt-dlp/bin:$PATH\" youtube-tui \"$@\"' > \"$HOME/.local/bin/t4e-youtube-tui\" && chmod +x \"$HOME/.local/bin/t4e-youtube-tui\"".to_string()
+        }
+        crate::catalog::models::Platform::Macos => {
+            "cargo install --locked youtube-tui".to_string()
+        }
+    }
+}
+
+fn materialize_yewtube_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Linux => concat!(
+            "command -v pipx >/dev/null 2>&1 || sudo -n env DEBIAN_FRONTEND=noninteractive ",
+            "apt-get -o DPkg::Lock::Timeout=300 install -y pipx; ",
+            "pipx install --force yewtube && mkdir -p \"$HOME/.local/bin\" && ",
+            "printf '%s\\n' '#!/bin/sh' ",
+            "'config_dir=\"${XDG_CONFIG_HOME:-$HOME/.config}/mps-youtube\"' ",
+            "'config=\"$config_dir/config.json\"' ",
+            "'player=\"$(python3 -c \"import json,sys; print(json.load(open(sys.argv[1])).get(\\\"PLAYER\\\", \\\"\\\"))\" \"$config\" 2>/dev/null)\"' ",
+            "'if [ -z \"$player\" ] || ! command -v \"$player\" >/dev/null 2>&1; then' ",
+            "'  mkdir -p \"$config_dir\"' ",
+            "'  python3 -c \"import json,os,sys; p=sys.argv[1]; d=json.load(open(p)) if os.path.exists(p) else {}; d[\\\"PLAYER\\\"]=\\\"mpv\\\"; q=p+\\\".tmp\\\"; json.dump(d,open(q,\\\"w\\\"),indent=2); os.replace(q,p)\" \"$config\"' ",
+            "'fi' ",
+            "'exec yt \"$@\"' > \"$HOME/.local/bin/t4e-yewtube\" && ",
+            "chmod +x \"$HOME/.local/bin/t4e-yewtube\""
+        )
+        .to_string(),
+        crate::catalog::models::Platform::Macos => "brew install yewtube".to_string(),
     }
 }
 

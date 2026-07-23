@@ -303,6 +303,12 @@ fn process_effects(
                     app.status = format!("Mouse mode failed: {error}");
                 }
             }
+            AppEffect::ReadAppLinks { pane_id, action } => {
+                match tmux.capture_app_joined(&pane_id) {
+                    Ok(content) => app.apply_app_links(action, &content),
+                    Err(error) => app.status = format!("Could not read app links: {error}"),
+                }
+            }
             AppEffect::CopyUrl(url) => match copy_to_clipboard(&url) {
                 Ok(method) => app.status = format!("Copied link via {method}"),
                 Err(error) => app.status = format!("Could not copy link: {error}"),
@@ -584,6 +590,8 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::Pipx
             | InstallMethod::LazyVim
             | InstallMethod::Tplay
+            | InstallMethod::YoutubeTui
+            | InstallMethod::Yewtube
             | InstallMethod::Newsboat
             | InstallMethod::Fastfetch
     )
@@ -769,6 +777,10 @@ mod tests {
         assert!(install_method_requires_privileges(&InstallMethod::Pipx));
         assert!(install_method_requires_privileges(&InstallMethod::LazyVim));
         assert!(install_method_requires_privileges(&InstallMethod::Tplay));
+        assert!(install_method_requires_privileges(
+            &InstallMethod::YoutubeTui
+        ));
+        assert!(install_method_requires_privileges(&InstallMethod::Yewtube));
         assert!(install_method_requires_privileges(&InstallMethod::Newsboat));
         assert!(install_method_requires_privileges(
             &InstallMethod::Fastfetch
