@@ -30,6 +30,13 @@ fn ubuntu_install_sources_resolve_every_catalog_package() {
                 InstallMethod::LazyVim => command_succeeds("snap", &["info", "nvim"]),
                 InstallMethod::Tplay => cargo_package_exists(package),
                 InstallMethod::Newsboat => command_succeeds("snap", &["info", package]),
+                InstallMethod::Fastfetch => command_succeeds(
+                    "curl",
+                    &[
+                        "-fsSIL",
+                        "https://github.com/fastfetch-cli/fastfetch/releases/latest/download/fastfetch-linux-amd64.deb",
+                    ],
+                ),
                 InstallMethod::Script => installer
                     .install_cmd
                     .as_deref()

@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
@@ -16,7 +16,8 @@ use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
 use crate::mux::tmux::compile_workspace;
 use crate::mux::workspace::{Workspace, WorkspaceRegistry};
 use crate::storage::{
-    PersistentState, RecentItem, UserSettings, load_state, log_dir_for_state, save_state,
+    LaunchOptionPreference, PersistentState, RecentItem, UserSettings, load_state,
+    log_dir_for_state, save_state,
 };
 
 use super::events::Screen;
@@ -70,6 +71,7 @@ pub struct UninstallRequest {
 pub struct ToolLaunchRequest {
     pub tool_id: String,
     pub command: String,
+    pub keep_open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,6 +160,7 @@ pub struct AppState {
     pub workspace_index: usize,
     pub agent_index: usize,
     pub install_index: usize,
+    pub activity_scroll: usize,
     pub pack_index: usize,
     pub settings_index: usize,
     pub search_query: String,
@@ -175,6 +178,7 @@ pub struct AppState {
     pub uninstall_confirmation: Option<UninstallRequest>,
     pub recents: Vec<RecentItem>,
     pub settings: UserSettings,
+    pub launch_preferences: BTreeMap<String, BTreeMap<String, LaunchOptionPreference>>,
     pub queue_running: bool,
     pub managed_sessions: Vec<ManagedSession>,
     pub workspace_missing_tools: Vec<String>,
@@ -233,7 +237,7 @@ impl AppState {
             }
         }
         reconcile_saved_queue(&catalog, &mut saved);
-        saved.logs.push("T4E dashboard started".to_string());
+        saved.logs.push(timestamp_log("T4E dashboard started"));
         Self {
             catalog,
             workspaces,
@@ -242,6 +246,7 @@ impl AppState {
             workspace_index: 0,
             agent_index: 0,
             install_index: 0,
+            activity_scroll: 0,
             pack_index: 0,
             settings_index: 0,
             search_query: String::new(),
@@ -259,6 +264,7 @@ impl AppState {
             uninstall_confirmation: None,
             recents: saved.recents,
             settings: saved.settings,
+            launch_preferences: saved.launch_preferences,
             queue_running: false,
             managed_sessions: Vec::new(),
             workspace_missing_tools: Vec::new(),
@@ -551,6 +557,12 @@ impl AppState {
         self.effects.pop_front()
     }
 
+    pub fn record_log(&mut self, message: impl AsRef<str>) {
+        self.logs.push(timestamp_log(message));
+        self.activity_scroll = 0;
+        self.trim_logs();
+    }
+
     pub fn mark_execution_started(&mut self, tool_id: &str) {
         if let Some(job) = self
             .queue
@@ -559,7 +571,8 @@ impl AppState {
         {
             let _ = job.item.transition(QueueState::Installing);
             self.status = format!("Installing {tool_id}");
-            self.logs.push(format!("install: started {tool_id}"));
+            self.logs
+                .push(timestamp_log(format!("install: started {tool_id}")));
             self.trim_logs();
         }
     }
@@ -599,11 +612,14 @@ impl AppState {
             _ => format!("Installation updated for {tool_id}"),
         };
         if already_installed {
-            self.logs
-                .push(format!("install: {tool_id} already installed"));
+            self.logs.push(timestamp_log(format!(
+                "install: {tool_id} already installed"
+            )));
         } else {
-            self.logs
-                .push(format!("install: {} -> {:?}", tool_id, state));
+            self.logs.push(timestamp_log(format!(
+                "install: {} -> {:?}",
+                tool_id, state
+            )));
         }
         if state == QueueState::Success {
             self.installed_tools.insert(tool_id.clone());
@@ -640,8 +656,9 @@ impl AppState {
         }
         self.queue_running = false;
         self.status = format!("Authorization cancelled for {tool_id}: {error}");
-        self.logs
-            .push(format!("install: {tool_id} authorization failed: {error}"));
+        self.logs.push(timestamp_log(format!(
+            "install: {tool_id} authorization failed: {error}"
+        )));
         self.trim_logs();
     }
 
@@ -651,8 +668,10 @@ impl AppState {
             OutputStream::Stderr => "progress",
         };
         for line in chunk.text.lines().filter(|line| !line.trim().is_empty()) {
-            self.logs
-                .push(format!("{tool_id} [{stream}]: {}", line.trim_end()));
+            self.logs.push(timestamp_log(format!(
+                "{tool_id} [{stream}]: {}",
+                line.trim_end()
+            )));
         }
         self.trim_logs();
     }
@@ -669,6 +688,7 @@ impl AppState {
                 favorites: self.favorites.iter().cloned().collect(),
                 recents: self.recents.clone(),
                 settings: self.settings.clone(),
+                launch_preferences: self.launch_preferences.clone(),
             },
         )
     }
@@ -692,7 +712,8 @@ impl AppState {
     pub fn mark_uninstall_started(&mut self, tool_id: &str) {
         self.uninstalling_tools.insert(tool_id.to_string());
         self.status = format!("Uninstalling {tool_id}");
-        self.logs.push(format!("uninstall: started {tool_id}"));
+        self.logs
+            .push(timestamp_log(format!("uninstall: started {tool_id}")));
         self.trim_logs();
     }
 
@@ -708,10 +729,12 @@ impl AppState {
             self.installed_tools.remove(tool_id);
             self.queue.retain(|job| job.item.tool_id != tool_id);
             self.install_index = self.install_index.min(self.queue.len().saturating_sub(1));
-            self.logs.push(format!("uninstall: completed {tool_id}"));
+            self.logs
+                .push(timestamp_log(format!("uninstall: completed {tool_id}")));
             if reinstall {
                 self.queue_tool_ids(vec![tool_id.to_string()]);
-                self.logs.push(format!("reinstall: queued {tool_id}"));
+                self.logs
+                    .push(timestamp_log(format!("reinstall: queued {tool_id}")));
                 self.request_execute_selected();
                 if self.confirmation.is_none() {
                     self.status = format!("Reset {tool_id}; reinstalling now");
@@ -725,8 +748,9 @@ impl AppState {
             } else {
                 format!("Uninstall failed for {tool_id}: {error}")
             };
-            self.logs
-                .push(format!("uninstall: failed {tool_id}: {error}"));
+            self.logs.push(timestamp_log(format!(
+                "uninstall: failed {tool_id}: {error}"
+            )));
         }
         self.trim_logs();
     }
@@ -738,7 +762,7 @@ impl AppState {
         } else {
             format!("Session {} is already running", outcome.session_name)
         };
-        self.logs.push(format!(
+        self.logs.push(timestamp_log(format!(
             "workspace: {} {}",
             if outcome.created {
                 "launched"
@@ -746,7 +770,7 @@ impl AppState {
                 "reused"
             },
             outcome.session_name
-        ));
+        )));
         self.push_recent(outcome.workspace_id, "workspace");
         self.effects.push_back(AppEffect::RefreshWorkspaces);
         self.effects
@@ -845,15 +869,17 @@ impl AppState {
 
     pub fn apply_workspace_error(&mut self, action: &str, error: &anyhow::Error) {
         self.status = format!("Workspace {action} failed: {error}");
-        self.logs
-            .push(format!("workspace: {action} failed: {error}"));
+        self.logs.push(timestamp_log(format!(
+            "workspace: {action} failed: {error}"
+        )));
         self.trim_logs();
     }
 
     pub fn apply_workspace_hash(&mut self, workspace_id: &str, hash: &str) {
         self.status = format!("{workspace_id} snapshot {}", &hash[..12.min(hash.len())]);
-        self.logs
-            .push(format!("workspace: snapshot {workspace_id} {hash}"));
+        self.logs.push(timestamp_log(format!(
+            "workspace: snapshot {workspace_id} {hash}"
+        )));
         self.trim_logs();
     }
 
@@ -924,14 +950,16 @@ impl AppState {
             }
             CodexEvent::ApprovalDenied(method) => {
                 self.ai_status = format!("Denied app-server request {method}");
-                self.logs.push(format!("codex: denied {method}"));
+                self.logs
+                    .push(timestamp_log(format!("codex: denied {method}")));
             }
             CodexEvent::Diagnostic(diagnostic) => {
-                self.logs.push(format!("codex diagnostic: {diagnostic}"));
+                self.logs
+                    .push(timestamp_log(format!("codex diagnostic: {diagnostic}")));
             }
             CodexEvent::Error(error) => {
                 self.ai_status = format!("Error: {error}");
-                self.logs.push(format!("codex: {error}"));
+                self.logs.push(timestamp_log(format!("codex: {error}")));
             }
         }
         self.trim_logs();
@@ -1026,10 +1054,10 @@ impl AppState {
                     self.workspace_index = index;
                     self.screen = Screen::Workspace;
                     self.request_workspace_launch();
-                    self.logs.push(format!(
+                    self.logs.push(timestamp_log(format!(
                         "codex: approved workspace_launch {}",
                         confirmation.action.target
-                    ));
+                    )));
                 }
             }
             _ => {}
@@ -1100,17 +1128,28 @@ impl AppState {
                 KeyCode::Char('A') => self.begin_ai_action_confirmation(),
                 _ => {}
             },
-            Screen::Logs => {
-                if matches!(code, KeyCode::Char('c')) {
+            Screen::Logs => match code {
+                KeyCode::Down | KeyCode::Char('j') => self.move_activity(1),
+                KeyCode::Up | KeyCode::Char('k') => self.move_activity(-1),
+                KeyCode::PageDown => self.move_activity(10),
+                KeyCode::PageUp => self.move_activity(-10),
+                KeyCode::Home => self.activity_scroll = 0,
+                KeyCode::End => {
+                    self.activity_scroll = self.logs.len().saturating_sub(1);
+                }
+                KeyCode::Char('c') => {
                     self.logs.clear();
+                    self.activity_scroll = 0;
                     self.status = "Activity log cleared".to_string();
                 }
-            }
+                _ => {}
+            },
             Screen::Settings => match code {
                 KeyCode::Down | KeyCode::Char('j') => self.move_setting(1),
                 KeyCode::Up | KeyCode::Char('k') => self.move_setting(-1),
                 KeyCode::Left | KeyCode::Char('h') => self.adjust_setting(-1),
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => self.adjust_setting(1),
+                KeyCode::Enter if self.settings_index == 4 => self.reset_saved_preferences(),
                 _ => {}
             },
             Screen::Help => {}
@@ -1288,7 +1327,8 @@ impl AppState {
             Screen::AppView => self.move_app_view(delta),
             Screen::Agents => self.move_agent(delta),
             Screen::Settings => self.move_setting(delta),
-            Screen::Logs | Screen::Help => {}
+            Screen::Logs => self.move_activity(delta),
+            Screen::Help => {}
         }
     }
 
@@ -1306,7 +1346,7 @@ impl AppState {
                 self.workspace_index = index;
             }
             Screen::Agents if index < self.agent_tools().len() => self.agent_index = index,
-            Screen::Settings if index < 4 => self.settings_index = index,
+            Screen::Settings if index < 5 => self.settings_index = index,
             Screen::AppView
             | Screen::Logs
             | Screen::Home
@@ -1356,7 +1396,7 @@ impl AppState {
     }
 
     fn move_setting(&mut self, delta: isize) {
-        self.settings_index = move_index(self.settings_index, 4, delta);
+        self.settings_index = move_index(self.settings_index, 5, delta);
     }
 
     fn queue_selected_tool(&mut self) {
@@ -1420,6 +1460,7 @@ impl AppState {
         let tool_id = tool.id.clone();
         let tool_name = tool.name.clone();
         let command = tool.run_command_for_current_platform().to_string();
+        let keep_open = tool.run.keep_open;
         let launch_argument = tool.launch_argument.clone();
         let options = tool.run_options.clone();
         if let Some(index) = self
@@ -1452,19 +1493,33 @@ impl AppState {
                 .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
                     tool_id,
                     command,
+                    keep_open,
                 }));
             self.status = format!("Opening {tool_name}");
             return;
         }
+        let saved_preferences = self.launch_preferences.get(&tool_id);
         let selections = options
             .iter()
-            .map(|option| LaunchOptionSelection {
-                enabled: option.default_enabled,
-                value_index: option
-                    .default_value
-                    .as_ref()
-                    .and_then(|default| option.values.iter().position(|value| value == default))
-                    .unwrap_or_default(),
+            .map(|option| {
+                let saved = saved_preferences.and_then(|options| options.get(&option.id));
+                LaunchOptionSelection {
+                    enabled: saved.map_or(option.default_enabled, |saved| saved.enabled),
+                    value_index: saved
+                        .and_then(|saved| saved.value.as_ref())
+                        .and_then(|value| {
+                            option
+                                .values
+                                .iter()
+                                .position(|candidate| candidate == value)
+                        })
+                        .or_else(|| {
+                            option.default_value.as_ref().and_then(|default| {
+                                option.values.iter().position(|value| value == default)
+                            })
+                        })
+                        .unwrap_or_default(),
+                }
             })
             .collect();
         self.launch_options = Some(LaunchOptionsState {
@@ -1519,6 +1574,7 @@ impl AppState {
                             tool.run_command_for_current_platform(),
                             shell_quote(value)
                         ),
+                        keep_open: tool.run.keep_open,
                     }));
                 self.status = format!("Opening {}", tool.name);
             }
@@ -1597,7 +1653,15 @@ impl AppState {
             return;
         };
         let mut command = tool.run_command_for_current_platform().to_string();
+        let mut preferences = BTreeMap::new();
         for (option, selection) in tool.run_options.iter().zip(&options.selections) {
+            preferences.insert(
+                option.id.clone(),
+                LaunchOptionPreference {
+                    enabled: selection.enabled,
+                    value: option.values.get(selection.value_index).cloned(),
+                },
+            );
             if !selection.enabled {
                 continue;
             }
@@ -1608,12 +1672,17 @@ impl AppState {
                 command.push_str(value);
             }
         }
+        let tool_id = tool.id.clone();
+        let tool_name = tool.name.clone();
+        let keep_open = tool.run.keep_open;
+        self.launch_preferences.insert(tool_id.clone(), preferences);
         self.effects
             .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
-                tool_id: tool.id.clone(),
+                tool_id,
                 command,
+                keep_open,
             }));
-        self.status = format!("Opening {}", tool.name);
+        self.status = format!("Opening {tool_name}; launch options saved");
     }
 
     pub fn install_then_launch(&mut self, request: ToolLaunchRequest) {
@@ -1695,7 +1764,8 @@ impl AppState {
             };
             let channel = task.method.channel_name().to_string();
             self.queue.push(InstallJob::new(task, channel));
-            self.logs.push(format!("queue: added {tool_id}"));
+            self.logs
+                .push(timestamp_log(format!("queue: added {tool_id}")));
             added += 1;
         }
         self.install_index = self.queue.len().saturating_sub(1);
@@ -1732,7 +1802,8 @@ impl AppState {
         let tool_id = job.item.tool_id.clone();
         if job.item.transition(QueueState::Queued).is_ok() {
             self.status = format!("Queued {} for retry", tool_id);
-            self.logs.push(format!("queue: retry {}", tool_id));
+            self.logs
+                .push(timestamp_log(format!("queue: retry {}", tool_id)));
         }
     }
 
@@ -1839,7 +1910,8 @@ impl AppState {
         self.queue.remove(self.install_index);
         self.install_index = self.install_index.min(self.queue.len().saturating_sub(1));
         self.status = format!("Removed {tool_id} from the install queue");
-        self.logs.push(format!("queue: removed {tool_id}"));
+        self.logs
+            .push(timestamp_log(format!("queue: removed {tool_id}")));
     }
 
     fn build_current_task(&self, tool_id: &str) -> Option<crate::installer::engine::InstallTask> {
@@ -1982,6 +2054,9 @@ impl AppState {
     }
 
     fn adjust_setting(&mut self, delta: isize) {
+        if self.settings_index == 4 {
+            return;
+        }
         match self.settings_index {
             0 => {
                 const OPTIONS: [&str; 3] = ["tmux", "zellij", "none"];
@@ -2008,6 +2083,16 @@ impl AppState {
         self.status = "Settings updated".to_string();
     }
 
+    fn reset_saved_preferences(&mut self) {
+        self.settings = UserSettings::default();
+        self.launch_preferences.clear();
+        self.status = "Runtime settings and saved app options reset".to_string();
+        self.logs.push(timestamp_log(
+            "settings: reset runtime settings and app options",
+        ));
+        self.trim_logs();
+    }
+
     fn push_recent(&mut self, id: String, kind: &str) {
         self.recents
             .retain(|item| !(item.id == id && item.kind == kind));
@@ -2022,11 +2107,30 @@ impl AppState {
         self.recents.truncate(20);
     }
 
+    fn move_activity(&mut self, delta: isize) {
+        let max = self.logs.len().saturating_sub(1);
+        self.activity_scroll = if delta.is_negative() {
+            self.activity_scroll.saturating_sub(delta.unsigned_abs())
+        } else {
+            self.activity_scroll.saturating_add(delta as usize).min(max)
+        };
+        self.status = if self.logs.is_empty() {
+            "Activity log is empty".to_string()
+        } else {
+            format!(
+                "Activity line {} of {}",
+                self.activity_scroll + 1,
+                self.logs.len()
+            )
+        };
+    }
+
     fn trim_logs(&mut self) {
         const MAX_LOG_LINES: usize = 500;
         if self.logs.len() > MAX_LOG_LINES {
             self.logs.drain(0..self.logs.len() - MAX_LOG_LINES);
         }
+        self.activity_scroll = self.activity_scroll.min(self.logs.len().saturating_sub(1));
     }
 }
 
@@ -2055,11 +2159,17 @@ fn reconcile_saved_queue(catalog: &CatalogRegistry, saved: &mut PersistentState)
         job.diagnostics = None;
         refreshed.push(job.item.tool_id.clone());
     }
-    saved.logs.extend(
-        refreshed
-            .into_iter()
-            .map(|tool_id| format!("queue: refreshed stale install plan for {tool_id}")),
-    );
+    saved.logs.extend(refreshed.into_iter().map(|tool_id| {
+        timestamp_log(format!("queue: refreshed stale install plan for {tool_id}"))
+    }));
+}
+
+fn timestamp_log(message: impl AsRef<str>) -> String {
+    format!(
+        "[{}] {}",
+        chrono::Local::now().format("%Y-%m-%d %H:%M:%S %:z"),
+        message.as_ref()
+    )
 }
 
 fn build_current_task(
@@ -2178,6 +2288,8 @@ fn uninstall_command(
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
         InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && (cargo uninstall tplay || ! command -v tplay >/dev/null 2>&1)".to_string(),
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
+        InstallMethod::Fastfetch if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' fastfetch 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch; fi".to_string(),
+        InstallMethod::Fastfetch => "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch".to_string(),
         InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => return None,
     };
     Some(command)

@@ -23,6 +23,8 @@ pub struct Tool {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
+    pub key_hints: Vec<String>,
+    #[serde(default)]
     pub install_timeout_sec: Option<u64>,
     pub category: ToolCategory,
     #[serde(default)]
@@ -66,6 +68,8 @@ pub struct RunOption {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RunSpec {
     pub cmd: String,
+    #[serde(default)]
+    pub keep_open: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -272,6 +276,8 @@ pub enum InstallMethod {
     Tplay,
     #[serde(rename = "newsboat")]
     Newsboat,
+    #[serde(rename = "fastfetch")]
+    Fastfetch,
     #[serde(rename = "script")]
     Script,
     #[serde(other)]
@@ -295,6 +301,7 @@ impl InstallMethod {
             Self::LazyVim => "lazyvim",
             Self::Tplay => "tplay",
             Self::Newsboat => "newsboat",
+            Self::Fastfetch => "fastfetch",
             Self::Script => "script",
             Self::Other => "other",
         }

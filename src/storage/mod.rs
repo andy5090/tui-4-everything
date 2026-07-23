@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -25,6 +26,15 @@ pub struct PersistentState {
     pub recents: Vec<RecentItem>,
     #[serde(default)]
     pub settings: UserSettings,
+    #[serde(default)]
+    pub launch_preferences: BTreeMap<String, BTreeMap<String, LaunchOptionPreference>>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LaunchOptionPreference {
+    pub enabled: bool,
+    #[serde(default)]
+    pub value: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

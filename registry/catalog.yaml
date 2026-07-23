@@ -18,7 +18,7 @@ packs:
   - id: viewers-pack
     title: Viewers Pack
     exposure: starter
-    tool_ids: [glow, bat, less, mediainfo]
+    tool_ids: [fastfetch, glow, bat, less, mediainfo]
   - id: files-pack
     title: Files Pack
     exposure: starter
@@ -44,6 +44,7 @@ tools:
   - id: spotatui
     name: "Spotatui"
     description: "A Spotify TUI focused on browsing, discovery, and playback control."
+    key_hints: ["? help", "q quit"]
     category: entertainment
     tags: []
     audience: general
@@ -62,6 +63,7 @@ tools:
   - id: spotify-player
     name: "Spotify Player"
     description: "A full-featured Spotify client with library, playlist, search, and playback views."
+    key_hints: ["? help", "q quit"]
     category: entertainment
     tags: []
     audience: general
@@ -80,6 +82,7 @@ tools:
   - id: ncspot
     name: "Ncspot"
     description: "A lightweight, keyboard-focused Spotify client inspired by ncurses players."
+    key_hints: ["? help", "q quit"]
     category: entertainment
     tags: []
     audience: general
@@ -98,6 +101,7 @@ tools:
   - id: cava
     name: "Cava"
     description: "A real-time terminal audio spectrum visualizer."
+    key_hints: ["q quit"]
     category: entertainment
     tags: []
     audience: general
@@ -115,6 +119,7 @@ tools:
   - id: termusic
     name: "Termusic"
     description: "A terminal music player for local audio libraries."
+    key_hints: ["? help", "q quit"]
     install_timeout_sec: 3600
     category: entertainment
     tags: []
@@ -153,6 +158,7 @@ tools:
   - id: yewtube
     name: "Yewtube"
     description: "Search and play YouTube content from an interactive terminal client."
+    key_hints: ["h help", "q quit"]
     category: entertainment
     tags: []
     audience: general
@@ -172,6 +178,7 @@ tools:
   - id: youtube-tui
     name: "YouTube TUI"
     description: "Browse and search YouTube in a configurable TUI with external video playback."
+    key_hints: ["? help", "q quit"]
     install_timeout_sec: 3600
     category: entertainment
     tags: []
@@ -191,6 +198,7 @@ tools:
   - id: tplay
     name: "tplay"
     description: "Play local or online media, including YouTube, as colored terminal ASCII art."
+    key_hints: ["q quit"]
     install_timeout_sec: 3600
     category: entertainment
     tags: []
@@ -278,6 +286,7 @@ tools:
   - id: shellcast
     name: "Shellcast"
     description: "Browse, subscribe to, and play podcasts from the terminal."
+    key_hints: ["? help", "q quit"]
     category: reading
     tags: []
     audience: general
@@ -296,6 +305,7 @@ tools:
   - id: newsboat
     name: "Newsboat"
     description: "A keyboard-driven RSS and Atom feed reader."
+    key_hints: ["? help", "q quit"]
     category: reading
     tags: []
     audience: prosumer
@@ -315,6 +325,7 @@ tools:
   - id: glow
     name: "Glow"
     description: "Read and browse Markdown files with terminal formatting."
+    key_hints: ["j/k scroll", "q quit"]
     category: reading
     tags: []
     audience: general
@@ -329,9 +340,32 @@ tools:
       - platform: linux
         method: snap
         package_hints: ["glow"]
+  - id: fastfetch
+    name: "Fastfetch"
+    description: "Show a concise, colorful summary of the current system and terminal environment."
+    key_hints: ["Alt-Q close in T4E"]
+    category: utility
+    tags: []
+    audience: general
+    capabilities: [FILE_READ]
+    exposure: starter
+    run:
+      cmd: "fastfetch"
+      keep_open: true
+    checks:
+      - which: "fastfetch"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["fastfetch"]
+      - platform: linux
+        method: fastfetch
+        package_hints: ["fastfetch"]
+        system_packages: ["curl"]
   - id: lynx
     name: "Lynx"
     description: "Browse websites as text with a keyboard-driven terminal interface."
+    key_hints: ["arrows navigate", "Enter open", "q quit"]
     category: reading
     tags: []
     audience: general
@@ -413,6 +447,7 @@ tools:
   - id: yazi
     name: "Yazi"
     description: "A fast terminal file manager with previews and bulk operations."
+    key_hints: ["? help", "q quit"]
     category: files
     tags: []
     audience: general
@@ -560,6 +595,7 @@ tools:
   - id: ncdu
     name: "ncdu"
     description: "Interactively inspect disk usage and remove large files."
+    key_hints: ["arrows navigate", "d delete", "q quit"]
     category: files
     tags: []
     audience: general
@@ -577,6 +613,7 @@ tools:
   - id: broot
     name: "broot"
     description: "Navigate directory trees, search files, and run file operations."
+    key_hints: ["? help", "Esc quit"]
     category: files
     tags: []
     audience: general
@@ -674,6 +711,7 @@ tools:
   - id: cmatrix
     name: "cmatrix"
     description: "Display an animated digital-rain terminal effect."
+    key_hints: ["q quit"]
     category: fun
     tags: []
     audience: general
@@ -714,6 +752,7 @@ tools:
   - id: bastet
     name: "bastet"
     description: "Play an adversarial terminal block-stacking game."
+    key_hints: ["arrows move", "Space rotate", "q quit"]
     category: fun
     tags: []
     audience: general
@@ -772,7 +811,8 @@ tools:
     capabilities: []
     exposure: starter
     run:
-      cmd: "lolcat"
+      cmd: "lolcat /etc/hosts"
+      keep_open: true
     installers:
       - platform: macos
         method: brew
@@ -789,7 +829,8 @@ tools:
     capabilities: []
     exposure: starter
     run:
-      cmd: "cowsay"
+      cmd: "cowsay T4E"
+      keep_open: true
     installers:
       - platform: macos
         method: brew
@@ -807,6 +848,7 @@ tools:
     exposure: starter
     run:
       cmd: "fortune"
+      keep_open: true
     installers:
       - platform: macos
         method: brew
@@ -817,6 +859,7 @@ tools:
   - id: tty-clock
     name: "tty-clock"
     description: "Show a large configurable digital clock in the terminal."
+    key_hints: ["q quit"]
     category: fun
     tags: []
     audience: general
@@ -881,6 +924,7 @@ tools:
   - id: pipes-sh
     name: "pipes.sh"
     description: "Generate animated terminal pipes with configurable colors and styles."
+    key_hints: ["q quit"]
     category: fun
     tags: []
     audience: general
@@ -962,6 +1006,7 @@ tools:
   - id: micro
     name: "Micro"
     description: "A straightforward terminal text editor with familiar shortcuts."
+    key_hints: ["Ctrl-S save", "Ctrl-Q quit"]
     category: edit
     tags: []
     audience: general
@@ -979,6 +1024,7 @@ tools:
   - id: helix
     name: "Helix"
     description: "A modal code editor with built-in language-server support."
+    key_hints: [":w save", ":q quit", "Space-? commands"]
     category: ide
     tags: []
     audience: prosumer
@@ -996,6 +1042,7 @@ tools:
   - id: lazyvim
     name: "LazyVim"
     description: "A full IDE configuration for Neovim, isolated from your existing Neovim setup."
+    key_hints: ["Space help", ":w save", ":q quit"]
     category: ide
     tags: []
     audience: developer
@@ -1015,6 +1062,7 @@ tools:
   - id: visidata
     name: "VisiData"
     description: "Interactively explore, transform, and analyze tabular data."
+    key_hints: ["Ctrl-H help", "q quit"]
     category: edit
     tags: []
     audience: prosumer

@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -6,7 +7,9 @@ use chrono::Utc;
 use t4e::catalog::models::InstallMethod;
 use t4e::installer::engine::InstallTask;
 use t4e::installer::execution::InstallJob;
-use t4e::storage::{PersistentState, RecentItem, UserSettings, load_state, save_state};
+use t4e::storage::{
+    LaunchOptionPreference, PersistentState, RecentItem, UserSettings, load_state, save_state,
+};
 
 fn temp_file() -> PathBuf {
     let nonce = SystemTime::now()
@@ -45,6 +48,16 @@ fn persistent_state_round_trips_queue_and_logs() {
             install_timeout_sec: 900,
             ..UserSettings::default()
         },
+        launch_preferences: BTreeMap::from([(
+            "cmatrix".to_string(),
+            BTreeMap::from([(
+                "color".to_string(),
+                LaunchOptionPreference {
+                    enabled: true,
+                    value: Some("cyan".to_string()),
+                },
+            )]),
+        )]),
     };
 
     save_state(&path, &expected).expect("state saves");
@@ -65,5 +78,6 @@ fn legacy_state_uses_defaults_for_new_user_fields() {
     assert!(actual.favorites.is_empty());
     assert!(actual.recents.is_empty());
     assert_eq!(actual.settings, UserSettings::default());
+    assert!(actual.launch_preferences.is_empty());
     let _ = fs::remove_dir_all(path.parent().expect("state parent"));
 }

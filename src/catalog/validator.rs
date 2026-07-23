@@ -46,6 +46,9 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
         }) {
             bail!("tool {} has an invalid launch argument", tool.id);
         }
+        if tool.key_hints.iter().any(|hint| hint.trim().is_empty()) {
+            bail!("tool {} has an empty key hint", tool.id);
+        }
         let mut option_ids = HashSet::new();
         for option in &tool.run_options {
             if !option_ids.insert(option.id.as_str()) {

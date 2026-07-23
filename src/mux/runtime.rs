@@ -184,6 +184,28 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         width: u16,
         height: u16,
     ) -> Result<LaunchOutcome> {
+        self.launch_app_at_size_with_mode(
+            session_name,
+            workspace_id,
+            app_id,
+            command,
+            width,
+            height,
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn launch_app_at_size_with_mode(
+        &self,
+        session_name: &str,
+        workspace_id: &str,
+        app_id: &str,
+        command: &str,
+        width: u16,
+        height: u16,
+        keep_open: bool,
+    ) -> Result<LaunchOutcome> {
         validate_identifier("session name", session_name)?;
         validate_identifier("workspace id", workspace_id)?;
         validate_identifier("app id", app_id)?;
@@ -226,7 +248,10 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             let setup = (|| {
                 self.resize_window(&pane_id, width, height)?;
                 self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
-                self.start_app(&pane_id, &app_command, app_id)
+                if keep_open {
+                    self.enable_remain_on_exit(&pane_id)?;
+                }
+                self.spawn_app(&pane_id, &app_command, app_id)
             })();
             if let Err(error) = setup {
                 let _ = self.runner.run(&strings(["kill-pane", "-t", &pane_id]));
@@ -254,7 +279,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             "-P",
             "-F",
             "#{pane_id}",
-            &app_command,
+            "bash",
         ]))?;
         ensure_success("create app session", &create)?;
         let pane_id = create.stdout.trim().to_string();
@@ -273,7 +298,11 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 workspace_id,
             ]))?;
             ensure_success("mark app session", &marker)?;
-            self.disable_automatic_rename(&format!("{session_name}:{app_id}"))
+            self.disable_automatic_rename(&format!("{session_name}:{app_id}"))?;
+            if keep_open {
+                self.enable_remain_on_exit(&pane_id)?;
+            }
+            self.spawn_app(&pane_id, &app_command, app_id)
         })();
         if let Err(error) = setup {
             let _ = self
@@ -368,11 +397,29 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         ensure_success("preserve app window name", &output)
     }
 
+    fn enable_remain_on_exit(&self, target: &str) -> Result<()> {
+        let output = self.runner.run(&strings([
+            "set-window-option",
+            "-t",
+            target,
+            "remain-on-exit",
+            "on",
+        ]))?;
+        ensure_success("keep one-shot app output visible", &output)
+    }
+
     fn start_app(&self, target: &str, command: &str, app_id: &str) -> Result<()> {
         let output =
             self.runner
                 .run(&strings(["send-keys", "-t", target, "--", command, "C-m"]))?;
         ensure_success(&format!("start app {app_id}"), &output)
+    }
+
+    fn spawn_app(&self, target: &str, command: &str, app_id: &str) -> Result<()> {
+        let output = self
+            .runner
+            .run(&strings(["respawn-pane", "-k", "-t", target, command]))?;
+        ensure_success(&format!("spawn app {app_id}"), &output)
     }
 
     fn configure_split_panes(&self, workspace: &Workspace, session: &str) -> Result<Vec<String>> {
@@ -498,7 +545,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             self.runner
                 .run(&strings(["capture-pane", "-p", "-e", "-J", "-t", pane_id]))?;
         ensure_success("capture app screen", &output)?;
-        Ok(output.stdout.trim_end_matches('\n').to_string())
+        Ok(normalize_dec_graphics(output.stdout.trim_end_matches('\n')))
     }
 
     pub fn resize_app(&self, pane_id: &str, width: u16, height: u16) -> Result<()> {
@@ -710,6 +757,71 @@ fn ensure_success(action: &str, output: &TmuxOutput) -> Result<()> {
     }
 }
 
+fn normalize_dec_graphics(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut graphics = false;
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\x0e' => graphics = true,
+            '\x0f' => graphics = false,
+            '\x1b' => {
+                output.push(ch);
+                let Some(next) = chars.next() else {
+                    break;
+                };
+                output.push(next);
+                if next == '[' {
+                    for sequence in chars.by_ref() {
+                        output.push(sequence);
+                        if ('@'..='~').contains(&sequence) {
+                            break;
+                        }
+                    }
+                } else if matches!(next, '(' | ')' | '*' | '+')
+                    && let Some(designator) = chars.next()
+                {
+                    output.push(designator);
+                }
+            }
+            _ if graphics => output.push(dec_graphic(ch)),
+            _ => output.push(ch),
+        }
+    }
+    output
+}
+
+fn dec_graphic(ch: char) -> char {
+    match ch {
+        '`' => '◆',
+        'a' => '▒',
+        'f' => '°',
+        'g' => '±',
+        'j' => '┘',
+        'k' => '┐',
+        'l' => '┌',
+        'm' => '└',
+        'n' => '┼',
+        'o' => '⎺',
+        'p' => '⎻',
+        'q' => '─',
+        'r' => '⎼',
+        's' => '⎽',
+        't' => '├',
+        'u' => '┤',
+        'v' => '┴',
+        'w' => '┬',
+        'x' => '│',
+        'y' => '≤',
+        'z' => '≥',
+        '{' => 'π',
+        '|' => '≠',
+        '}' => '£',
+        '~' => '·',
+        _ => ch,
+    }
+}
+
 fn validate_command(command: &str) -> Result<()> {
     if command.trim().is_empty()
         || command
@@ -762,4 +874,18 @@ fn validate_pane_id(value: &str) -> Result<()> {
 
 fn strings<const N: usize>(values: [&str; N]) -> Vec<String> {
     values.into_iter().map(str::to_string).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_dec_graphics;
+
+    #[test]
+    fn dec_special_graphics_are_converted_without_corrupting_ansi_styles() {
+        let captured = "\x1b[37m\x0elqqk\x1b[31mx\x0fmqqj";
+        assert_eq!(
+            normalize_dec_graphics(captured),
+            "\x1b[37m┌──┐\x1b[31m│mqqj"
+        );
+    }
 }

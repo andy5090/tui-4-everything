@@ -10,6 +10,7 @@ fn fake_tool(capabilities: Vec<Capability>) -> Tool {
         id: "fake-tool".to_string(),
         name: "Fake Tool".to_string(),
         description: None,
+        key_hints: vec![],
         install_timeout_sec: None,
         category: ToolCategory::Utility,
         tags: vec![],
@@ -18,6 +19,7 @@ fn fake_tool(capabilities: Vec<Capability>) -> Tool {
         exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "fake".to_string(),
+            keep_open: false,
         },
         launch_argument: None,
         run_options: Vec::new(),
@@ -375,4 +377,39 @@ fn non_script_installer_cannot_override_the_generated_command() {
     };
 
     assert!(build_install_task(&tool, &installer, &InstallPolicy::default()).is_err());
+}
+
+#[test]
+fn fastfetch_uses_the_official_architecture_specific_deb() {
+    let mut tool = fake_tool(vec![Capability::FileRead]);
+    tool.id = "fastfetch".to_string();
+    tool.run.cmd = "fastfetch".to_string();
+    tool.checks = vec![Check {
+        which: Some("fastfetch".to_string()),
+        version: None,
+        custom: None,
+    }];
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Fastfetch,
+        package_hints: vec!["fastfetch".to_string()],
+        system_packages: vec!["curl".to_string()],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+
+    assert!(task.command.contains("dpkg --print-architecture"));
+    assert!(
+        task.command
+            .contains("fastfetch-cli/fastfetch/releases/latest/download")
+    );
+    assert!(task.command.contains("fastfetch-linux-${asset}.deb"));
+    assert!(task.command.contains("apt-get"));
+    assert_eq!(task.check_command.as_deref(), Some("fastfetch"));
+    assert!(task.requires_privileges);
+    assert!(!task.requires_confirmation);
 }

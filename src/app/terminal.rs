@@ -229,13 +229,14 @@ fn process_effects(
                     }
                     Ok(_) => {
                         let (width, height) = app_viewport_size(session).unwrap_or((80, 17));
-                        match tmux.launch_app_at_size(
+                        match tmux.launch_app_at_size_with_mode(
                             "t4e-apps",
                             "app-launcher",
                             &request.tool_id,
                             &request.command,
                             width,
                             height,
+                            request.keep_open,
                         ) {
                             Ok(_) => match tmux.list_apps("t4e-apps") {
                                 Ok(apps) => {
@@ -371,7 +372,7 @@ fn process_effects(
             AppEffect::StopWorkspace(session_name) => match tmux.stop(&session_name) {
                 Ok(()) => {
                     app.status = format!("Stopped tmux session {session_name}");
-                    app.logs.push(format!("workspace: stopped {session_name}"));
+                    app.record_log(format!("workspace: stopped {session_name}"));
                     match tmux.list_managed() {
                         Ok(sessions) => app.apply_managed_sessions(sessions),
                         Err(error) => app.apply_workspace_error("refresh", &error),
@@ -584,6 +585,7 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::LazyVim
             | InstallMethod::Tplay
             | InstallMethod::Newsboat
+            | InstallMethod::Fastfetch
     )
 }
 
@@ -597,6 +599,7 @@ fn uninstall_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::SnapClassic
             | InstallMethod::Pipx
             | InstallMethod::Newsboat
+            | InstallMethod::Fastfetch
     )
 }
 
@@ -767,6 +770,9 @@ mod tests {
         assert!(install_method_requires_privileges(&InstallMethod::LazyVim));
         assert!(install_method_requires_privileges(&InstallMethod::Tplay));
         assert!(install_method_requires_privileges(&InstallMethod::Newsboat));
+        assert!(install_method_requires_privileges(
+            &InstallMethod::Fastfetch
+        ));
         assert!(!install_method_requires_privileges(&InstallMethod::Brew));
         assert!(!install_method_requires_privileges(&InstallMethod::Cargo));
         assert!(!uninstall_method_requires_privileges(
@@ -774,6 +780,9 @@ mod tests {
         ));
         assert!(uninstall_method_requires_privileges(
             &InstallMethod::Newsboat
+        ));
+        assert!(uninstall_method_requires_privileges(
+            &InstallMethod::Fastfetch
         ));
     }
 }

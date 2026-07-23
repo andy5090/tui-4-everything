@@ -17,7 +17,7 @@ use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::execution::{InstallAttempt, InstallJob};
 use t4e::installer::queue::QueueState;
 use t4e::mux::runtime::ManagedApp;
-use t4e::storage::{PersistentState, save_state};
+use t4e::storage::{PersistentState, UserSettings, save_state};
 
 fn app() -> AppState {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
@@ -105,6 +105,34 @@ fn catalog_row_places_app_name_before_risk_column() {
 }
 
 #[test]
+fn catalog_detail_previews_app_keys_and_explains_risk() {
+    let mut app = app();
+    app.pack_index = app
+        .catalog
+        .packs
+        .iter()
+        .position(|pack| pack.id == "fun-pack")
+        .expect("fun pack exists");
+    app.handle_key(key(KeyCode::Enter));
+    let backend = TestBackend::new(140, 35);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("catalog renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(rendered.contains("risk: SAFE (app-owned config, cache, and UI state only)"));
+    assert!(rendered.contains("app keys: q quit"));
+    assert!(rendered.contains("T4E controls: Enter run | I install | U uninstall | R reinstall"));
+}
+
+#[test]
 fn catalog_enter_launches_and_missing_app_auto_launches_after_install() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -166,6 +194,103 @@ fn catalog_builds_launch_command_from_allowlisted_options() {
         app.take_effect(),
         Some(AppEffect::LaunchTool(request))
             if request.tool_id == "cmatrix" && request.command == "cmatrix -b -u 6"
+    ));
+    assert_eq!(
+        app.launch_preferences["cmatrix"]["update-delay"]
+            .value
+            .as_deref(),
+        Some("6")
+    );
+    assert!(app.launch_preferences["cmatrix"]["update-delay"].enabled);
+}
+
+#[test]
+fn launch_options_survive_state_reload_and_ignore_option_order() {
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+    let workspaces =
+        load_workspaces(Path::new("registry/workspaces.yaml")).expect("workspaces load");
+    let path = temp_state_file();
+    let mut app =
+        AppState::persistent(catalog, workspaces, path.clone()).expect("persistent app starts");
+
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "cmatrix".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+    for _ in 0..3 {
+        app.handle_key(key(KeyCode::Down));
+    }
+    app.handle_key(key(KeyCode::Char(' ')));
+    app.handle_key(key(KeyCode::Right));
+    app.handle_key(key(KeyCode::Enter));
+    app.persist().expect("launch preferences save");
+
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog reloads");
+    let workspaces =
+        load_workspaces(Path::new("registry/workspaces.yaml")).expect("workspaces reload");
+    let mut restored =
+        AppState::persistent(catalog, workspaces, path.clone()).expect("state reloads");
+    restored.handle_key(key(KeyCode::Char('2')));
+    restored.handle_key(key(KeyCode::Char('/')));
+    for ch in "cmatrix".chars() {
+        restored.handle_key(key(KeyCode::Char(ch)));
+    }
+    restored.handle_key(key(KeyCode::Enter));
+    restored.handle_key(key(KeyCode::Enter));
+
+    let options = restored.launch_options.expect("launch options reopen");
+    assert!(options.selections[3].enabled);
+    assert_eq!(options.selections[3].value_index, 3);
+    let _ = fs::remove_dir_all(path.parent().expect("state parent"));
+}
+
+#[test]
+fn removed_saved_option_value_falls_back_to_catalog_default() {
+    let mut app = app();
+    app.launch_preferences.insert(
+        "cmatrix".to_string(),
+        [(
+            "update-delay".to_string(),
+            t4e::storage::LaunchOptionPreference {
+                enabled: true,
+                value: Some("removed-value".to_string()),
+            },
+        )]
+        .into(),
+    );
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "cmatrix".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+
+    let options = app.launch_options.expect("launch options open");
+    assert!(options.selections[3].enabled);
+    assert_eq!(options.selections[3].value_index, 2);
+}
+
+#[test]
+fn one_shot_fun_app_requests_a_persistent_output_pane() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "fortune".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request))
+            if request.tool_id == "fortune"
+                && request.command == "fortune"
+                && request.keep_open
     ));
 }
 
@@ -983,8 +1108,39 @@ fn preflight_success_reports_that_tool_was_already_installed() {
     assert!(
         app.logs
             .iter()
-            .any(|line| line == "install: ripgrep already installed")
+            .any(|line| line.ends_with("install: ripgrep already installed"))
     );
+}
+
+#[test]
+fn activity_supports_arrow_and_page_navigation_with_timestamped_entries() {
+    let mut app = app();
+    for index in 0..25 {
+        app.record_log(format!("activity event {index}"));
+    }
+    app.handle_key(key(KeyCode::Char('6')));
+
+    let latest = app.logs.last().expect("activity entry");
+    assert!(latest.ends_with("activity event 24"));
+    chrono::DateTime::parse_from_str(&latest[1..27], "%Y-%m-%d %H:%M:%S %:z")
+        .expect("timestamp includes local UTC offset");
+
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.activity_scroll, 1);
+    app.handle_key(key(KeyCode::PageDown));
+    assert_eq!(app.activity_scroll, 11);
+    app.handle_key(key(KeyCode::PageUp));
+    assert_eq!(app.activity_scroll, 1);
+    app.handle_key(key(KeyCode::Up));
+    app.handle_key(key(KeyCode::PageUp));
+    assert_eq!(app.activity_scroll, 0);
+
+    app.handle_key(key(KeyCode::End));
+    assert_eq!(app.activity_scroll, app.logs.len() - 1);
+    app.handle_key(key(KeyCode::PageDown));
+    assert_eq!(app.activity_scroll, app.logs.len() - 1);
+    app.handle_key(key(KeyCode::Home));
+    assert_eq!(app.activity_scroll, 0);
 }
 
 #[test]
@@ -1090,6 +1246,32 @@ fn settings_controls_update_execution_policy() {
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Char(' ')));
     assert!(app.settings.confirm_all_installs);
+}
+
+#[test]
+fn settings_reset_restores_defaults_and_clears_saved_app_options() {
+    let mut app = app();
+    app.settings.install_timeout_sec = 1_200;
+    app.launch_preferences.insert(
+        "cmatrix".to_string(),
+        [(
+            "color".to_string(),
+            t4e::storage::LaunchOptionPreference {
+                enabled: true,
+                value: Some("cyan".to_string()),
+            },
+        )]
+        .into(),
+    );
+    app.handle_key(key(KeyCode::Char('7')));
+    for _ in 0..4 {
+        app.handle_key(key(KeyCode::Down));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    assert_eq!(app.settings, UserSettings::default());
+    assert!(app.launch_preferences.is_empty());
+    assert!(app.status.contains("reset"));
 }
 
 #[test]

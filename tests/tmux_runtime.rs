@@ -187,14 +187,54 @@ fn single_app_launch_creates_a_managed_background_session() {
             "-P",
             "-F",
             "#{pane_id}",
-            "exec cmatrix -b",
+            "bash",
         ]
     }));
     assert!(
-        !calls
+        calls
             .iter()
-            .any(|args| args.first().is_some_and(|arg| arg == "send-keys"))
+            .any(|args| { args == &["respawn-pane", "-k", "-t", "%7", "exec cmatrix -b"] })
     );
+}
+
+#[test]
+fn one_shot_app_enables_remain_on_exit_before_launch() {
+    let runner = MockRunner {
+        outputs: Mutex::new(VecDeque::from([
+            output(false, "", "missing"),
+            output(true, "%8\n", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+        ])),
+        calls: Arc::new(Mutex::new(Vec::new())),
+    };
+    let calls = Arc::clone(&runner.calls);
+    let runtime = TmuxRuntime::new(runner);
+
+    runtime
+        .launch_app_at_size_with_mode(
+            "t4e-apps",
+            "app-launcher",
+            "fortune",
+            "fortune",
+            80,
+            24,
+            true,
+        )
+        .expect("one-shot app launches");
+
+    let calls = calls.lock().expect("calls lock");
+    let remain = calls
+        .iter()
+        .position(|args| args == &["set-window-option", "-t", "%8", "remain-on-exit", "on"])
+        .expect("remain-on-exit call");
+    let launch = calls
+        .iter()
+        .position(|args| args.first().is_some_and(|arg| arg == "respawn-pane"))
+        .expect("launch call");
+    assert!(remain < launch);
 }
 
 #[test]
@@ -250,6 +290,88 @@ fn real_single_app_lifecycle_works_when_tmux_and_cmatrix_are_available() {
         thread::sleep(Duration::from_millis(50));
     }
     assert!(!runtime.session_exists(&session).expect("session probe"));
+}
+
+#[test]
+fn real_one_shot_fun_apps_leave_visible_output_when_available() {
+    let _guard = TMUX_TEST_LOCK.lock().expect("tmux test lock");
+    let apps = [
+        ("lolcat", "lolcat /etc/hosts", ""),
+        ("cowsay", "cowsay T4E", "T4E"),
+        ("fortune", "fortune", ""),
+    ];
+    if Command::new("tmux").arg("-V").output().is_err()
+        || apps.iter().any(|(app, _, _)| {
+            !Command::new("which")
+                .arg(app)
+                .output()
+                .is_ok_and(|output| output.status.success())
+        })
+    {
+        return;
+    }
+
+    for (app_id, command, expected) in apps {
+        let session = unique_session(app_id);
+        let runtime = TmuxRuntime::new(SystemTmuxRunner);
+        let outcome = runtime
+            .launch_app_at_size_with_mode(&session, "app-launcher", app_id, command, 80, 24, true)
+            .expect("one-shot app launches");
+        let pane_id = outcome.pane_ids[0].clone();
+        runtime.list_apps(&session).expect("managed app refresh");
+        let mut content = String::new();
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(50));
+            content = runtime
+                .capture_app(&pane_id)
+                .expect("one-shot output capture");
+            if !content.trim().is_empty() {
+                break;
+            }
+        }
+        runtime.close_app(&pane_id).expect("one-shot app closes");
+
+        assert!(!content.trim().is_empty(), "{app_id} output is visible");
+        assert!(
+            expected.is_empty() || content.contains(expected),
+            "{app_id} output contains {expected}"
+        );
+    }
+}
+
+#[test]
+fn real_curses_capture_uses_unicode_box_drawing_when_available() {
+    let _guard = TMUX_TEST_LOCK.lock().expect("tmux test lock");
+    if Command::new("tmux").arg("-V").output().is_err()
+        || !Command::new("which")
+            .arg("bastet")
+            .output()
+            .is_ok_and(|output| output.status.success())
+    {
+        return;
+    }
+
+    let session = unique_session("bastet-boxes");
+    let runtime = TmuxRuntime::new(SystemTmuxRunner);
+    let outcome = runtime
+        .launch_app(&session, "app-launcher", "bastet", "bastet")
+        .expect("bastet launches");
+    let pane_id = outcome.pane_ids[0].clone();
+    runtime.list_apps(&session).expect("managed app refresh");
+    let mut content = String::new();
+    for _ in 0..20 {
+        thread::sleep(Duration::from_millis(50));
+        content = runtime
+            .capture_app(&pane_id)
+            .expect("curses output capture");
+        if content.contains('┌') {
+            break;
+        }
+    }
+    runtime.close_app(&pane_id).expect("bastet closes");
+
+    assert!(content.contains('┌'));
+    assert!(!content.contains("lqqqq"));
 }
 
 #[test]

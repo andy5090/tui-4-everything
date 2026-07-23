@@ -133,6 +133,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::LazyVim => materialize_lazyvim_command(&installer.platform),
         InstallMethod::Tplay => materialize_tplay_command(&installer.platform),
         InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
+        InstallMethod::Fastfetch => materialize_fastfetch_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
         InstallMethod::Other => {
             return Err(anyhow::anyhow!("unsupported install method"));
@@ -149,6 +150,24 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         ))
     } else {
         bail!("system_packages are only supported by Linux installers")
+    }
+}
+
+fn materialize_fastfetch_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Macos => "brew install fastfetch".to_string(),
+        crate::catalog::models::Platform::Linux => concat!(
+            "case \"$(dpkg --print-architecture)\" in ",
+            "amd64) asset=amd64 ;; arm64) asset=aarch64 ;; ",
+            "*) echo 'fastfetch supports amd64 and arm64 in T4E' >&2; exit 1 ;; esac && ",
+            "package=\"$(mktemp --suffix=.deb)\" && trap 'rm -f \"$package\"' EXIT && ",
+            "curl -fL --retry 3 -o \"$package\" ",
+            "\"https://github.com/fastfetch-cli/fastfetch/releases/latest/download/",
+            "fastfetch-linux-${asset}.deb\" && ",
+            "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get ",
+            "-o DPkg::Lock::Timeout=300 install -y \"$package\""
+        )
+        .to_string(),
     }
 }
 

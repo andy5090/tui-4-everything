@@ -62,6 +62,7 @@ fn registry_loads_and_validates() {
         installer.platform == Platform::Linux && installer.method == InstallMethod::Pipx
     }));
     assert_eq!(yewtube.checks[0].which.as_deref(), Some("yt"));
+    assert!(!yewtube.key_hints.is_empty());
 
     let youtube_tui = catalog
         .tools
@@ -207,7 +208,10 @@ fn glow_and_read_only_helpers_belong_to_the_viewers_pack() {
         .iter()
         .find(|pack| pack.id == "viewers-pack")
         .expect("viewers pack exists");
-    assert_eq!(viewers.tool_ids, ["glow", "bat", "less", "mediainfo"]);
+    assert_eq!(
+        viewers.tool_ids,
+        ["fastfetch", "glow", "bat", "less", "mediainfo"]
+    );
 
     let podcasts = catalog
         .packs
@@ -216,6 +220,27 @@ fn glow_and_read_only_helpers_belong_to_the_viewers_pack() {
         .expect("podcasts and news pack exists");
     assert_eq!(podcasts.title, "Podcasts & News Pack");
     assert!(!podcasts.tool_ids.contains(&"glow".to_string()));
+}
+
+#[test]
+fn one_shot_fun_tools_have_visible_default_output() {
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+    let expected = [
+        ("lolcat", "lolcat /etc/hosts"),
+        ("cowsay", "cowsay T4E"),
+        ("fortune", "fortune"),
+        ("fastfetch", "fastfetch"),
+    ];
+
+    for (tool_id, command) in expected {
+        let tool = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == tool_id)
+            .expect("one-shot tool exists");
+        assert_eq!(tool.run.cmd, command);
+        assert!(tool.run.keep_open, "{tool_id} output must remain visible");
+    }
 }
 
 #[test]

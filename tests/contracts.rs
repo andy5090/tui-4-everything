@@ -23,6 +23,7 @@ fn runtime_risk_is_derived_only_from_capabilities() {
         id: "codex-cli".to_string(),
         name: "Codex CLI".to_string(),
         description: None,
+        key_hints: vec![],
         install_timeout_sec: None,
         category: ToolCategory::Agents,
         tags: vec![],
@@ -36,6 +37,7 @@ fn runtime_risk_is_derived_only_from_capabilities() {
         exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "codex".to_string(),
+            keep_open: false,
         },
         launch_argument: None,
         run_options: Vec::new(),
@@ -49,6 +51,7 @@ fn runtime_risk_is_derived_only_from_capabilities() {
         id: "custom".to_string(),
         name: "Custom".to_string(),
         description: None,
+        key_hints: vec![],
         install_timeout_sec: None,
         category: ToolCategory::Utility,
         tags: vec![],
@@ -57,6 +60,7 @@ fn runtime_risk_is_derived_only_from_capabilities() {
         exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "custom".to_string(),
+            keep_open: false,
         },
         launch_argument: None,
         run_options: Vec::new(),
@@ -81,6 +85,7 @@ fn risk_level_uses_the_highest_declared_capability() {
         id: "capability-test".to_string(),
         name: "Capability Test".to_string(),
         description: None,
+        key_hints: vec![],
         install_timeout_sec: None,
         category: ToolCategory::Utility,
         tags: vec![],
@@ -89,6 +94,7 @@ fn risk_level_uses_the_highest_declared_capability() {
         exposure: Exposure::Starter,
         run: RunSpec {
             cmd: "capability-test".to_string(),
+            keep_open: false,
         },
         launch_argument: None,
         run_options: Vec::new(),

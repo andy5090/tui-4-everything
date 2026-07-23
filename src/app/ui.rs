@@ -244,7 +244,11 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 ),
                 Line::from(""),
                 Line::from(format!("id: {}", tool.id)),
-                Line::from(format!("risk: {}", AppState::risk_label(tool.risk_level()))),
+                Line::from(format!(
+                    "risk: {} ({})",
+                    AppState::risk_label(tool.risk_level()),
+                    risk_explanation(tool.risk_level())
+                )),
                 Line::from(format!(
                     "capabilities: {}",
                     if tool.capabilities.is_empty() {
@@ -259,6 +263,15 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 )),
                 Line::from(format!("run: {}", tool.run_command_for_current_platform())),
                 Line::from(format!("launch options: {}", tool.run_options.len())),
+                Line::from(format!(
+                    "app keys: {}",
+                    if tool.key_hints.is_empty() {
+                        "See the app's built-in help".to_string()
+                    } else {
+                        tool.key_hints.join(" | ")
+                    }
+                )),
+                Line::from("T4E controls: Enter run | I install | U uninstall | R reinstall"),
                 Line::from(""),
             ];
             if let Some(job) = app.queue.iter().find(|job| job.item.tool_id == tool.id) {
@@ -292,10 +305,12 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                     .logs
                     .iter()
                     .rev()
-                    .filter(|line| {
-                        line.starts_with(&format!("{} [", tool.id))
-                            || line.starts_with(&format!("install: {}", tool.id))
-                            || line.starts_with(&format!("uninstall: {}", tool.id))
+                    .filter_map(|line| {
+                        let message = activity_message(line);
+                        (message.starts_with(&format!("{} [", tool.id))
+                            || message.starts_with(&format!("install: {}", tool.id))
+                            || message.starts_with(&format!("uninstall: {}", tool.id)))
+                        .then_some(message)
                     })
                     .take(4)
                     .collect::<Vec<_>>();
@@ -309,12 +324,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                         },
                         Style::default().fg(MUTED),
                     ));
-                    lines.extend(
-                        recent
-                            .into_iter()
-                            .rev()
-                            .map(|line| Line::from(line.as_str())),
-                    );
+                    lines.extend(recent.into_iter().rev().map(Line::from));
                 }
             } else {
                 let (status, style) = catalog_install_status(app, &tool.id);
@@ -682,10 +692,26 @@ fn render_logs(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(lines)
-            .block(panel("Activity log - newest first"))
+            .block(panel(&format!(
+                "Activity log - newest first - row {}/{}",
+                if app.logs.is_empty() {
+                    0
+                } else {
+                    app.activity_scroll + 1
+                },
+                app.logs.len()
+            )))
+            .scroll((app.activity_scroll.min(u16::MAX as usize) as u16, 0))
             .wrap(Wrap { trim: false }),
         area,
     );
+}
+
+fn activity_message(entry: &str) -> &str {
+    entry
+        .strip_prefix('[')
+        .and_then(|entry| entry.split_once("] "))
+        .map_or(entry, |(_, message)| message)
 }
 
 fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
@@ -708,6 +734,7 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 "off"
             }
         ),
+        "Reset saved preferences    Enter".to_string(),
     ];
     let items = values.into_iter().map(ListItem::new).collect::<Vec<_>>();
     let mut state = ListState::default().with_selected(Some(app.settings_index));
@@ -729,9 +756,10 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         Line::from("Changes are saved immediately."),
         Line::from("Timeout and retries apply to new install runs."),
         Line::from("Confirm-all requires typed approval for every tool."),
+        Line::from("Reset restores runtime defaults and clears saved app options."),
         Line::from(""),
         Line::styled(
-            "h/l or arrows adjust  Space toggles",
+            "h/l or arrows adjust  Space toggles  Enter resets",
             Style::default().fg(MUTED),
         ),
     ]);
@@ -743,11 +771,25 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     );
 }
 
+fn risk_explanation(risk: RiskLevel) -> &'static str {
+    match risk {
+        RiskLevel::Safe => "app-owned config, cache, and UI state only",
+        RiskLevel::Low => "network, account sign-in, or selected-file reads",
+        RiskLevel::High => "can write, synchronize, or delete selected files",
+        RiskLevel::Danger => "system changes, commands, or autonomous actions",
+    }
+}
+
 fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let hint = if app.search_mode {
         format!("Search: {}_   Enter apply   Esc cancel", app.search_query)
     } else if app.ai_input_mode {
         "AI prompt input   Enter send   Esc cancel".to_string()
+    } else if app.screen == Screen::Logs {
+        format!(
+            "{} | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
+            app.status
+        )
     } else {
         format!(
             "{} | arrows/jk move  Enter open/run  Backspace back  ? help",
@@ -780,7 +822,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             ),
             Line::from("Scripts always need approval; installs get postflight checks"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
-            Line::from("? Help | Tab sections | Alt+Q close | Alt+BS background"),
+            Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
         ]
     } else {
         vec![
@@ -825,6 +867,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("I / U / R           install / uninstall / reset and reinstall"),
             Line::from("Tab / Shift+Tab     switch dashboard tabs"),
             Line::from("/                   search all catalog apps"),
+            Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
+            Line::from("Activity Home / End jump to newest / oldest entry"),
             Line::from("Alt+Left / Right    switch running apps"),
             Line::from("Alt+Backspace       leave an app running in the background"),
             Line::from("Alt+Q               close the current app"),

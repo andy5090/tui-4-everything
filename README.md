@@ -20,7 +20,7 @@ local Codex control surface. It uses the signed-in `codex` CLI account through
 | Video | Yewtube, YouTube TUI, tplay |
 | Podcasts & News | Shellcast, Newsboat |
 | Information Search | Lynx |
-| Viewers | Glow (with bat, less, and MediaInfo support tools) |
+| Viewers | Fastfetch, Glow (with bat, less, and MediaInfo support tools) |
 | Files | Yazi, ncdu, broot |
 | Fun | cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
 | Games | bastet, ninvaders, nudoku |
@@ -73,7 +73,12 @@ which explains controls, capabilities, and derived risk levels.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.
+  App details preview app-specific key hints, T4E controls, and a plain-language
+  explanation next to the capability-derived risk level.
 - Install queue: `x` runs one item, `X` runs queued items sequentially.
+- Activity: `Up`/`Down` or `j`/`k` scroll one row, `PageUp`/`PageDown`
+  scroll ten rows, `Home`/`End` jump to the newest/oldest entry, and `c`
+  clears the log. New entries include local time and UTC offset.
 - Workspaces: `Enter` starts and opens, `a` reopens, `x` stops all apps, `h`
   hashes a live snapshot, and `I` queues missing tools. The main flow is pack ->
   app -> run. In App View, `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
@@ -93,8 +98,11 @@ Important actions are intentionally explicit:
   `jq`, and `ripgrep` remain available to pack installation, global search, and
   the AI control plane as support tools, but are not launched without inputs.
 - Apps with registered flags open a launch-options dialog. Space enables an
-  option, Left/Right chooses an allowlisted value, and Enter launches it.
+  option, Left/Right chooses an allowlisted value, and Enter launches it. T4E
+  remembers enabled options and selected values per app for the next run.
 - Apps with a required positional value, such as tplay, open an input dialog.
+- Settings includes `Reset saved preferences`, which restores runtime policy
+  defaults and clears remembered app launch options.
   The value is shell-quoted before launch rather than interpreted as a command.
 - Package-manager and T4E-managed installations can be removed with `U`;
   removal requires confirmation and verifies that the executable is gone.
