@@ -6,6 +6,7 @@ use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use t4e::catalog::loader::load_workspaces;
+use t4e::catalog::models::OutputFilter;
 use t4e::mux::runtime::{SystemTmuxRunner, TmuxOutput, TmuxRunner, TmuxRuntime};
 use t4e::mux::tmux::reproducibility_hash;
 use t4e::mux::workspace::{Layout, MuxBackend, Pane, SplitDirection, TmuxView, Workspace};
@@ -198,7 +199,7 @@ fn single_app_launch_creates_a_managed_background_session() {
 }
 
 #[test]
-fn one_shot_app_uses_a_live_output_holder() {
+fn filtered_one_shot_app_uses_a_live_output_holder() {
     let runner = MockRunner {
         outputs: Mutex::new(VecDeque::from([
             output(false, "", "missing"),
@@ -214,7 +215,7 @@ fn one_shot_app_uses_a_live_output_holder() {
     let runtime = TmuxRuntime::new(runner);
 
     runtime
-        .launch_app_at_size_with_mode(
+        .launch_app_at_size_with_mode_and_filter(
             "t4e-apps",
             "app-launcher",
             "fortune",
@@ -222,6 +223,7 @@ fn one_shot_app_uses_a_live_output_holder() {
             80,
             24,
             true,
+            Some(OutputFilter::Lolcat),
         )
         .expect("one-shot app launches");
 
@@ -231,8 +233,8 @@ fn one_shot_app_uses_a_live_output_holder() {
         .iter()
         .find(|args| args.first().is_some_and(|arg| arg == "respawn-pane"))
         .expect("launch call");
-    assert!(launch[4].contains("exec bash -lc"));
-    assert!(launch[4].contains("fortune; status=$?"));
+    assert!(launch[4].contains("exec bash -c"));
+    assert!(launch[4].contains("fortune | lolcat; status=$?"));
     assert!(launch[4].contains("while :; do sleep 86400; done"));
 }
 
@@ -258,7 +260,7 @@ fn relaunch_reuses_and_revives_a_legacy_dead_pane() {
             "t4e-apps",
             "app-launcher",
             "lolcat",
-            "lolcat /etc/hosts",
+            "lolcat --help",
             80,
             24,
             true,
@@ -334,12 +336,11 @@ fn real_single_app_lifecycle_works_when_tmux_and_cmatrix_are_available() {
 fn real_one_shot_fun_apps_leave_visible_output_when_available() {
     let _guard = TMUX_TEST_LOCK.lock().expect("tmux test lock");
     let apps = [
-        ("lolcat", "lolcat /etc/hosts", ""),
-        ("cowsay", "cowsay T4E", "T4E"),
-        ("fortune", "fortune", ""),
+        ("cowsay", "cowsay T4E", "T4E", None),
+        ("fortune-rainbow", "fortune", "", Some(OutputFilter::Lolcat)),
     ];
     if Command::new("tmux").arg("-V").output().is_err()
-        || apps.iter().any(|(app, _, _)| {
+        || ["cowsay", "fortune", "lolcat"].iter().any(|app| {
             !Command::new("which")
                 .arg(app)
                 .output()
@@ -349,21 +350,38 @@ fn real_one_shot_fun_apps_leave_visible_output_when_available() {
         return;
     }
 
-    for (app_id, command, expected) in apps {
+    for (app_id, command, expected, filter) in apps {
         let session = unique_session(app_id);
         let runtime = TmuxRuntime::new(SystemTmuxRunner);
         let outcome = runtime
-            .launch_app_at_size_with_mode(&session, "app-launcher", app_id, command, 80, 24, true)
+            .launch_app_at_size_with_mode_and_filter(
+                &session,
+                "app-launcher",
+                app_id,
+                command,
+                80,
+                24,
+                true,
+                filter,
+            )
             .expect("one-shot app launches");
         let pane_id = outcome.pane_ids[0].clone();
         runtime.list_apps(&session).expect("managed app refresh");
         let mut content = String::new();
+        let mut plain_content = String::new();
         for _ in 0..20 {
             thread::sleep(Duration::from_millis(50));
             content = runtime
                 .capture_app(&pane_id)
                 .expect("one-shot output capture");
-            if !content.trim().is_empty() {
+            plain_content = Command::new("tmux")
+                .args(["capture-pane", "-p", "-t", &pane_id])
+                .output()
+                .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+                .unwrap_or_default();
+            if !content.trim().is_empty()
+                && (expected.is_empty() || plain_content.contains(expected))
+            {
                 break;
             }
         }
@@ -375,9 +393,13 @@ fn real_one_shot_fun_apps_leave_visible_output_when_available() {
 
         assert!(!content.trim().is_empty(), "{app_id} output is visible");
         assert!(!content.contains("Pane is dead"));
+        assert!(!plain_content.contains("[T4E] command exited"));
+        if filter.is_some() {
+            assert!(content.contains("\u{1b}["), "lolcat emits ANSI colors");
+        }
         assert_eq!(String::from_utf8_lossy(&pane_state.stdout).trim(), "0");
         assert!(
-            expected.is_empty() || content.contains(expected),
+            expected.is_empty() || plain_content.contains(expected),
             "{app_id} output contains {expected}"
         );
     }

@@ -28,7 +28,8 @@ use t4e::storage::{default_state_path, log_dir_for_state};
 
 #[derive(Debug, Parser)]
 #[command(name = "t4e")]
-#[command(about = "Curated terminal apps and workspace dashboard")]
+#[command(about = "Curated terminal application dashboard")]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Option<Command>,

@@ -56,13 +56,22 @@ pub struct LaunchArgument {
 pub struct RunOption {
     pub id: String,
     pub label: String,
+    #[serde(default)]
     pub flag: String,
+    #[serde(default)]
+    pub output_filter: Option<OutputFilter>,
     #[serde(default)]
     pub values: Vec<String>,
     #[serde(default)]
     pub default_enabled: bool,
     #[serde(default)]
     pub default_value: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OutputFilter {
+    Lolcat,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +117,22 @@ impl Tool {
             .unwrap_or(RiskLevel::Safe)
     }
 
+    pub fn app_category(&self) -> AppCategory {
+        match self.id.as_str() {
+            "ascii-camera" | "fastfetch" => AppCategory::System,
+            "shellcast" | "spotatui" | "spotify-player" | "ncspot" | "cava" | "termusic"
+            | "yewtube" | "youtube-tui" | "tplay" => AppCategory::Media,
+            "newsboat" | "lynx" => AppCategory::Internet,
+            "yazi" | "ncdu" | "broot" => AppCategory::Files,
+            "micro" | "helix" | "lazyvim" => AppCategory::Editors,
+            "claude-code" | "codex-cli" | "opencode" => AppCategory::Ai,
+            "bastet" | "ninvaders" | "nudoku" => AppCategory::Games,
+            "cmatrix" | "asciiquarium" | "sl" | "lolcat" | "cowsay" | "fortune" | "tty-clock"
+            | "nyancat" | "pipes-sh" => AppCategory::Entertainment,
+            _ => AppCategory::Utilities,
+        }
+    }
+
     pub fn run_command_for(&self, platform: Platform) -> &str {
         self.installers
             .iter()
@@ -145,6 +170,47 @@ impl Tool {
             })
             .into_iter()
             .collect()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AppCategory {
+    Internet,
+    Media,
+    Files,
+    Editors,
+    Ai,
+    System,
+    Utilities,
+    Games,
+    Entertainment,
+}
+
+impl AppCategory {
+    pub const ALL: [Self; 9] = [
+        Self::Internet,
+        Self::Media,
+        Self::Files,
+        Self::Editors,
+        Self::Ai,
+        Self::System,
+        Self::Utilities,
+        Self::Games,
+        Self::Entertainment,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Internet => "Internet",
+            Self::Media => "Media",
+            Self::Files => "Files",
+            Self::Editors => "Editors",
+            Self::Ai => "AI",
+            Self::System => "System",
+            Self::Utilities => "Utilities",
+            Self::Games => "Games",
+            Self::Entertainment => "Entertainment",
+        }
     }
 }
 

@@ -241,14 +241,29 @@ fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform)
         "{install}mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' \
          '#!/bin/sh' \
          'device=0' \
-         'if [ \"${{1:-}}\" = \"--device\" ]; then device=\"${{2:-0}}\"; shift 2; fi' \
+         'renderer=tct' \
+         'mirror=0' \
+         'lavf_options=' \
+         'while [ \"$#\" -gt 0 ]; do' \
+         '  case \"$1\" in' \
+         '    --device) device=\"${{2:-0}}\"; shift 2 ;;' \
+         '    --vo) renderer=\"${{2:-tct}}\"; shift 2 ;;' \
+         '    --vf=hflip) mirror=1; shift ;;' \
+         '    --demuxer-lavf-o) lavf_options=\"${{2:-}}\"; shift 2 ;;' \
+         '    *) printf \"Unknown ASCII Camera option: %s\\n\" \"$1\" >&2; exit 2 ;;' \
+         '  esac' \
+         'done' \
          'case \"$(uname -s)\" in' \
          '  Darwin) input=\"av://avfoundation:${{device}}:none\" ;;' \
          '  *) input=\"av://v4l2:/dev/video${{device}}\" ;;' \
          'esac' \
-         'exec mpv --profile=low-latency --no-audio --untimed --vo=tct \"$@\" \"$input\"' \
+         'set --' \
+         'if [ \"$mirror\" -eq 1 ]; then set -- \"$@\" \"--vf=hflip\"; fi' \
+         'if [ -n \"$lavf_options\" ]; then set -- \"$@\" \"--demuxer-lavf-o=$lavf_options\"; fi' \
+         'exec mpv --profile=low-latency --no-audio --untimed \"--vo=$renderer\" \"$@\" \"$input\"' \
          > \"$HOME/.local/bin/t4e-ascii-camera\" && \
-         chmod +x \"$HOME/.local/bin/t4e-ascii-camera\""
+         chmod +x \"$HOME/.local/bin/t4e-ascii-camera\" && \
+         ln -sf t4e-ascii-camera \"$HOME/.local/bin/t4e-ascii-camera-v2\""
     )
 }
 

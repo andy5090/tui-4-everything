@@ -15,7 +15,6 @@ pub enum Screen {
 pub enum EventAction {
     GoCatalog,
     GoInstall,
-    GoWorkspace,
     GoAgents,
     GoLogs,
     GoSettings,
@@ -36,7 +35,6 @@ pub fn map_key(screen: Screen, key: char) -> EventAction {
     match (screen, key) {
         (Screen::Home, 'c') => EventAction::GoCatalog,
         (Screen::Home, 'i') => EventAction::GoInstall,
-        (Screen::Home, 'w') => EventAction::GoWorkspace,
         (Screen::Home, 'a') => EventAction::GoAgents,
         (Screen::Home, 'l') => EventAction::GoLogs,
         (Screen::Home, 's') => EventAction::GoSettings,

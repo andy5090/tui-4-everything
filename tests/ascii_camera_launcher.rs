@@ -61,7 +61,7 @@ mod unix {
         let args = fs::read_to_string(root.join("mpv-args")).expect("mpv arguments recorded");
         assert!(args.contains("--profile=low-latency\n"));
         assert!(args.contains("--no-audio\n"));
-        assert!(args.contains("--vo\ncaca\n"));
+        assert!(args.contains("--vo=caca\n"));
         assert!(args.contains("--vf=hflip\n"));
         assert!(args.ends_with("av://v4l2:/dev/video2\n"));
         assert!(!args.contains("--device"));

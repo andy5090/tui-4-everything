@@ -2,17 +2,70 @@
 
 ## Product Direction
 
-T4E starts as a curated TUI application manager and workspace launcher, then
-grows into an AI-assisted terminal environment. Codex is the control plane that
-interprets intent and plans multi-application work. T4E remains the trusted
-runtime that owns permissions, process lifecycle, tmux/zellij sessions, logs,
-and persistent state.
+T4E starts as a curated TUI application manager, then grows into an
+AI-controlled terminal environment. AI interprets intent and coordinates
+application work; T4E remains the trusted runtime that owns permissions,
+process lifecycle, hidden tmux sessions, logs, and persistent state.
 
 The AI layer must use bounded, structured T4E actions. Generic terminal-screen
 reading and synthetic key input are a later fallback, not the primary control
 mechanism.
 
+Codex app-server is the first AI backend, not the product boundary. The AI
+orchestrator must support provider adapters for subscription-backed local agent
+runtimes and direct model APIs without changing T4E actions or safety policy.
+
+## Navigation Direction
+
+- HOME is the primary application entry point: HOME -> Apps or Category ->
+  app -> run.
+- Packs are not a user-facing navigation or batch-install concept. Legacy pack
+  records remain internal until CLI and release-gate consumers migrate.
+- HOME Quick Access contains Running, Favorites, and Recent. Apps contains All
+  Apps, Installed, and the OS-style categories.
+- OS-style categories are Internet, Media, Files, Editors, AI, System,
+  Utilities, Games, and Entertainment. Categories only filter applications.
+- Fixed-purpose Video, Music, and Fun workspace templates are legacy backend
+  fixtures and are not part of primary navigation.
+- Do not restore a workspace menu until a clear multi-app user workflow is
+  validated. If restored, use neutral user-owned slots such as Workspace 1,
+  Workspace 2, and Workspace 3 with optional custom names and app membership,
+  rather than product-defined workspace categories.
+- HOME includes a compact fastfetch summary with a built-in system fallback.
+- The standalone AI tab is transitional. Once the HOME command input provides
+  equivalent conversation, search, and app-control workflows, remove that tab.
+
 ## Delivery Sequence
+
+1. Replace Pack-first HOME with app views, OS-style categories, direct
+   application launch, and single-application install actions.
+2. Move the current Codex implementation behind a provider-neutral AI backend
+   contract with normalized streaming, usage, tool, approval, and error events.
+3. Add a unified HOME input that returns local application matches immediately
+   and delegates natural-language commands to the selected AI backend.
+4. Expand structured T4E actions to install, reinstall, uninstall, launch,
+   focus, background, stop, configure, observe, send bounded input, open links,
+   and cancel work.
+5. Add Anthropic API and OpenAI-compatible API adapters, then add a Claude local
+   runtime adapter when its supported protocol and subscription boundary are
+   verified.
+6. Remove the standalone AI tab after HOME reaches feature parity; add provider
+   selection, connection testing, model selection, and fallback controls in
+   Settings.
+7. Expand reliable task automation from generic TUI observation to dedicated
+   adapters for high-use applications.
+
+Provider implementation rules:
+
+- Treat local agent runtimes and model APIs as different backend types. For
+  model APIs, T4E owns conversation state and the tool-calling loop.
+- Normalize every backend to Started, TextDelta, ReasoningDelta, ToolRequested,
+  ToolCompleted, ApprovalRequired, UsageUpdated, Completed, and Failed events.
+- Keep credentials out of T4E state and Activity logs. Use provider login,
+  environment variables, or an OS credential store.
+- Never grant a provider direct tmux or arbitrary shell authority. Providers
+  request the same structured T4E actions and pass through the same capability,
+  confirmation, and audit policy.
 
 ## Current Implementation Status
 
@@ -31,10 +84,13 @@ mechanism.
 - Phase 6 packaging, protocol checks, CI, and real-gate workflow: complete.
   Gates 1 through 5 passed on isolated GitHub runners, and Linux x64 plus macOS
   ARM64 release packages passed out-of-tree validation.
-- Pack-first app shell: implemented. Selecting a pack opens its apps, Enter
-  launches the selected app, missing apps install and then launch, and the
-  embedded App View owns switching and process lifecycle without exposing tmux
-  controls.
+- OS-style app shell: implemented. HOME filters applications by app state
+  and category, Enter launches the selected app, missing apps install and then
+  launch, and App View owns switching and process lifecycle without exposing
+  tmux controls. Pack records are no longer shown in HOME.
+- Composable output effects: implemented for the first trusted filter. Cowsay
+  and Fortune can enable a remembered Rainbow output option; T4E installs the
+  hidden lolcat dependency when needed and constructs the pipeline internally.
 - Ubuntu catalog hardening: package-source candidates and declared build
   dependencies are live-checked; installs are serialized; apt lock contention,
   missing pipx, Cargo build duration, and multi-binary apps are handled.
@@ -51,9 +107,10 @@ Exit criteria:
 - Pull requests run formatting, lint, and unit/integration tests.
 - Mock gate results cannot be presented as real installation success.
 
-### Phase 1: Pack-First TUI Shell
+### Phase 1: Application Views TUI Shell
 
-- Make packs the main screen and open a pack directly into its app list.
+- Make HOME Quick Access and Apps the main screen and launch an app directly
+  from the selected view.
 - Launch the selected app with Enter; keep installs, workspaces, AI, logs, and
   settings as secondary utilities rather than top-level tabs.
 - Show install state, attempts, recent output, and failures directly in the app
@@ -62,12 +119,13 @@ Exit criteria:
   the app alive, and explicitly terminate the selected app with Alt+Q.
 - Keep terminal text selection as the default mouse mode and toggle interactive
   T4E mouse capture with Alt+M.
-- Expose allowlisted launch flags/arguments and verified package-manager
-  uninstall actions in the app selection screen.
+- Expose allowlisted launch flags, arguments, trusted output effects, and
+  verified package-manager uninstall actions in the app selection screen.
 - Support keyboard navigation, catalog search, list selection, and help.
-- Display registry-backed packs, tools, risk levels, and workspace layouts.
-- Keep one-shot support commands available to pack installs and AI while only
-  presenting input-ready interactive apps in each pack launcher.
+- Display registry-backed applications, categories, capabilities, and risk
+  levels.
+- Keep one-shot support commands available to dependency plans, explicit
+  catalog search, and AI while presenting input-ready interactive apps on HOME.
 - Keep all existing bootstrap CLI commands available.
 
 Exit criteria:
@@ -86,7 +144,7 @@ Exit criteria:
 
 Exit criteria:
 
-- A single tool and a selected pack can be installed from CLI and TUI.
+- A single tool can be installed from CLI and a single application from TUI.
 - Failed operations expose an error summary, full log, and retry action.
 
 ### Phase 3: Workspace Runtime

@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::catalog::models::OutputFilter;
 use crate::installer::checks::{InstallChecker, SystemInstallChecker};
 
 use super::tmux::{CommandLog, PaneSnapshot, ReproSnapshot, WindowSnapshot};
@@ -206,13 +207,41 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         height: u16,
         keep_open: bool,
     ) -> Result<LaunchOutcome> {
+        self.launch_app_at_size_with_mode_and_filter(
+            session_name,
+            workspace_id,
+            app_id,
+            command,
+            width,
+            height,
+            keep_open,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn launch_app_at_size_with_mode_and_filter(
+        &self,
+        session_name: &str,
+        workspace_id: &str,
+        app_id: &str,
+        command: &str,
+        width: u16,
+        height: u16,
+        keep_open: bool,
+        output_filter: Option<OutputFilter>,
+    ) -> Result<LaunchOutcome> {
         validate_identifier("session name", session_name)?;
         validate_identifier("workspace id", workspace_id)?;
         validate_identifier("app id", app_id)?;
         validate_command(command)?;
         validate_app_viewport(width, height)?;
+        let command = match output_filter {
+            Some(OutputFilter::Lolcat) => format!("{command} | lolcat"),
+            None => command.to_string(),
+        };
         let app_command = if keep_open {
-            persistent_output_command(command)
+            persistent_output_command(&command)
         } else {
             format!("exec {command}")
         };
@@ -861,7 +890,7 @@ fn persistent_output_command(command: &str) -> String {
          printf '\\n[T4E] command exited with status %s\\n' \"$status\"; fi; \
          trap 'exit 0' INT TERM; while :; do sleep 86400; done"
     );
-    format!("exec bash -lc {}", shell_quote(&script))
+    format!("exec bash -c {}", shell_quote(&script))
 }
 
 fn shell_quote(value: &str) -> String {
@@ -913,7 +942,7 @@ fn strings<const N: usize>(values: [&str; N]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_dec_graphics;
+    use super::{normalize_dec_graphics, persistent_output_command};
 
     #[test]
     fn dec_special_graphics_are_converted_without_corrupting_ansi_styles() {
@@ -922,5 +951,12 @@ mod tests {
             normalize_dec_graphics(captured),
             "\x1b[37m┌──┐\x1b[31m│mqqj"
         );
+    }
+
+    #[test]
+    fn persistent_output_reports_command_failures() {
+        let command = persistent_output_command("fortune");
+
+        assert!(command.contains("[T4E] command exited"));
     }
 }

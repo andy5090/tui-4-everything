@@ -54,9 +54,10 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
             if !option_ids.insert(option.id.as_str()) {
                 bail!("tool {} has duplicate run option {}", tool.id, option.id);
             }
+            let has_flag = !option.flag.is_empty();
             if option.label.trim().is_empty()
-                || !is_safe_argument(&option.flag)
-                || !option.flag.starts_with('-')
+                || (!has_flag && option.output_filter.is_none())
+                || (has_flag && (!is_safe_argument(&option.flag) || !option.flag.starts_with('-')))
                 || option.values.iter().any(|value| !is_safe_argument(value))
             {
                 bail!("tool {} has an unsafe run option {}", tool.id, option.id);

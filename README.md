@@ -1,34 +1,40 @@
 # T4E
 
-T4E is a curated terminal application manager, tmux workspace runtime, and
-local Codex control surface. It uses the signed-in `codex` CLI account through
-`codex app-server`; it does not request or proxy an OpenAI API key.
+T4E is a curated terminal application manager and AI-controlled terminal
+environment. The current AI backend uses the signed-in `codex` CLI account
+through `codex app-server`; provider-neutral support for Claude runtimes,
+Anthropic API, and OpenAI-compatible APIs is on the roadmap.
 
 ## Requirements
 
 - Rust stable toolchain
 - Linux or macOS
-- tmux 3.x as the current hidden workspace process backend
-- Codex CLI for AI Home
+- tmux 3.x as the current hidden app process backend
+- Codex CLI for the current AI backend
 - The relevant package manager (`apt`, Snap, Homebrew, Cargo, or pipx) for installs
 
-## Catalog Packs
+## Applications
 
-| Pack | Interactive apps |
+HOME presents OS-style app views. `Quick Access` contains `Running`,
+`Favorites`, and `Recent`. `Apps` contains `All Apps`, `Installed`, and the
+application categories; categories only filter applications and never act as
+batch-install units.
+
+| Category | Interactive apps |
 | --- | --- |
-| Music | Spotatui, Spotify Player, Ncspot, Cava, Termusic |
-| Video | ASCII Camera, Yewtube, YouTube TUI, tplay |
-| Podcasts & News | Shellcast, Newsboat |
-| Information Search | Lynx |
-| Viewers | Fastfetch, Glow (with bat, less, and MediaInfo support tools) |
+| Internet | Newsboat, Lynx |
+| Media | Spotatui, Spotify Player, Ncspot, Cava, Termusic, Shellcast, Yewtube, YouTube TUI, tplay |
 | Files | Yazi, ncdu, broot |
-| Fun | cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
+| Editors | Micro, Helix, LazyVim |
+| AI | Claude Code, Codex CLI, OpenCode |
+| System | ASCII Camera, Fastfetch |
+| Utilities | Glow, VisiData |
 | Games | bastet, ninvaders, nudoku |
-| Editors & IDEs | Micro, Helix, LazyVim, VisiData |
-| Agents | Claude Code, Codex CLI, OpenCode |
+| Entertainment | cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
 
-Support commands such as `mpv`, `yt-dlp`, `ffmpeg`, `jq`, and `ripgrep` are
-installed as pack dependencies but are not launched without required input.
+Support commands such as `mpv`, `yt-dlp`, `ffmpeg`, `jq`, `ripgrep`, and
+`lolcat` are internal dependencies and remain available through explicit
+catalog search, but are not shown as applications on HOME.
 LazyVim uses an isolated `t4e-lazyvim` profile, leaving an existing Neovim
 configuration untouched. YouTube TUI provides browsing and search; tplay asks
 for a media URL or local path before rendering the media as terminal ASCII.
@@ -41,9 +47,9 @@ not install OpenCV. Camera access is classified as `HIGH` and requires approval
 on the first launch of each T4E session.
 
 Catalog exposure is internal release metadata: `starter` participates in the
-default curated release checks and `labs` is experimental. Every current pack,
-including Agents, is `starter`. Exposure is hidden from the TUI because it is
-not an installation or permission decision.
+default curated release checks and `labs` is experimental. Exposure and legacy
+pack records remain hidden because they are release and compatibility metadata,
+not user-facing installation or permission decisions.
 
 Each app declares any combination of `NETWORK`, `ACCOUNT`, `FILE_READ`,
 `FILE_WRITE`, `DELETE`, `SYSTEM`, `COMMANDS`, and `AUTONOMOUS` capabilities.
@@ -52,7 +58,7 @@ impactful capability:
 
 - `SAFE`: no declared capability beyond app-owned configuration, cache, and UI state.
 - `LOW`: `NETWORK`, `ACCOUNT`, or `FILE_READ`.
-- `HIGH`: `FILE_WRITE` or `DELETE`.
+- `HIGH`: `CAMERA_CAPTURE`, `FILE_WRITE`, or `DELETE`.
 - `DANGER`: `SYSTEM`, `COMMANDS`, or `AUTONOMOUS`.
 
 Installation trust is separate. Package-manager installs use generated catalog
@@ -75,8 +81,11 @@ scripts/dev-watch.sh
 The script requires `cargo-watch` and restores the terminal screen and cursor
 when it exits.
 
-Main screens use `1` through `8`. Press `?` to open the persistent Help tab,
-which explains controls, capabilities, and derived risk levels.
+The primary navigation is `HOME`, `AI`, `Activity`, `Settings`, and `Help`.
+HOME contains Quick Access, categorized Apps, and a compact
+fastfetch system summary with the detected OS ASCII logo. Left/Right switches
+between the app views and app list; Enter enters a list or runs an app. Press `/`
+to search the current view and `?` to open Help.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.
@@ -86,9 +95,8 @@ Important actions are intentionally explicit:
 - Activity: `Up`/`Down` or `j`/`k` scroll one row, `PageUp`/`PageDown`
   scroll ten rows, `Home`/`End` jump to the newest/oldest entry, and `c`
   clears the log. New entries include local time and UTC offset.
-- Workspaces: `Enter` starts and opens, `a` reopens, `x` stops all apps, `h`
-  hashes a live snapshot, and `I` queues missing tools. The main flow is pack ->
-  app -> run. In App View, `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
+- The main flow is HOME -> Apps or Category -> app -> run. In App View,
+  `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
   returns to the previous screen while keeping apps running, and `Alt+Q` closes
   the current app. `Backspace` and `Esc` are forwarded to the running app.
   Text selection is the default mouse mode; `Alt+M` toggles T4E mouse controls
@@ -101,12 +109,15 @@ Important actions are intentionally explicit:
 - App rows show install readiness and live install state. The detail panel keeps
   the current attempt, channel, recent package-manager output, and failure
   summary visible without opening the install utility.
-- Pack screens list interactive apps only. One-shot commands such as `ffmpeg`,
-  `jq`, and `ripgrep` remain available to pack installation, global search, and
-  the AI control plane as support tools, but are not launched without inputs.
-- Apps with registered flags open a launch-options dialog. Space enables an
-  option, Left/Right chooses an allowlisted value, and Enter launches it. T4E
-  remembers enabled options and selected values per app for the next run.
+- HOME lists interactive applications only. One-shot commands such as
+  `ffmpeg`, `jq`, and `ripgrep` remain available to explicit catalog search,
+  dependency installation, and the AI control plane as support tools.
+- Apps with registered flags or output effects open a launch-options dialog.
+  Space enables an option, Left/Right chooses an allowlisted value, and Enter
+  launches it. T4E remembers enabled options and selected values per app for
+  the next run. `cowsay` and `fortune` offer `Rainbow output`; T4E installs the
+  hidden `lolcat` support command when needed and applies it as a managed
+  output filter.
 - Apps with a required positional value, such as tplay, open an input dialog.
 - Settings includes `Reset saved preferences`, which restores runtime policy
   defaults and clears remembered app launch options.
@@ -114,8 +125,10 @@ Important actions are intentionally explicit:
 - Package-manager and T4E-managed installations can be removed with `U`;
   removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
-- AI Home: `Enter` composes a request, `x` interrupts, and `A` reviews a
-  proposed side effect.
+- AI: `Enter` composes a request and `x` interrupts it. AI can navigate HOME to
+  catalog and installation plans but cannot launch legacy workspace templates.
+  The AI tab remains during migration; the target UI integrates provider-neutral
+  search, conversation, and app control directly into HOME.
 
 Script installers, DANGER apps, and AI-proposed side effects require an exact typed
 confirmation. Codex runs in a read-only sandbox with app-server approvals set
@@ -182,8 +195,17 @@ runtime evidence for Gates 3 through 5, then packages Linux and macOS binaries
 only after all five gates pass. Every report contains source SHA-256 evidence.
 
 Default catalog and workspace registries are embedded in the binary, so the
-packaged executable works outside the source tree. Release archives also ship
+packaged executable works outside the source tree. Legacy pack and workspace
+records remain embedded for CLI compatibility and validation. Release archives also ship
 editable Registry copies, the README, architecture notes, and a SHA-256 file.
+
+## Versioning
+
+T4E follows Semantic Versioning. User-visible changes are recorded in
+[`CHANGELOG.md`](CHANGELOG.md) under `Unreleased`; a release moves those entries
+to a versioned section with its release date. Navigation or provider contract
+breaks require at least a minor version bump while the project is pre-1.0.
+Run `t4e --version` (or `cargo run -- --version`) to inspect the build version.
 
 The signed-in Codex live-turn test is intentionally excluded from normal CI:
 
@@ -214,7 +236,7 @@ startup; install logs are stored beside the state file.
 
 ## Current Boundaries
 
-- tmux is the hidden workspace process backend. App View owns normal launch,
+- tmux is the hidden app process backend. App View owns normal launch,
   display, keyboard input, switching, and close controls. Zellij layouts
   compile, but App View lifecycle parity is not implemented yet.
 - Native adapters are provided for mpv JSON IPC, yazi, and newsboat. The latter

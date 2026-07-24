@@ -7,10 +7,10 @@ use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 use t4e::app::events::Screen;
-use t4e::app::state::{AppEffect, AppState};
+use t4e::app::state::{AppEffect, AppState, HomeFilter, HomeFocus};
 use t4e::app::ui::render;
 use t4e::catalog::loader::{load_catalog, load_workspaces};
-use t4e::catalog::models::{InstallMethod, Platform};
+use t4e::catalog::models::{AppCategory, InstallMethod, OutputFilter, Platform};
 use t4e::codex::service::CodexEvent;
 use t4e::installer::checks::CheckResult;
 use t4e::installer::engine::{InstallPolicy, build_install_task};
@@ -40,6 +40,15 @@ fn key(code: KeyCode) -> KeyEvent {
     KeyEvent::new(code, KeyModifiers::NONE)
 }
 
+fn open_catalog_search(app: &mut AppState, query: &str) {
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in query.chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+}
+
 #[test]
 fn tab_switches_header_sections_outside_running_apps() {
     let mut app = app();
@@ -49,7 +58,7 @@ fn tab_switches_header_sections_outside_running_apps() {
     assert_eq!(app.catalog_index, 1);
 
     app.handle_key(key(KeyCode::Tab));
-    assert_eq!(app.screen, Screen::Workspace);
+    assert_eq!(app.screen, Screen::Agents);
     assert_eq!(app.catalog_index, 1);
 
     app.handle_key(key(KeyCode::BackTab));
@@ -79,13 +88,7 @@ fn catalog_search_filters_and_queues_a_tool_once() {
 #[test]
 fn catalog_row_places_app_name_before_risk_column() {
     let mut app = app();
-    app.pack_index = app
-        .catalog
-        .packs
-        .iter()
-        .position(|pack| pack.id == "fun-pack")
-        .expect("fun pack exists");
-    app.handle_key(key(KeyCode::Enter));
+    open_catalog_search(&mut app, "cmatrix");
     let backend = TestBackend::new(80, 24);
     let mut terminal = Terminal::new(backend).expect("test terminal");
     terminal
@@ -107,13 +110,7 @@ fn catalog_row_places_app_name_before_risk_column() {
 #[test]
 fn catalog_detail_previews_app_keys_and_explains_risk() {
     let mut app = app();
-    app.pack_index = app
-        .catalog
-        .packs
-        .iter()
-        .position(|pack| pack.id == "fun-pack")
-        .expect("fun pack exists");
-    app.handle_key(key(KeyCode::Enter));
+    open_catalog_search(&mut app, "cmatrix");
     let backend = TestBackend::new(140, 35);
     let mut terminal = Terminal::new(backend).expect("test terminal");
     terminal
@@ -284,6 +281,7 @@ fn one_shot_fun_app_requests_a_persistent_output_pane() {
     }
     app.handle_key(key(KeyCode::Enter));
     app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
 
     assert!(matches!(
         app.take_effect(),
@@ -291,6 +289,63 @@ fn one_shot_fun_app_requests_a_persistent_output_pane() {
             if request.tool_id == "fortune"
                 && request.command == "fortune"
                 && request.keep_open
+                && request.output_filter.is_none()
+    ));
+}
+
+#[test]
+fn compatible_app_can_enable_lolcat_as_a_structured_output_filter() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "fortune".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Char(' ')));
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request))
+            if request.tool_id == "fortune"
+                && request.command == "fortune"
+                && request.output_filter == Some(OutputFilter::Lolcat)
+    ));
+}
+
+#[test]
+fn output_filter_install_resumes_the_original_app_launch() {
+    let mut app = app();
+    let request = t4e::app::state::ToolLaunchRequest {
+        tool_id: "fortune".to_string(),
+        command: "fortune".to_string(),
+        keep_open: true,
+        output_filter: Some(OutputFilter::Lolcat),
+    };
+
+    app.install_tool_then_launch("lolcat".to_string(), request);
+    let Some(AppEffect::Execute(job)) = app.take_effect() else {
+        panic!("lolcat dependency should install immediately");
+    };
+    assert_eq!(job.item.tool_id, "lolcat");
+    let mut completed = *job;
+    completed
+        .item
+        .transition(QueueState::Installing)
+        .expect("starts");
+    completed
+        .item
+        .transition(QueueState::Success)
+        .expect("succeeds");
+    app.apply_execution(completed);
+
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request))
+            if request.tool_id == "fortune"
+                && request.output_filter == Some(OutputFilter::Lolcat)
     ));
 }
 
@@ -502,23 +557,11 @@ fn lazyvim_uninstall_only_removes_the_t4e_profile() {
 }
 
 #[test]
-fn workspace_action_emits_a_bounded_launch_request() {
+fn legacy_workspace_templates_are_not_a_primary_menu_destination() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('4')));
-    app.handle_key(key(KeyCode::Enter));
-
-    let Some(AppEffect::LaunchWorkspace(request)) = app.take_effect() else {
-        panic!("workspace launch request expected");
-    };
-    assert_eq!(request.workspace.id, "video-desk");
-    assert_eq!(
-        request.required_tools,
-        [
-            ("yewtube".to_string(), "t4e-yewtube".to_string()),
-            ("mpv".to_string(), "mpv".to_string()),
-            ("yazi".to_string(), "yazi".to_string()),
-        ]
-    );
+    assert_eq!(app.screen, Screen::Agents);
+    assert!(app.take_effect().is_none());
 }
 
 #[test]
@@ -719,7 +762,7 @@ fn app_process_exit_keeps_remaining_apps_or_returns_to_t4e() {
     assert_eq!(app.app_view.as_ref().expect("app view").apps.len(), 1);
 
     app.update_app_view(Vec::new(), String::new());
-    assert_eq!(app.screen, Screen::Catalog);
+    assert_eq!(app.screen, Screen::Home);
     assert!(app.app_view.is_none());
     assert_eq!(app.status, "App closed");
 }
@@ -741,7 +784,7 @@ fn alt_backspace_returns_to_the_previous_screen_without_closing_the_app() {
 
     app.handle_key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::ALT));
 
-    assert_eq!(app.screen, Screen::Catalog);
+    assert_eq!(app.screen, Screen::Home);
     assert!(app.app_view.is_some());
     assert!(app.take_effect().is_none());
 }
@@ -759,14 +802,7 @@ fn catalog_enter_reopens_running_app_without_launch_options_or_duplicate_launch(
             process: "cmatrix".to_string(),
         }],
     );
-    app.pack_index = app
-        .catalog
-        .packs
-        .iter()
-        .position(|pack| pack.id == "fun-pack")
-        .expect("fun pack exists");
-    app.handle_key(key(KeyCode::Enter));
-
+    open_catalog_search(&mut app, "cmatrix");
     app.handle_key(key(KeyCode::Enter));
 
     assert_eq!(app.screen, Screen::AppView);
@@ -846,7 +882,7 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
         },
         24,
     );
-    assert_eq!(app.pack_index, 2);
+    assert_eq!(app.home_filter_index, 2);
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::ScrollDown,
@@ -856,7 +892,7 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
         },
         24,
     );
-    assert_eq!(app.pack_index, 3);
+    assert_eq!(app.home_filter_index, 3);
 
     app.open_app_view(
         "t4e-mouse".to_string(),
@@ -916,13 +952,13 @@ fn mouse_clicks_header_navigation_tabs() {
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: 10,
+            column: 9,
             row: 1,
             modifiers: KeyModifiers::NONE,
         },
         24,
     );
-    assert_eq!(app.screen, Screen::Workspace);
+    assert_eq!(app.screen, Screen::Agents);
 
     app.handle_mouse(
         MouseEvent {
@@ -938,7 +974,7 @@ fn mouse_clicks_header_navigation_tabs() {
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: 50,
+            column: 36,
             row: 1,
             modifiers: KeyModifiers::NONE,
         },
@@ -948,13 +984,13 @@ fn mouse_clicks_header_navigation_tabs() {
 }
 
 #[test]
-fn closing_an_app_returns_to_the_pack_it_was_launched_from() {
+fn closing_an_app_returns_to_home_when_launched_from_home() {
     let mut app = app();
     app.handle_key(key(KeyCode::Enter));
-    assert_eq!(app.screen, Screen::Catalog);
-    let pack = app.active_pack.clone();
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
     app.open_app_view(
-        "t4e-pack-return".to_string(),
+        "t4e-home-return".to_string(),
         vec![ManagedApp {
             pane_id: "%20".to_string(),
             window_index: 0,
@@ -971,8 +1007,7 @@ fn closing_an_app_returns_to_the_pack_it_was_launched_from() {
     ));
     app.update_app_view(Vec::new(), String::new());
 
-    assert_eq!(app.screen, Screen::Catalog);
-    assert_eq!(app.active_pack, pack);
+    assert_eq!(app.screen, Screen::Home);
     assert!(app.app_view.is_none());
 }
 
@@ -1033,12 +1068,43 @@ fn narrow_layout_keeps_every_screen_target_and_back_key_visible() {
         .collect::<String>();
 
     assert!(rendered.contains("T4E"));
-    assert!(rendered.contains("Packs"));
-    assert!(rendered.contains("Workspaces"));
+    assert!(rendered.contains("HOME"));
+    assert!(rendered.contains("AI"));
     assert!(rendered.contains("Activity"));
     assert!(rendered.contains("Settings"));
     assert!(rendered.contains("Help"));
     assert!(rendered.contains("Backspace back"));
+}
+
+#[test]
+fn home_shows_compact_fastfetch_information_and_application_entry_points() {
+    let mut app = app();
+    app.system_overview.logo = vec!["ASCII-OS".to_string()];
+    let backend = TestBackend::new(120, 35);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("home renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(rendered.contains("Apps"));
+    assert!(rendered.contains("Quick Access"));
+    assert!(rendered.contains("All Apps"));
+    assert!(rendered.contains("Information"));
+    assert!(rendered.contains("ASCII-OS"));
+    for label in ["OS:", "Host:", "Kernel:", "CPU:", "Memory:"] {
+        assert!(
+            rendered.contains(label),
+            "missing system information {label}"
+        );
+    }
+    assert!(!rendered.contains("workspace templates"));
 }
 
 #[test]
@@ -1074,73 +1140,78 @@ fn help_tab_explains_capabilities_and_derived_risk() {
 }
 
 #[test]
-fn home_pack_can_filter_catalog_and_queue_the_pack() {
+fn home_library_queues_only_the_selected_app() {
     let mut app = app();
-    let first_pack_ids = app.catalog.packs[0].tool_ids.clone();
 
     app.handle_key(key(KeyCode::Enter));
-    assert_eq!(app.screen, Screen::Catalog);
-    assert_eq!(app.active_pack.as_deref(), Some("music-pack"));
-    assert!(
-        app.visible_catalog_tools()
-            .iter()
-            .all(|tool| first_pack_ids.contains(&tool.id))
-    );
-    assert!(
-        app.visible_catalog_tools()
-            .iter()
-            .all(|tool| tool.is_launchable_app())
-    );
-    assert!(
-        !app.visible_catalog_tools()
-            .iter()
-            .any(|tool| tool.id == "mpv")
-    );
-
-    app.handle_key(key(KeyCode::Char('1')));
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
+    let selected_id = app
+        .selected_home_tool()
+        .expect("HOME selects an app")
+        .id
+        .clone();
     app.handle_key(key(KeyCode::Char('I')));
-    assert!(!app.queue.is_empty());
-    assert!(
-        app.queue
-            .iter()
-            .all(|job| first_pack_ids.contains(&job.item.tool_id))
-    );
+    assert_eq!(app.queue.len(), 1);
+    assert_eq!(app.queue[0].item.tool_id, selected_id);
 }
 
 #[test]
-fn agents_pack_opens_its_three_agent_apps() {
+fn home_library_filters_saved_and_running_apps() {
     let mut app = app();
-    app.pack_index = app
-        .catalog
-        .packs
+    app.favorites.insert("newsboat".to_string());
+    app.installed_tools.insert("yazi".to_string());
+    app.remember_app_view(
+        "t4e-running-filter".to_string(),
+        vec![ManagedApp {
+            pane_id: "%70".to_string(),
+            window_index: 0,
+            window_name: "yazi".to_string(),
+            pane_index: 0,
+            process: "yazi".to_string(),
+        }],
+    );
+
+    for (filter, expected) in [
+        (HomeFilter::Favorites, "newsboat"),
+        (HomeFilter::Installed, "yazi"),
+        (HomeFilter::Running, "yazi"),
+    ] {
+        app.home_filter_index = HomeFilter::ALL
+            .iter()
+            .position(|candidate| *candidate == filter)
+            .expect("filter exists");
+        let tools = app.home_tools();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].id, expected);
+    }
+}
+
+#[test]
+fn ai_category_lists_its_three_apps() {
+    let mut app = app();
+    app.home_filter_index = HomeFilter::ALL
         .iter()
-        .position(|pack| pack.id == "agents-pack")
-        .expect("agents pack exists");
+        .position(|filter| *filter == HomeFilter::Category(AppCategory::Ai))
+        .expect("AI category exists");
 
-    app.handle_key(key(KeyCode::Enter));
-
-    assert_eq!(app.active_pack.as_deref(), Some("agents-pack"));
-    let visible = app.visible_catalog_tools();
+    let visible = app.home_tools();
     assert_eq!(visible.len(), 3);
     assert!(
         visible
             .iter()
-            .all(|tool| tool.category == t4e::catalog::models::ToolCategory::Agents)
+            .all(|tool| tool.app_category() == AppCategory::Ai)
     );
 }
 
 #[test]
-fn global_catalog_entry_clears_a_transient_pack_filter() {
+fn global_catalog_entry_clears_a_transient_home_search() {
     let mut app = app();
-    app.handle_key(key(KeyCode::Enter));
-    assert_eq!(app.active_pack.as_deref(), Some("music-pack"));
     app.search_query = "stale-search".to_string();
 
-    app.handle_key(key(KeyCode::Char('q')));
     app.handle_key(key(KeyCode::Char('2')));
 
     assert_eq!(app.screen, Screen::Catalog);
-    assert!(app.active_pack.is_none());
     assert!(app.search_query.is_empty());
     assert_eq!(app.status, "Showing all catalog tools");
 }
@@ -1343,8 +1414,11 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
 }
 
 #[test]
-fn queue_run_schedules_pack_jobs_sequentially() {
+fn queue_run_schedules_multiple_app_jobs_sequentially() {
     let mut app = app();
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Char('I')));
+    app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Char('I')));
     assert!(app.queue.len() > 1);
     app.handle_key(key(KeyCode::Char('3')));
@@ -1404,7 +1478,7 @@ fn ai_home_composes_prompts_and_applies_stream_events() {
 }
 
 #[test]
-fn ai_context_describes_catalog_queue_and_live_workspace_state() {
+fn ai_context_describes_the_catalog_and_queue_without_legacy_workspaces() {
     let mut app = app();
     let tool = app
         .catalog
@@ -1432,8 +1506,8 @@ fn ai_context_describes_catalog_queue_and_live_workspace_state() {
     assert!(context.contains("platform: linux"));
     assert!(context.contains("yazi=Yazi (run: yazi)"));
     assert!(context.contains("yazi:Queued"));
-    assert!(context.contains("video-desk=Video Desk"));
-    assert!(context.contains("state: running as t4e-video"));
+    assert!(!context.contains("video-desk=Video Desk"));
+    assert!(!context.contains("workspaces:"));
 }
 
 #[test]
@@ -1454,31 +1528,17 @@ fn codex_stderr_diagnostic_does_not_replace_working_status() {
 }
 
 #[test]
-fn ai_workspace_action_requires_typed_approval_before_launch_effect() {
+fn ai_rejects_legacy_workspace_actions_hidden_from_the_main_product() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('5')));
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "workspace_launch".to_string(),
         target: "video-desk".to_string(),
     });
-    assert!(app.pending_ai_action.is_some());
+    assert!(app.pending_ai_action.is_none());
     assert!(app.take_effect().is_none());
-    app.apply_codex_event(CodexEvent::TurnCompleted("completed".to_string()));
-    assert!(app.ai_status.contains("Approval required"));
-
-    app.handle_key(key(KeyCode::Char('A')));
-    assert!(app.ai_confirmation.is_some());
-    for ch in "APPROVE workspace_launch video-desk".chars() {
-        app.handle_key(key(KeyCode::Char(ch)));
-    }
-    app.handle_key(key(KeyCode::Enter));
-
-    assert!(app.ai_confirmation.is_none());
-    assert_eq!(app.screen, Screen::Workspace);
-    assert!(matches!(
-        app.take_effect(),
-        Some(AppEffect::LaunchWorkspace(_))
-    ));
+    assert!(app.ai_status.contains("Rejected unsupported AI action"));
+    assert_eq!(app.screen, Screen::Agents);
 }
 
 #[test]

@@ -10,7 +10,7 @@ use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
 
 use super::events::Screen;
-use super::state::{AppState, LinkAction, NAVIGATION_TAB_LABELS};
+use super::state::{AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_LABELS};
 
 const ACCENT: Color = Color::Cyan;
 const MUTED: Color = Color::DarkGray;
@@ -76,15 +76,10 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
 
 fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let section = match app.screen {
-        Screen::Home => "Packs".to_string(),
-        Screen::Catalog => app
-            .active_pack
-            .as_ref()
-            .and_then(|id| app.catalog.packs.iter().find(|pack| &pack.id == id))
-            .map(|pack| pack.title.clone())
-            .unwrap_or_else(|| "All apps".to_string()),
+        Screen::Home => "HOME".to_string(),
+        Screen::Catalog => "App details".to_string(),
         Screen::Install => "Installs".to_string(),
-        Screen::Workspace => "Workspaces".to_string(),
+        Screen::Workspace => "Legacy workspace".to_string(),
         Screen::AppView => "Running apps".to_string(),
         Screen::Agents => "AI".to_string(),
         Screen::Logs => "Activity".to_string(),
@@ -122,70 +117,251 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 }
 
 fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
-    let chunks = responsive_split(area, 88);
-    let pack_items = app
-        .catalog
-        .packs
+    let [library_area, apps_area, information_area] = home_layout(area);
+    let library_sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(6)])
+        .split(library_area);
+    let library_filters = HomeFilter::ALL[..3]
         .iter()
-        .map(|pack| {
-            let app_count = pack
-                .tool_ids
-                .iter()
-                .filter_map(|id| app.catalog.tools.iter().find(|tool| &tool.id == id))
-                .filter(|tool| tool.is_launchable_app())
-                .count();
+        .map(|filter| {
             ListItem::new(format!(
-                "{:<24} {:>2} apps / {:>2} tools",
-                pack.title,
-                app_count,
-                pack.tool_ids.len()
+                "{:<14} {:>2}",
+                filter.label(),
+                app.home_filter_count(*filter)
             ))
         })
         .collect::<Vec<_>>();
-    let mut pack_state = ListState::default().with_selected(Some(app.pack_index));
+    let library_selected = (app.home_filter_index < 3).then_some(app.home_filter_index);
+    let mut library_state = ListState::default().with_selected(library_selected);
     frame.render_stateful_widget(
-        List::new(pack_items)
-            .block(panel("App packs"))
-            .highlight_style(selection_style())
+        List::new(library_filters)
+            .block(panel("Quick Access"))
+            .highlight_style(home_selection_style(
+                app.home_focus == HomeFocus::Views && app.home_filter_index < 3,
+            ))
             .highlight_symbol("> "),
-        chunks[0],
-        &mut pack_state,
+        library_sections[0],
+        &mut library_state,
     );
 
-    let summary = vec![
+    let categories = HomeFilter::ALL[3..]
+        .iter()
+        .map(|filter| {
+            ListItem::new(format!(
+                "{:<14} {:>2}",
+                filter.label(),
+                app.home_filter_count(*filter)
+            ))
+        })
+        .collect::<Vec<_>>();
+    let category_selected = app.home_filter_index.checked_sub(3);
+    let mut category_state = ListState::default().with_selected(category_selected);
+    frame.render_stateful_widget(
+        List::new(categories)
+            .block(panel("Apps"))
+            .highlight_style(home_selection_style(
+                app.home_focus == HomeFocus::Views && app.home_filter_index >= 3,
+            ))
+            .highlight_symbol("> "),
+        library_sections[1],
+        &mut category_state,
+    );
+
+    let tools = app.home_tools();
+    let app_items = tools
+        .iter()
+        .map(|tool| {
+            let state =
+                if app.is_tool_running(&tool.id) {
+                    "RUNNING"
+                } else if app.installed_tools.contains(&tool.id) {
+                    "INSTALLED"
+                } else if app.queue.iter().any(|job| {
+                    job.item.tool_id == tool.id && job.item.state == QueueState::Installing
+                }) {
+                    "INSTALLING"
+                } else {
+                    ""
+                };
+            ListItem::new(Line::from(vec![
+                Span::raw(format!(
+                    "{} ",
+                    if app.favorites.contains(&tool.id) {
+                        "*"
+                    } else {
+                        " "
+                    }
+                )),
+                Span::raw(format!("{:<19}", tool.name)),
+                Span::styled(
+                    format!("{:<14}", tool.app_category().label()),
+                    Style::default().fg(MUTED),
+                ),
+                Span::styled(
+                    state,
+                    if state == "RUNNING" {
+                        Style::default().fg(ACCENT)
+                    } else {
+                        Style::default().fg(Color::Green)
+                    },
+                ),
+            ]))
+        })
+        .collect::<Vec<_>>();
+    let app_selection = (!tools.is_empty()).then_some(app.home_app_index);
+    let mut app_state = ListState::default().with_selected(app_selection);
+    let app_title = if app.search_query.is_empty() {
+        format!("{} ({})", app.selected_home_filter().label(), tools.len())
+    } else {
+        format!(
+            "{} ({}) /{}",
+            app.selected_home_filter().label(),
+            tools.len(),
+            app.search_query
+        )
+    };
+    frame.render_stateful_widget(
+        List::new(app_items)
+            .block(panel(&app_title))
+            .highlight_style(home_selection_style(app.home_focus == HomeFocus::AppList))
+            .highlight_symbol("> "),
+        apps_area,
+        &mut app_state,
+    );
+
+    let mut information = if app.system_overview.logo.is_empty() {
+        app.system_overview
+            .lines
+            .iter()
+            .map(|line| Line::from(line.as_str()))
+            .collect::<Vec<_>>()
+    } else {
+        let logo_width = app
+            .system_overview
+            .logo
+            .iter()
+            .map(|line| line.chars().count())
+            .max()
+            .unwrap_or_default();
+        let row_count = app
+            .system_overview
+            .logo
+            .len()
+            .max(app.system_overview.lines.len());
+        (0..row_count)
+            .map(|index| {
+                let logo = app
+                    .system_overview
+                    .logo
+                    .get(index)
+                    .map_or("", String::as_str);
+                let mut spans = vec![Span::styled(
+                    format!("{logo:<logo_width$}"),
+                    Style::default().fg(ACCENT),
+                )];
+                if let Some(detail) = app.system_overview.lines.get(index) {
+                    spans.push(Span::raw(format!("  {detail}")));
+                }
+                Line::from(spans)
+            })
+            .collect::<Vec<_>>()
+    };
+    information.extend([
+        Line::from(""),
         Line::from(vec![
-            Span::styled("Catalog  ", Style::default().fg(ACCENT)),
-            Span::raw(format!("{} tools", app.catalog.tools.len())),
-        ]),
-        Line::from(vec![
-            Span::styled("Workspaces ", Style::default().fg(Color::Green)),
+            Span::styled("Available: ", Style::default().fg(ACCENT)),
             Span::raw(format!(
-                "{} workspace templates",
-                app.workspaces.workspaces.len()
+                "{} apps · {} tools",
+                app.catalog
+                    .tools
+                    .iter()
+                    .filter(|tool| tool.is_launchable_app())
+                    .count(),
+                app.catalog.tools.len()
             )),
         ]),
         Line::from(vec![
-            Span::styled("Queue    ", Style::default().fg(Color::Yellow)),
-            Span::raw(format!("{} planned installs", app.queue.len())),
+            Span::styled("Installs: ", Style::default().fg(Color::Yellow)),
+            Span::raw(format!("{} queued or completed", app.queue.len())),
         ]),
         Line::from(vec![
-            Span::styled("Saved    ", Style::default().fg(Color::Magenta)),
+            Span::styled("Saved: ", Style::default().fg(Color::Magenta)),
             Span::raw(format!(
                 "{} favorites, {} recents",
                 app.favorites.len(),
                 app.recents.len()
             )),
         ]),
+    ]);
+    if let Some(tool) = app.selected_home_tool() {
+        information.extend([
+            Line::from(""),
+            Line::styled(
+                tool.name.as_str(),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
+            Line::from(
+                tool.description
+                    .as_deref()
+                    .unwrap_or("No description available"),
+            ),
+            Line::from(format!(
+                "{} · {}",
+                tool.app_category().label(),
+                AppState::risk_label(tool.risk_level())
+            )),
+            Line::from(format!(
+                "Keys: {}",
+                if tool.key_hints.is_empty() {
+                    "See built-in help".to_string()
+                } else {
+                    tool.key_hints.join(" | ")
+                }
+            )),
+        ]);
+    }
+    information.extend([
         Line::from(""),
-        Line::from("Enter open pack   I install pack   c all apps"),
-        Line::from("Tab / Shift-Tab switch sections"),
-    ];
-    frame.render_widget(
-        Paragraph::new(summary)
-            .block(panel("System overview"))
-            .wrap(Wrap { trim: true }),
-        chunks[1],
-    );
+        Line::from("←/→ panel   Enter run   / search   I/U/R install/remove/reset"),
+    ]);
+    let information_title = format!("Information · {}", app.system_overview.source);
+    let information = Paragraph::new(information).block(panel(&information_title));
+    frame.render_widget(information, information_area);
+}
+
+fn home_layout(area: Rect) -> [Rect; 3] {
+    if area.width >= 110 {
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(24),
+                Constraint::Min(40),
+                Constraint::Length(48),
+            ])
+            .split(area);
+        return [columns[0], columns[1], columns[2]];
+    }
+
+    let columns = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Length(22), Constraint::Min(30)])
+        .split(area);
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Min(6), Constraint::Length(5)])
+        .split(columns[1]);
+    [columns[0], right[0], right[1]]
+}
+
+fn home_selection_style(focused: bool) -> Style {
+    if focused {
+        selection_style()
+    } else {
+        Style::default()
+            .fg(Color::Gray)
+            .add_modifier(Modifier::REVERSED)
+    }
 }
 
 fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
@@ -213,7 +389,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             ]))
         })
         .collect::<Vec<_>>();
-    let scope = app.active_pack.as_deref().unwrap_or("all packs");
+    let scope = "all tools";
     let title = if app.search_query.is_empty() {
         format!("Catalog ({}) - {}", tools.len(), scope)
     } else {
@@ -335,7 +511,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             lines.extend([
                 Line::from(""),
                 Line::styled(
-                    "Enter run  I install  U remove  R reinstall  f favorite  Backspace packs",
+                    "Enter run  I install  U remove  R reinstall  f favorite  Backspace HOME",
                     Style::default().fg(MUTED),
                 ),
             ]);
@@ -640,10 +816,7 @@ fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     }));
     status.extend([
         Line::from(""),
-        Line::styled(
-            "Enter/i prompt   x interrupt   A approve action",
-            Style::default().fg(MUTED),
-        ),
+        Line::styled("Enter/i prompt   x interrupt", Style::default().fg(MUTED)),
     ]);
     frame.render_widget(
         Paragraph::new(Text::from(status))
@@ -865,10 +1038,10 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Line::from("arrows / j k       move selection"),
-            Line::from("Enter               open a pack or run an app"),
+            Line::from("Enter               enter an app list or run the selected app"),
             Line::from("I / U / R           install / uninstall / reset and reinstall"),
             Line::from("Tab / Shift+Tab     switch dashboard tabs"),
-            Line::from("/                   search all catalog apps"),
+            Line::from("/                   search apps in the current HOME view"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
             Line::from("Activity Home / End jump to newest / oldest entry"),
             Line::from("Alt+Left / Right    switch running apps"),
@@ -876,8 +1049,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("Alt+Q               close the current app"),
             Line::from("Alt+M               toggle text selection and T4E mouse controls"),
             Line::from("Alt+O / Alt+C       open or copy a link from the current app"),
-            Line::from("Backspace / Esc     return to Packs outside a running app"),
-            Line::from("q                   return to Packs, then quit"),
+            Line::from("Backspace / Esc     return to HOME outside a running app"),
+            Line::from("q                   return to HOME, then quit"),
         ]
     };
     frame.render_widget(
@@ -956,12 +1129,15 @@ fn render_launch_options(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             .values
             .get(selection.value_index)
             .map_or(String::new(), |value| format!("  < {value} >"));
+        let setting = option
+            .output_filter
+            .map_or(option.flag.as_str(), |_| "lolcat");
         let line = format!(
             "{} [{}] {:<24} {}{}",
             if index == state.selected { ">" } else { " " },
             if selection.enabled { "x" } else { " " },
             option.label,
-            option.flag,
+            setting,
             value
         );
         lines.push(Line::styled(

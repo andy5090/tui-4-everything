@@ -17,7 +17,7 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
-use crate::catalog::models::InstallMethod;
+use crate::catalog::models::{InstallMethod, OutputFilter};
 use crate::codex::service::{CodexCommand, CodexService};
 use crate::installer::checks::{InstallChecker, SystemInstallChecker};
 use crate::installer::execution::{
@@ -219,17 +219,33 @@ fn process_effects(
                     .next()
                     .unwrap_or(request.tool_id.as_str())
                     .to_string();
-                match tmux.preflight(std::slice::from_ref(&executable)) {
+                let mut executables = vec![executable];
+                if request.output_filter == Some(OutputFilter::Lolcat) {
+                    executables.push("lolcat".to_string());
+                }
+                match tmux.preflight(&executables) {
                     Ok(preflight) if !preflight.tmux_available => app.apply_workspace_error(
                         "app launch",
                         &anyhow::anyhow!("tmux is not installed"),
                     ),
                     Ok(preflight) if !preflight.missing_commands.is_empty() => {
-                        app.install_then_launch(request);
+                        if preflight
+                            .missing_commands
+                            .iter()
+                            .any(|command| command == "lolcat")
+                            && !preflight
+                                .missing_commands
+                                .iter()
+                                .any(|command| command == &executables[0])
+                        {
+                            app.install_tool_then_launch("lolcat".to_string(), request);
+                        } else {
+                            app.install_then_launch(request);
+                        }
                     }
                     Ok(_) => {
                         let (width, height) = app_viewport_size(session).unwrap_or((80, 17));
-                        match tmux.launch_app_at_size_with_mode(
+                        match tmux.launch_app_at_size_with_mode_and_filter(
                             "t4e-apps",
                             "app-launcher",
                             &request.tool_id,
@@ -237,6 +253,7 @@ fn process_effects(
                             width,
                             height,
                             request.keep_open,
+                            request.output_filter,
                         ) {
                             Ok(_) => match tmux.list_apps("t4e-apps") {
                                 Ok(apps) => {

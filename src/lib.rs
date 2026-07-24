@@ -9,3 +9,4 @@ pub mod mcp;
 pub mod mux;
 pub mod security;
 pub mod storage;
+pub mod system_info;

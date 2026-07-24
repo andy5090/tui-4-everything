@@ -227,7 +227,7 @@ fn start_prompt(
 
 pub fn planner_prompt(environment_context: &str, user_request: &str) -> String {
     format!(
-        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from T4E's AI Home. T4E catalogs terminal apps, plans and executes approved installations, launches individual apps, and manages approved tmux workspaces containing those apps. Treat the supplied T4E runtime context as authoritative.\n\nYour job is to help the user operate this T4E environment. Refer to apps and workspaces by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. catalog_search and install_plan are read-only proposals. workspace_launch is side-effecting: clearly say it is proposed and requires explicit approval in T4E. T4E can launch and manage individual catalog apps from its pack UI; the current AI action surface can navigate to an app but cannot press Enter for the user. T4E, not you, owns installation, process lifecycle, tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: navigate T4E to a catalog app\n- install_plan: prepare an app installation plan in T4E\n- workspace_launch: propose launching a T4E workspace after approval\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
+        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from T4E's AI screen. T4E catalogs terminal apps, plans and executes approved installations, and launches individual apps from HOME. Treat the supplied T4E runtime context as authoritative.\n\nYour job is to help the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. catalog_search and install_plan are read-only navigation proposals. T4E can launch and manage individual catalog apps from HOME; the current AI action surface can navigate to an app but cannot press Enter for the user. T4E, not you, owns installation, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: navigate T4E to a catalog app\n- install_plan: prepare an app installation plan in T4E\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
     )
 }
 
@@ -360,7 +360,7 @@ pub fn bounded_action_schema() -> Value {
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["catalog_search", "install_plan", "workspace_launch"]
+                                "enum": ["catalog_search", "install_plan"]
                             },
                             "target": { "type": "string" }
                         },
@@ -438,7 +438,7 @@ mod tests {
         assert!(prompt.contains("not a generic coding assistant"));
         assert!(prompt.contains("plans and executes approved installations"));
         assert!(prompt.contains("launches individual apps"));
-        assert!(prompt.contains("manages approved tmux workspaces"));
+        assert!(prompt.contains("launches individual apps from HOME"));
         assert!(prompt.contains("T4E can launch and manage individual catalog apps"));
         assert!(prompt.contains("catalog apps: yazi=Yazi (run: yazi)"));
         assert!(prompt.ends_with("User request: What can you do here?"));

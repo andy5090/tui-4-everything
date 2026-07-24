@@ -5,7 +5,8 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use crate::catalog::models::{
-    CatalogRegistry, InstallMethod, Platform, RiskLevel, Tool, ToolCategory,
+    AppCategory, CatalogRegistry, InstallMethod, OutputFilter, Platform, RiskLevel, Tool,
+    ToolCategory,
 };
 use crate::codex::service::CodexEvent;
 use crate::installer::diagnostics::FailureDiagnostics;
@@ -19,14 +20,64 @@ use crate::storage::{
     LaunchOptionPreference, PersistentState, RecentItem, UserSettings, load_state,
     log_dir_for_state, save_state,
 };
+use crate::system_info::{SystemOverview, cached_system_overview};
 
 use super::events::Screen;
 
-pub const NAVIGATION_TAB_LABELS: [&str; 6] =
-    ["Packs", "Workspaces", "AI", "Activity", "Settings", "Help"];
+pub const NAVIGATION_TAB_LABELS: [&str; 5] = ["HOME", "AI", "Activity", "Settings", "Help"];
 
 fn navigation_tab_label(index: usize) -> &'static str {
-    NAVIGATION_TAB_LABELS.get(index).copied().unwrap_or("Packs")
+    NAVIGATION_TAB_LABELS.get(index).copied().unwrap_or("HOME")
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomeFilter {
+    AllApps,
+    Installed,
+    Favorites,
+    Recent,
+    Running,
+    Category(AppCategory),
+}
+
+impl HomeFilter {
+    pub const ALL: [Self; 14] = [
+        Self::Running,
+        Self::Favorites,
+        Self::Recent,
+        Self::AllApps,
+        Self::Installed,
+        Self::Category(AppCategory::Internet),
+        Self::Category(AppCategory::Media),
+        Self::Category(AppCategory::Files),
+        Self::Category(AppCategory::Editors),
+        Self::Category(AppCategory::Ai),
+        Self::Category(AppCategory::System),
+        Self::Category(AppCategory::Utilities),
+        Self::Category(AppCategory::Games),
+        Self::Category(AppCategory::Entertainment),
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::AllApps => "All Apps",
+            Self::Installed => "Installed",
+            Self::Favorites => "Favorites",
+            Self::Recent => "Recent",
+            Self::Running => "Running",
+            Self::Category(category) => category.label(),
+        }
+    }
+
+    pub fn is_category(self) -> bool {
+        matches!(self, Self::Category(_))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HomeFocus {
+    Views,
+    AppList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,6 +124,7 @@ pub struct ToolLaunchRequest {
     pub tool_id: String,
     pub command: String,
     pub keep_open: bool,
+    pub output_filter: Option<OutputFilter>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,8 +220,11 @@ pub struct AppState {
     pub agent_index: usize,
     pub install_index: usize,
     pub activity_scroll: usize,
-    pub pack_index: usize,
+    pub home_filter_index: usize,
+    pub home_app_index: usize,
+    pub home_focus: HomeFocus,
     pub settings_index: usize,
+    pub system_overview: SystemOverview,
     pub search_query: String,
     pub search_mode: bool,
     pub should_quit: bool,
@@ -178,7 +233,6 @@ pub struct AppState {
     pub logs: Vec<String>,
     pub status: String,
     pub confirmation: Option<InstallConfirmation>,
-    pub active_pack: Option<String>,
     pub favorites: BTreeSet<String>,
     pub installed_tools: BTreeSet<String>,
     pub uninstalling_tools: BTreeSet<String>,
@@ -195,6 +249,7 @@ pub struct AppState {
     pub launch_options: Option<LaunchOptionsState>,
     pub launch_approval: Option<LaunchApproval>,
     pending_tool_launch: Option<ToolLaunchRequest>,
+    pending_tool_install: Option<String>,
     approved_camera_tools: BTreeSet<String>,
     return_after_app_close: bool,
     pub ai_account: String,
@@ -256,8 +311,11 @@ impl AppState {
             agent_index: 0,
             install_index: 0,
             activity_scroll: 0,
-            pack_index: 0,
+            home_filter_index: 3,
+            home_app_index: 0,
+            home_focus: HomeFocus::Views,
             settings_index: 0,
+            system_overview: cached_system_overview(),
             search_query: String::new(),
             search_mode: false,
             should_quit: false,
@@ -266,7 +324,6 @@ impl AppState {
             logs: saved.logs,
             status: "Ready".to_string(),
             confirmation: None,
-            active_pack: None,
             favorites: saved.favorites.into_iter().collect(),
             installed_tools: BTreeSet::new(),
             uninstalling_tools: BTreeSet::new(),
@@ -283,6 +340,7 @@ impl AppState {
             launch_options: None,
             launch_approval: None,
             pending_tool_launch: None,
+            pending_tool_install: None,
             approved_camera_tools: BTreeSet::new(),
             return_after_app_close: false,
             ai_account: "connecting".to_string(),
@@ -374,8 +432,7 @@ impl AppState {
             KeyCode::Char('1') => self.screen = Screen::Home,
             KeyCode::Char('2') => self.open_all_catalog(),
             KeyCode::Char('3') => self.screen = Screen::Install,
-            KeyCode::Char('4') => self.screen = Screen::Workspace,
-            KeyCode::Char('5') => self.screen = Screen::Agents,
+            KeyCode::Char('4') | KeyCode::Char('5') => self.screen = Screen::Agents,
             KeyCode::Char('6') => self.screen = Screen::Logs,
             KeyCode::Char('7') => self.screen = Screen::Settings,
             KeyCode::Char('8') => self.screen = Screen::Help,
@@ -406,7 +463,9 @@ impl AppState {
             MouseEventKind::Down(MouseButton::Left) if mouse.row < 3 => {
                 self.select_navigation_tab_at(mouse.column);
             }
-            MouseEventKind::Down(MouseButton::Left) => self.select_list_row(mouse.row),
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.select_list_row(mouse.column, mouse.row)
+            }
             _ => {}
         }
     }
@@ -414,11 +473,11 @@ impl AppState {
     pub fn navigation_tab_index(&self) -> usize {
         match self.screen {
             Screen::Home | Screen::Catalog | Screen::Install => 0,
-            Screen::Workspace => 1,
-            Screen::Agents => 2,
-            Screen::Logs => 3,
-            Screen::Settings => 4,
-            Screen::Help => 5,
+            Screen::Workspace => 0,
+            Screen::Agents => 1,
+            Screen::Logs => 2,
+            Screen::Settings => 3,
+            Screen::Help => 4,
             Screen::AppView => 0,
         }
     }
@@ -435,11 +494,10 @@ impl AppState {
     fn open_navigation_tab(&mut self, index: usize) {
         self.screen = match index {
             0 => Screen::Home,
-            1 => Screen::Workspace,
-            2 => Screen::Agents,
-            3 => Screen::Logs,
-            4 => Screen::Settings,
-            5 => Screen::Help,
+            1 => Screen::Agents,
+            2 => Screen::Logs,
+            3 => Screen::Settings,
+            4 => Screen::Help,
             _ => return,
         };
         self.status = format!("Opened {}", navigation_tab_label(index));
@@ -462,17 +520,6 @@ impl AppState {
         self.catalog
             .tools
             .iter()
-            .filter(|tool| tool.category != ToolCategory::Agents || self.active_pack.is_some())
-            .filter(|tool| self.active_pack.is_none() || tool.is_launchable_app())
-            .filter(|tool| {
-                self.active_pack.as_ref().is_none_or(|pack_id| {
-                    self.catalog
-                        .packs
-                        .iter()
-                        .find(|pack| &pack.id == pack_id)
-                        .is_some_and(|pack| pack.tool_ids.contains(&tool.id))
-                })
-            })
             .filter(|tool| {
                 query.is_empty()
                     || tool.name.to_ascii_lowercase().contains(&query)
@@ -483,6 +530,141 @@ impl AppState {
                         .any(|tag| tag.to_ascii_lowercase().contains(&query))
             })
             .collect()
+    }
+
+    pub fn selected_home_filter(&self) -> HomeFilter {
+        HomeFilter::ALL
+            .get(self.home_filter_index)
+            .copied()
+            .unwrap_or(HomeFilter::AllApps)
+    }
+
+    pub fn home_tools(&self) -> Vec<&Tool> {
+        let filter = self.selected_home_filter();
+        let query = self.search_query.to_ascii_lowercase();
+        let matches_query = |tool: &&Tool| {
+            query.is_empty()
+                || tool.name.to_ascii_lowercase().contains(&query)
+                || tool.id.to_ascii_lowercase().contains(&query)
+                || tool
+                    .tags
+                    .iter()
+                    .any(|tag| tag.to_ascii_lowercase().contains(&query))
+        };
+
+        match filter {
+            HomeFilter::Recent => self
+                .recents
+                .iter()
+                .filter(|recent| recent.kind == "tool")
+                .filter_map(|recent| {
+                    self.catalog
+                        .tools
+                        .iter()
+                        .find(|tool| tool.id == recent.id && tool.is_launchable_app())
+                })
+                .filter(matches_query)
+                .collect(),
+            HomeFilter::Running => self
+                .app_view
+                .as_ref()
+                .into_iter()
+                .flat_map(|view| &view.apps)
+                .filter_map(|running| {
+                    self.catalog
+                        .tools
+                        .iter()
+                        .find(|tool| tool.id == running.window_name && tool.is_launchable_app())
+                })
+                .filter(matches_query)
+                .collect(),
+            _ => self
+                .catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app())
+                .filter(|tool| match filter {
+                    HomeFilter::AllApps => true,
+                    HomeFilter::Installed => self.installed_tools.contains(&tool.id),
+                    HomeFilter::Favorites => self.favorites.contains(&tool.id),
+                    HomeFilter::Category(category) => tool.app_category() == category,
+                    HomeFilter::Recent | HomeFilter::Running => unreachable!(),
+                })
+                .filter(matches_query)
+                .collect(),
+        }
+    }
+
+    pub fn selected_home_tool(&self) -> Option<&Tool> {
+        self.home_tools().get(self.home_app_index).copied()
+    }
+
+    pub fn home_filter_count(&self, filter: HomeFilter) -> usize {
+        match filter {
+            HomeFilter::AllApps => self
+                .catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app())
+                .count(),
+            HomeFilter::Installed => self
+                .catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app() && self.installed_tools.contains(&tool.id))
+                .count(),
+            HomeFilter::Favorites => self
+                .catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app() && self.favorites.contains(&tool.id))
+                .count(),
+            HomeFilter::Recent => self
+                .recents
+                .iter()
+                .filter(|item| {
+                    item.kind == "tool"
+                        && self
+                            .catalog
+                            .tools
+                            .iter()
+                            .any(|tool| tool.id == item.id && tool.is_launchable_app())
+                })
+                .count(),
+            HomeFilter::Running => self.app_view.as_ref().map_or(0, |view| {
+                view.apps
+                    .iter()
+                    .filter(|running| {
+                        self.catalog
+                            .tools
+                            .iter()
+                            .any(|tool| tool.id == running.window_name && tool.is_launchable_app())
+                    })
+                    .count()
+            }),
+            HomeFilter::Category(category) => self
+                .catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app() && tool.app_category() == category)
+                .count(),
+        }
+    }
+
+    pub fn is_tool_running(&self, tool_id: &str) -> bool {
+        self.app_view.as_ref().is_some_and(|view| {
+            view.apps
+                .iter()
+                .any(|running| running.window_name == tool_id)
+        })
+    }
+
+    fn selected_action_tool(&self) -> Option<&Tool> {
+        if self.screen == Screen::Home {
+            self.selected_home_tool()
+        } else {
+            self.selected_catalog_tool()
+        }
     }
 
     pub fn agent_tools(&self) -> Vec<&Tool> {
@@ -527,30 +709,6 @@ impl AppState {
             })
             .collect::<Vec<_>>()
             .join("; ");
-        let workspaces = self
-            .workspaces
-            .workspaces
-            .iter()
-            .map(|workspace| {
-                let session = self
-                    .managed_sessions
-                    .iter()
-                    .find(|session| session.workspace_id == workspace.id);
-                let runtime = session.map_or_else(
-                    || "stopped".to_string(),
-                    |session| format!("running as {}", session.name),
-                );
-                format!(
-                    "{}={} (mux: {:?}, apps: {}, state: {})",
-                    workspace.id,
-                    workspace.title,
-                    workspace.mux,
-                    workspace.recommended_tools.join(","),
-                    runtime
-                )
-            })
-            .collect::<Vec<_>>()
-            .join("; ");
         let queue = if self.queue.is_empty() {
             "empty".to_string()
         } else {
@@ -561,9 +719,7 @@ impl AppState {
                 .join(", ")
         };
 
-        format!(
-            "platform: {platform}\ninstall queue: {queue}\ncatalog apps: {apps}\nworkspaces: {workspaces}"
-        )
+        format!("platform: {platform}\ninstall queue: {queue}\ncatalog apps: {apps}")
     }
 
     pub fn risk_label(risk: RiskLevel) -> &'static str {
@@ -641,21 +797,17 @@ impl AppState {
         if state == QueueState::Success {
             self.installed_tools.insert(tool_id.clone());
             self.push_recent(tool_id.clone(), "tool");
-            if self
-                .pending_tool_launch
-                .as_ref()
-                .is_some_and(|request| request.tool_id == tool_id)
+            if self.pending_tool_install.as_deref() == Some(tool_id.as_str())
                 && let Some(request) = self.pending_tool_launch.take()
             {
+                self.pending_tool_install = None;
                 self.effects.push_back(AppEffect::LaunchTool(request));
             }
         } else if state == QueueState::Failed
-            && self
-                .pending_tool_launch
-                .as_ref()
-                .is_some_and(|request| request.tool_id == tool_id)
+            && self.pending_tool_install.as_deref() == Some(tool_id.as_str())
         {
             self.pending_tool_launch = None;
+            self.pending_tool_install = None;
         }
         self.trim_logs();
         if self.queue_running {
@@ -664,12 +816,9 @@ impl AppState {
     }
 
     pub fn apply_install_authorization_error(&mut self, tool_id: &str, error: &anyhow::Error) {
-        if self
-            .pending_tool_launch
-            .as_ref()
-            .is_some_and(|request| request.tool_id == tool_id)
-        {
+        if self.pending_tool_install.as_deref() == Some(tool_id) {
             self.pending_tool_launch = None;
+            self.pending_tool_install = None;
         }
         self.queue_running = false;
         self.status = format!("Authorization cancelled for {tool_id}: {error}");
@@ -719,7 +868,10 @@ impl AppState {
 
     pub fn apply_managed_sessions(&mut self, sessions: Vec<ManagedSession>) {
         self.managed_sessions = sessions;
-        self.status = format!("{} running workspaces", self.managed_sessions.len());
+        self.status = match self.managed_sessions.len() {
+            0 => "No background apps running".to_string(),
+            count => format!("{count} apps running in background"),
+        };
     }
 
     pub fn apply_installed_tools(&mut self, tool_ids: BTreeSet<String>) {
@@ -926,28 +1078,16 @@ impl AppState {
             }
             CodexEvent::ActionProposed { kind, target } => match kind.as_str() {
                 "catalog_search" => {
-                    self.active_pack = None;
                     self.search_query = target.clone();
                     self.catalog_index = 0;
                     self.screen = Screen::Catalog;
                     self.status = format!("AI searched the catalog for {target}");
                 }
                 "install_plan" if self.catalog.tools.iter().any(|tool| tool.id == target) => {
-                    self.active_pack = None;
                     self.search_query = target.clone();
                     self.catalog_index = 0;
                     self.screen = Screen::Catalog;
                     self.status = format!("Review the install plan for {target}");
-                }
-                "workspace_launch"
-                    if self
-                        .workspaces
-                        .workspaces
-                        .iter()
-                        .any(|workspace| workspace.id == target) =>
-                {
-                    self.pending_ai_action = Some(AiAction { kind, target });
-                    self.ai_status = "Workspace launch proposed; press A to approve".to_string();
                 }
                 _ => {
                     self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
@@ -988,10 +1128,12 @@ impl AppState {
             KeyCode::Backspace => {
                 self.search_query.pop();
                 self.catalog_index = 0;
+                self.home_app_index = 0;
             }
             KeyCode::Char(ch) => {
                 self.search_query.push(ch);
                 self.catalog_index = 0;
+                self.home_app_index = 0;
             }
             _ => {}
         }
@@ -1084,15 +1226,34 @@ impl AppState {
     fn handle_screen_key(&mut self, code: KeyCode) {
         match self.screen {
             Screen::Home => match code {
-                KeyCode::Down | KeyCode::Char('j') => self.move_pack(1),
-                KeyCode::Up | KeyCode::Char('k') => self.move_pack(-1),
-                KeyCode::Enter => self.open_selected_pack(),
-                KeyCode::Char('I') => self.queue_selected_pack(),
+                KeyCode::Down | KeyCode::Char('j') => self.move_home_selection(1),
+                KeyCode::Up | KeyCode::Char('k') => self.move_home_selection(-1),
+                KeyCode::Left | KeyCode::Char('h') => self.home_focus = HomeFocus::Views,
+                KeyCode::Right | KeyCode::Char('l') => {
+                    if !self.home_tools().is_empty() {
+                        self.home_focus = HomeFocus::AppList;
+                    }
+                }
+                KeyCode::Enter if self.home_focus == HomeFocus::Views => {
+                    if self.home_tools().is_empty() {
+                        self.status = format!("No apps in {}", self.selected_home_filter().label());
+                    } else {
+                        self.home_focus = HomeFocus::AppList;
+                        self.status = format!("Browsing {}", self.selected_home_filter().label());
+                    }
+                }
+                KeyCode::Enter => self.request_selected_tool_launch(),
+                KeyCode::Char('/') => {
+                    self.home_focus = HomeFocus::AppList;
+                    self.search_mode = true;
+                }
+                KeyCode::Char('I') => self.queue_selected_tool(),
+                KeyCode::Char('U') => self.request_selected_uninstall(),
+                KeyCode::Char('R') => self.request_selected_reinstall(),
+                KeyCode::Char('f') => self.toggle_favorite(),
                 KeyCode::Char('c') => self.open_all_catalog(),
                 KeyCode::Char('i') => self.screen = Screen::Install,
-                KeyCode::Char('w') => self.screen = Screen::Workspace,
                 KeyCode::Char('a') => self.screen = Screen::Agents,
-                KeyCode::Char('l') => self.screen = Screen::Logs,
                 KeyCode::Char('s') => self.screen = Screen::Settings,
                 _ => {}
             },
@@ -1105,11 +1266,6 @@ impl AppState {
                 KeyCode::Char('U') => self.request_selected_uninstall(),
                 KeyCode::Char('R') => self.request_selected_reinstall(),
                 KeyCode::Char('f') => self.toggle_favorite(),
-                KeyCode::Char('p') => {
-                    self.active_pack = None;
-                    self.catalog_index = 0;
-                    self.status = "Showing all catalog tools".to_string();
-                }
                 _ => {}
             },
             Screen::Install => match code {
@@ -1348,7 +1504,7 @@ impl AppState {
 
     fn move_current_selection(&mut self, delta: isize) {
         match self.screen {
-            Screen::Home => self.move_pack(delta),
+            Screen::Home => self.move_home_selection(delta),
             Screen::Catalog => self.move_catalog(delta),
             Screen::Install => self.move_install(delta),
             Screen::Workspace => self.move_workspace(delta),
@@ -1360,12 +1516,34 @@ impl AppState {
         }
     }
 
-    fn select_list_row(&mut self, row: u16) {
+    fn select_list_row(&mut self, column: u16, row: u16) {
         let Some(index) = row.checked_sub(4).map(usize::from) else {
             return;
         };
+        if self.screen == Screen::Home {
+            self.home_focus = if column < 24 {
+                HomeFocus::Views
+            } else {
+                HomeFocus::AppList
+            };
+        }
         match self.screen {
-            Screen::Home if index < self.catalog.packs.len() => self.pack_index = index,
+            Screen::Home if self.home_focus == HomeFocus::Views => {
+                let filter_index = if (4..=6).contains(&row) {
+                    Some(usize::from(row - 4))
+                } else if row >= 9 {
+                    Some(3 + usize::from(row - 9))
+                } else {
+                    None
+                };
+                if let Some(filter_index) =
+                    filter_index.filter(|index| *index < HomeFilter::ALL.len())
+                {
+                    self.home_filter_index = filter_index;
+                    self.home_app_index = 0;
+                }
+            }
+            Screen::Home if index < self.home_tools().len() => self.home_app_index = index,
             Screen::Catalog if index < self.visible_catalog_tools().len() => {
                 self.catalog_index = index;
             }
@@ -1419,8 +1597,18 @@ impl AppState {
         self.install_index = move_index(self.install_index, self.queue.len(), delta);
     }
 
-    fn move_pack(&mut self, delta: isize) {
-        self.pack_index = move_index(self.pack_index, self.catalog.packs.len(), delta);
+    fn move_home_selection(&mut self, delta: isize) {
+        match self.home_focus {
+            HomeFocus::Views => {
+                self.home_filter_index =
+                    move_index(self.home_filter_index, HomeFilter::ALL.len(), delta);
+                self.home_app_index = 0;
+            }
+            HomeFocus::AppList => {
+                self.home_app_index =
+                    move_index(self.home_app_index, self.home_tools().len(), delta);
+            }
+        }
     }
 
     fn move_setting(&mut self, delta: isize) {
@@ -1428,15 +1616,15 @@ impl AppState {
     }
 
     fn queue_selected_tool(&mut self) {
-        let Some(tool) = self.selected_catalog_tool() else {
-            self.status = "No catalog tool selected".to_string();
+        let Some(tool) = self.selected_action_tool() else {
+            self.status = "No app selected".to_string();
             return;
         };
         self.queue_tool_ids(vec![tool.id.clone()]);
     }
 
     fn request_selected_uninstall(&mut self) {
-        let Some(tool) = self.selected_catalog_tool() else {
+        let Some(tool) = self.selected_action_tool() else {
             return;
         };
         let tool_id = tool.id.clone();
@@ -1453,7 +1641,7 @@ impl AppState {
     }
 
     fn request_selected_reinstall(&mut self) {
-        let Some(tool) = self.selected_catalog_tool() else {
+        let Some(tool) = self.selected_action_tool() else {
             return;
         };
         let tool_id = tool.id.clone();
@@ -1481,7 +1669,7 @@ impl AppState {
     }
 
     fn request_selected_tool_launch(&mut self) {
-        let Some(tool) = self.selected_catalog_tool() else {
+        let Some(tool) = self.selected_action_tool() else {
             self.status = "No app selected".to_string();
             return;
         };
@@ -1523,6 +1711,7 @@ impl AppState {
                     tool_id,
                     command,
                     keep_open,
+                    output_filter: None,
                 },
             );
             return;
@@ -1604,6 +1793,7 @@ impl AppState {
                             shell_quote(value)
                         ),
                         keep_open: tool.run.keep_open,
+                        output_filter: None,
                     }));
                 self.status = format!("Opening {}", tool.name);
             }
@@ -1682,6 +1872,7 @@ impl AppState {
             return;
         };
         let mut command = tool.run_command_for_current_platform().to_string();
+        let mut output_filter = None;
         let mut preferences = BTreeMap::new();
         for (option, selection) in tool.run_options.iter().zip(&options.selections) {
             preferences.insert(
@@ -1694,11 +1885,16 @@ impl AppState {
             if !selection.enabled {
                 continue;
             }
-            command.push(' ');
-            command.push_str(&option.flag);
+            if !option.flag.is_empty() {
+                command.push(' ');
+                command.push_str(&option.flag);
+            }
             if let Some(value) = option.values.get(selection.value_index) {
                 command.push(' ');
                 command.push_str(value);
+            }
+            if option.output_filter.is_some() {
+                output_filter = option.output_filter;
             }
         }
         let tool_id = tool.id.clone();
@@ -1711,6 +1907,7 @@ impl AppState {
                 tool_id,
                 command,
                 keep_open,
+                output_filter,
             },
         );
         if self.launch_approval.is_none() {
@@ -1760,7 +1957,12 @@ impl AppState {
 
     pub fn install_then_launch(&mut self, request: ToolLaunchRequest) {
         let tool_id = request.tool_id.clone();
+        self.install_tool_then_launch(tool_id, request);
+    }
+
+    pub fn install_tool_then_launch(&mut self, tool_id: String, request: ToolLaunchRequest) {
         self.pending_tool_launch = Some(request);
+        self.pending_tool_install = Some(tool_id.clone());
 
         if let Some(index) = self
             .queue
@@ -1789,38 +1991,18 @@ impl AppState {
     }
 
     fn return_to_main(&mut self) {
-        if self.screen == Screen::Catalog && self.active_pack.is_some() {
-            self.active_pack = None;
+        if self.screen == Screen::Catalog {
             self.search_query.clear();
         }
         self.screen = Screen::Home;
     }
 
-    fn open_selected_pack(&mut self) {
-        let Some(pack) = self.catalog.packs.get(self.pack_index) else {
-            return;
-        };
-        self.active_pack = Some(pack.id.clone());
-        self.catalog_index = 0;
-        self.screen = Screen::Catalog;
-        self.status = format!("Viewing {}", pack.title);
-    }
-
     fn open_all_catalog(&mut self) {
-        self.active_pack = None;
         self.search_query.clear();
         self.search_mode = false;
         self.catalog_index = 0;
         self.screen = Screen::Catalog;
         self.status = "Showing all catalog tools".to_string();
-    }
-
-    fn queue_selected_pack(&mut self) {
-        let Some(pack) = self.catalog.packs.get(self.pack_index) else {
-            return;
-        };
-        let ids = pack.tool_ids.clone();
-        self.queue_tool_ids(ids);
     }
 
     fn queue_tool_ids(&mut self, tool_ids: Vec<String>) {
@@ -1847,7 +2029,7 @@ impl AppState {
     }
 
     fn toggle_favorite(&mut self) {
-        let Some(tool_id) = self.selected_catalog_tool().map(|tool| tool.id.clone()) else {
+        let Some(tool_id) = self.selected_action_tool().map(|tool| tool.id.clone()) else {
             return;
         };
         let favorite = self.favorites.insert(tool_id.clone());
@@ -1997,6 +2179,7 @@ impl AppState {
                 self.confirmation = None;
                 self.queue_running = false;
                 self.pending_tool_launch = None;
+                self.pending_tool_install = None;
                 self.status = "Installation confirmation cancelled".to_string();
             }
             KeyCode::Backspace => {
@@ -2363,7 +2546,8 @@ fn uninstall_command(
         InstallMethod::YoutubeTui => "rm -f \"$HOME/.local/bin/t4e-youtube-tui\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && (cargo uninstall youtube-tui || ! command -v youtube-tui >/dev/null 2>&1)".to_string(),
         InstallMethod::Yewtube => "rm -f \"$HOME/.local/bin/t4e-yewtube\" && if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq yewtube; then pipx uninstall yewtube; fi".to_string(),
         InstallMethod::AsciiCamera => {
-            "rm -f \"$HOME/.local/bin/t4e-ascii-camera\"".to_string()
+            "rm -f \"$HOME/.local/bin/t4e-ascii-camera\" \"$HOME/.local/bin/t4e-ascii-camera-v2\""
+                .to_string()
         }
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
         InstallMethod::Fastfetch if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' fastfetch 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch; fi".to_string(),

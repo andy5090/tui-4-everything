@@ -76,7 +76,7 @@ tools:
         default_value: "framerate=30"
     checks:
       - which: "mpv"
-      - which: "t4e-ascii-camera"
+      - which: "t4e-ascii-camera-v2"
     installers:
       - platform: macos
         method: ascii_camera
@@ -857,15 +857,14 @@ tools:
         package_hints: ["sl"]
   - id: lolcat
     name: "lolcat"
-    description: "Render piped text with animated rainbow coloring."
+    description: "Colorize compatible command output with a rainbow effect."
     category: fun
-    tags: []
+    tags: [support]
     audience: general
     capabilities: []
     exposure: starter
     run:
-      cmd: "lolcat /etc/hosts"
-      keep_open: true
+      cmd: "lolcat"
     installers:
       - platform: macos
         method: brew
@@ -884,6 +883,10 @@ tools:
     run:
       cmd: "cowsay T4E"
       keep_open: true
+    run_options:
+      - id: rainbow-output
+        label: "Rainbow output"
+        output_filter: lolcat
     installers:
       - platform: macos
         method: brew
@@ -902,6 +905,10 @@ tools:
     run:
       cmd: "fortune"
       keep_open: true
+    run_options:
+      - id: rainbow-output
+        label: "Rainbow output"
+        output_filter: lolcat
     installers:
       - platform: macos
         method: brew

@@ -3,7 +3,8 @@ use std::path::Path;
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::{
-    Capability, Exposure, InstallMethod, Platform, RiskLevel, ToolCategory,
+    AppCategory, Capability, Exposure, InstallMethod, OutputFilter, Platform, RiskLevel,
+    ToolCategory,
 };
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
@@ -209,6 +210,30 @@ fn registry_loads_and_validates() {
 }
 
 #[test]
+fn every_home_application_has_one_non_empty_os_category() {
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+    let launchable_count = catalog
+        .tools
+        .iter()
+        .filter(|tool| tool.is_launchable_app())
+        .count();
+    let categorized_count = AppCategory::ALL
+        .iter()
+        .map(|category| {
+            let count = catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app() && tool.app_category() == *category)
+                .count();
+            assert!(count > 0, "{} category is empty", category.label());
+            count
+        })
+        .sum::<usize>();
+
+    assert_eq!(categorized_count, launchable_count);
+}
+
+#[test]
 fn launchable_apps_belong_to_exactly_one_pack() {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
     let mut memberships = catalog
@@ -268,7 +293,6 @@ fn glow_and_read_only_helpers_belong_to_the_viewers_pack() {
 fn one_shot_fun_tools_have_visible_default_output() {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
     let expected = [
-        ("lolcat", "lolcat /etc/hosts"),
         ("cowsay", "cowsay T4E"),
         ("fortune", "fortune"),
         ("fastfetch", "fastfetch"),
@@ -282,6 +306,23 @@ fn one_shot_fun_tools_have_visible_default_output() {
             .expect("one-shot tool exists");
         assert_eq!(tool.run.cmd, command);
         assert!(tool.run.keep_open, "{tool_id} output must remain visible");
+    }
+
+    let lolcat = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "lolcat")
+        .expect("lolcat support tool exists");
+    assert!(!lolcat.is_launchable_app());
+    for tool_id in ["cowsay", "fortune"] {
+        let tool = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == tool_id)
+            .expect("compatible app exists");
+        assert!(tool.run_options.iter().any(|option| {
+            option.id == "rainbow-output" && option.output_filter == Some(OutputFilter::Lolcat)
+        }));
     }
 }
 
