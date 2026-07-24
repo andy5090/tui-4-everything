@@ -6,7 +6,7 @@ packs:
   - id: video-pack
     title: Video Pack
     exposure: starter
-    tool_ids: [mpv, yewtube, youtube-tui, tplay, yt-dlp, ffmpeg, streamlink]
+    tool_ids: [ascii-camera, mpv, yewtube, youtube-tui, tplay, yt-dlp, ffmpeg, streamlink]
   - id: podcasts-reading-pack
     title: Podcasts & News Pack
     exposure: starter
@@ -41,6 +41,52 @@ packs:
     tool_ids: [claude-code, codex-cli, opencode]
 
 tools:
+  - id: ascii-camera
+    name: "ASCII Camera"
+    description: "Render a live camera feed as colored terminal character art without OpenCV."
+    key_hints: ["q quit", "d dithering (caca)", "c color mode (caca)"]
+    category: entertainment
+    tags: []
+    audience: general
+    capabilities: [CAMERA_CAPTURE]
+    exposure: starter
+    run:
+      cmd: "t4e-ascii-camera"
+    run_options:
+      - id: device
+        label: "Camera device"
+        flag: "--device"
+        values: ["0", "1", "2", "3"]
+        default_enabled: true
+        default_value: "0"
+      - id: renderer
+        label: "Terminal renderer"
+        flag: "--vo"
+        values: ["tct", "caca"]
+        default_enabled: true
+        default_value: "tct"
+      - id: mirror
+        label: "Mirror horizontally"
+        flag: "--vf=hflip"
+        default_value: null
+      - id: input-fps
+        label: "Camera framerate"
+        flag: "--demuxer-lavf-o"
+        values: ["framerate=15", "framerate=24", "framerate=30"]
+        default_value: "framerate=30"
+    checks:
+      - which: "mpv"
+      - which: "t4e-ascii-camera"
+    installers:
+      - platform: macos
+        method: ascii_camera
+        package_hints: ["mpv"]
+        executable: "t4e-ascii-camera"
+      - platform: linux
+        method: ascii_camera
+        package_hints: ["mpv"]
+        system_packages: ["mpv"]
+        executable: "t4e-ascii-camera"
   - id: spotatui
     name: "Spotatui"
     description: "A Spotify TUI focused on browsing, discovery, and playback control."

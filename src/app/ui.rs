@@ -63,6 +63,8 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         render_launch_argument(frame, app, area);
     } else if app.launch_options.is_some() {
         render_launch_options(frame, app, area);
+    } else if app.launch_approval.is_some() {
+        render_launch_approval(frame, app, area);
     } else if app.uninstall_confirmation.is_some() {
         render_uninstall_confirmation(frame, app, area);
     } else if app.confirmation.is_some() {
@@ -775,7 +777,7 @@ fn risk_explanation(risk: RiskLevel) -> &'static str {
     match risk {
         RiskLevel::Safe => "app-owned config, cache, and UI state only",
         RiskLevel::Low => "network, account sign-in, or selected-file reads",
-        RiskLevel::High => "can write, synchronize, or delete selected files",
+        RiskLevel::High => "camera capture, file writes, synchronization, or deletion",
         RiskLevel::Danger => "system changes, commands, or autonomous actions",
     }
 }
@@ -813,7 +815,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
             Line::from("SAFE none | LOW network, account, or file read"),
-            Line::from("HIGH file write or delete"),
+            Line::from("HIGH camera capture, file write, or delete"),
             Line::from("DANGER system, commands, or autonomous operation"),
             Line::from("Highest capability level becomes the app risk level"),
             Line::styled(
@@ -837,7 +839,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
                 "LOW      NETWORK, ACCOUNT, or FILE_READ: remote access, sign-in, or reading selected files",
             ),
             Line::from(
-                "HIGH     FILE_WRITE or DELETE: can create, change, synchronize, or remove selected files",
+                "HIGH     CAMERA_CAPTURE, FILE_WRITE, or DELETE: can capture video or change selected files",
             ),
             Line::from(
                 "DANGER   SYSTEM, COMMANDS, or AUTONOMOUS: system changes, general commands, or agentic action",
@@ -1013,6 +1015,36 @@ fn render_launch_argument(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     frame.render_widget(
         Paragraph::new(content)
             .block(panel("Launch input"))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
+}
+
+fn render_launch_approval(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(approval) = &app.launch_approval else {
+        return;
+    };
+    let popup = centered_rect(76, 12, area);
+    frame.render_widget(Clear, popup);
+    let content = Text::from(vec![
+        Line::styled(
+            "Camera access required",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Line::from(""),
+        Line::from(format!("app: {}", approval.tool_name)),
+        Line::from("capability: CAMERA_CAPTURE (HIGH)"),
+        Line::from(""),
+        Line::from("This app will read live frames from the selected camera."),
+        Line::from("Approval lasts for the current T4E session."),
+        Line::from(""),
+        Line::styled("Enter allow   Esc cancel", Style::default().fg(MUTED)),
+    ]);
+    frame.render_widget(
+        Paragraph::new(content)
+            .block(panel("Sensitive device approval"))
             .wrap(Wrap { trim: false }),
         popup,
     );

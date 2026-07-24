@@ -152,6 +152,12 @@ pub struct AiActionConfirmation {
     pub input: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct LaunchApproval {
+    pub tool_name: String,
+    pub request: ToolLaunchRequest,
+}
+
 #[derive(Debug)]
 pub struct AppState {
     pub catalog: CatalogRegistry,
@@ -187,7 +193,9 @@ pub struct AppState {
     pub link_picker: Option<LinkPickerState>,
     pub launch_argument: Option<LaunchArgumentState>,
     pub launch_options: Option<LaunchOptionsState>,
+    pub launch_approval: Option<LaunchApproval>,
     pending_tool_launch: Option<ToolLaunchRequest>,
+    approved_camera_tools: BTreeSet<String>,
     return_after_app_close: bool,
     pub ai_account: String,
     pub ai_status: String,
@@ -273,7 +281,9 @@ impl AppState {
             link_picker: None,
             launch_argument: None,
             launch_options: None,
+            launch_approval: None,
             pending_tool_launch: None,
+            approved_camera_tools: BTreeSet::new(),
             return_after_app_close: false,
             ai_account: "connecting".to_string(),
             ai_status: "Starting local Codex app-server".to_string(),
@@ -321,6 +331,11 @@ impl AppState {
 
         if self.launch_options.is_some() {
             self.handle_launch_options_key(key.code);
+            return;
+        }
+
+        if self.launch_approval.is_some() {
+            self.handle_launch_approval_key(key.code);
             return;
         }
 
@@ -374,6 +389,7 @@ impl AppState {
             || self.ai_confirmation.is_some()
             || self.launch_argument.is_some()
             || self.launch_options.is_some()
+            || self.launch_approval.is_some()
             || self.uninstall_confirmation.is_some()
             || self.search_mode
             || self.ai_input_mode
@@ -1501,13 +1517,14 @@ impl AppState {
             return;
         }
         if options.is_empty() {
-            self.effects
-                .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+            self.request_tool_launch(
+                tool_name,
+                ToolLaunchRequest {
                     tool_id,
                     command,
                     keep_open,
-                }));
-            self.status = format!("Opening {tool_name}");
+                },
+            );
             return;
         }
         let saved_preferences = self.launch_preferences.get(&tool_id);
@@ -1688,13 +1705,57 @@ impl AppState {
         let tool_name = tool.name.clone();
         let keep_open = tool.run.keep_open;
         self.launch_preferences.insert(tool_id.clone(), preferences);
-        self.effects
-            .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+        self.request_tool_launch(
+            tool_name,
+            ToolLaunchRequest {
                 tool_id,
                 command,
                 keep_open,
-            }));
-        self.status = format!("Opening {tool_name}; launch options saved");
+            },
+        );
+        if self.launch_approval.is_none() {
+            self.status.push_str("; launch options saved");
+        }
+    }
+
+    fn request_tool_launch(&mut self, tool_name: String, request: ToolLaunchRequest) {
+        let needs_camera_approval = self
+            .catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == request.tool_id)
+            .is_some_and(|tool| {
+                tool.capabilities
+                    .contains(&crate::catalog::models::Capability::CameraCapture)
+            })
+            && !self.approved_camera_tools.contains(&request.tool_id);
+        if needs_camera_approval {
+            self.launch_approval = Some(LaunchApproval { tool_name, request });
+            self.status = "Camera access approval required".to_string();
+        } else {
+            self.status = format!("Opening {tool_name}");
+            self.effects.push_back(AppEffect::LaunchTool(request));
+        }
+    }
+
+    fn handle_launch_approval_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                self.launch_approval = None;
+                self.status = "Camera launch cancelled".to_string();
+            }
+            KeyCode::Enter => {
+                let Some(approval) = self.launch_approval.take() else {
+                    return;
+                };
+                self.approved_camera_tools
+                    .insert(approval.request.tool_id.clone());
+                self.status = format!("Opening {}; camera access approved", approval.tool_name);
+                self.effects
+                    .push_back(AppEffect::LaunchTool(approval.request));
+            }
+            _ => {}
+        }
     }
 
     pub fn install_then_launch(&mut self, request: ToolLaunchRequest) {
@@ -2301,6 +2362,9 @@ fn uninstall_command(
         InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && (cargo uninstall tplay || ! command -v tplay >/dev/null 2>&1)".to_string(),
         InstallMethod::YoutubeTui => "rm -f \"$HOME/.local/bin/t4e-youtube-tui\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && (cargo uninstall youtube-tui || ! command -v youtube-tui >/dev/null 2>&1)".to_string(),
         InstallMethod::Yewtube => "rm -f \"$HOME/.local/bin/t4e-yewtube\" && if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq yewtube; then pipx uninstall yewtube; fi".to_string(),
+        InstallMethod::AsciiCamera => {
+            "rm -f \"$HOME/.local/bin/t4e-ascii-camera\"".to_string()
+        }
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
         InstallMethod::Fastfetch if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' fastfetch 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch; fi".to_string(),
         InstallMethod::Fastfetch => "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch".to_string(),

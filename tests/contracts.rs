@@ -106,6 +106,8 @@ fn risk_level_uses_the_highest_declared_capability() {
     assert_eq!(tool.risk_level(), RiskLevel::Safe);
     tool.capabilities.push(Capability::Network);
     assert_eq!(tool.risk_level(), RiskLevel::Low);
+    tool.capabilities.push(Capability::CameraCapture);
+    assert_eq!(tool.risk_level(), RiskLevel::High);
     tool.capabilities.push(Capability::Delete);
     assert_eq!(tool.risk_level(), RiskLevel::High);
     tool.capabilities.push(Capability::Autonomous);

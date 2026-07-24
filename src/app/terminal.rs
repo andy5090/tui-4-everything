@@ -592,6 +592,7 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
             | InstallMethod::Tplay
             | InstallMethod::YoutubeTui
             | InstallMethod::Yewtube
+            | InstallMethod::AsciiCamera
             | InstallMethod::Newsboat
             | InstallMethod::Fastfetch
     )
@@ -781,6 +782,9 @@ mod tests {
             &InstallMethod::YoutubeTui
         ));
         assert!(install_method_requires_privileges(&InstallMethod::Yewtube));
+        assert!(install_method_requires_privileges(
+            &InstallMethod::AsciiCamera
+        ));
         assert!(install_method_requires_privileges(&InstallMethod::Newsboat));
         assert!(install_method_requires_privileges(
             &InstallMethod::Fastfetch

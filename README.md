@@ -17,7 +17,7 @@ local Codex control surface. It uses the signed-in `codex` CLI account through
 | Pack | Interactive apps |
 | --- | --- |
 | Music | Spotatui, Spotify Player, Ncspot, Cava, Termusic |
-| Video | Yewtube, YouTube TUI, tplay |
+| Video | ASCII Camera, Yewtube, YouTube TUI, tplay |
 | Podcasts & News | Shellcast, Newsboat |
 | Information Search | Lynx |
 | Viewers | Fastfetch, Glow (with bat, less, and MediaInfo support tools) |
@@ -36,6 +36,9 @@ On Linux, both media paths use T4E-managed current `yt-dlp` environments rather
 than the frequently outdated Ubuntu repository build. T4E also configures
 Yewtube to use `mpv` when its saved player is missing or unavailable, while
 preserving any working custom player.
+ASCII Camera reuses mpv's terminal renderer and V4L2 input on Linux, so it does
+not install OpenCV. Camera access is classified as `HIGH` and requires approval
+on the first launch of each T4E session.
 
 Catalog exposure is internal release metadata: `starter` participates in the
 default curated release checks and `labs` is experimental. Every current pack,

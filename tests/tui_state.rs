@@ -776,6 +776,60 @@ fn catalog_enter_reopens_running_app_without_launch_options_or_duplicate_launch(
 }
 
 #[test]
+fn ascii_camera_requires_only_the_first_session_launch_approval() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "ascii-camera".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    app.handle_key(key(KeyCode::Enter));
+    assert!(app.launch_options.is_some());
+    app.handle_key(key(KeyCode::Enter));
+    assert!(app.launch_approval.is_some());
+    assert!(app.take_effect().is_none());
+
+    app.handle_key(key(KeyCode::Enter));
+    let Some(AppEffect::LaunchTool(first)) = app.take_effect() else {
+        panic!("approved camera launch expected");
+    };
+    assert_eq!(first.tool_id, "ascii-camera");
+    assert!(first.command.contains("--device 0"));
+    assert!(first.command.contains("--vo tct"));
+
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+    assert!(app.launch_approval.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request)) if request.tool_id == "ascii-camera"
+    ));
+}
+
+#[test]
+fn ascii_camera_uninstall_keeps_the_shared_mpv_package() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "ascii-camera".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.installed_tools.insert("ascii-camera".to_string());
+
+    app.handle_key(key(KeyCode::Char('U')));
+    let request = app
+        .uninstall_confirmation
+        .as_ref()
+        .expect("uninstall confirmation");
+    assert!(request.command.contains("t4e-ascii-camera"));
+    assert!(!request.command.contains("apt-get"));
+    assert!(!request.command.contains("brew uninstall"));
+}
+
+#[test]
 fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
     let mut app = app();
     app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT));
@@ -1011,6 +1065,7 @@ fn help_tab_explains_capabilities_and_derived_risk() {
     }
     assert!(rendered.contains("NETWORK"));
     assert!(rendered.contains("AUTONOMOUS"));
+    assert!(rendered.contains("CAMERA_CAPTURE"));
 
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(app.screen, Screen::Home);

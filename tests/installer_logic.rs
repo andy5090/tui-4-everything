@@ -173,6 +173,47 @@ fn yewtube_install_defaults_an_invalid_player_to_mpv() {
 }
 
 #[test]
+fn ascii_camera_install_reuses_mpv_without_opencv() {
+    let mut tool = fake_tool(vec![Capability::CameraCapture]);
+    tool.id = "ascii-camera".to_string();
+    tool.run.cmd = "t4e-ascii-camera".to_string();
+    tool.checks = vec![
+        Check {
+            which: Some("mpv".to_string()),
+            version: None,
+            custom: None,
+        },
+        Check {
+            which: Some("t4e-ascii-camera".to_string()),
+            version: None,
+            custom: None,
+        },
+    ];
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::AsciiCamera,
+        package_hints: vec!["mpv".to_string()],
+        system_packages: vec!["mpv".to_string()],
+        executable: Some("t4e-ascii-camera".to_string()),
+        install_cmd: None,
+        requires_confirm: false,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+
+    assert!(task.command.contains("install -y mpv"));
+    assert!(task.command.contains("t4e-ascii-camera"));
+    assert!(task.command.contains("av://v4l2:/dev/video"));
+    assert!(task.command.contains("--vo=tct"));
+    assert!(!task.command.to_ascii_lowercase().contains("opencv"));
+    assert_eq!(task.check_command.as_deref(), Some("mpv"));
+    assert_eq!(task.additional_check_commands, ["t4e-ascii-camera"]);
+    assert!(task.requires_privileges);
+    assert!(!task.requires_confirmation);
+}
+
+#[test]
 fn cargo_install_uses_the_published_lockfile() {
     let tool = fake_tool(vec![]);
     let installer = Installer {

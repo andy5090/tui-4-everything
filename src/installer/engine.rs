@@ -134,6 +134,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::Tplay => materialize_tplay_command(&installer.platform),
         InstallMethod::YoutubeTui => materialize_youtube_tui_command(&installer.platform),
         InstallMethod::Yewtube => materialize_yewtube_command(&installer.platform),
+        InstallMethod::AsciiCamera => materialize_ascii_camera_command(&installer.platform),
         InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
         InstallMethod::Fastfetch => materialize_fastfetch_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
@@ -229,6 +230,26 @@ fn materialize_yewtube_command(platform: &crate::catalog::models::Platform) -> S
         .to_string(),
         crate::catalog::models::Platform::Macos => "brew install yewtube".to_string(),
     }
+}
+
+fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform) -> String {
+    let install = match platform {
+        crate::catalog::models::Platform::Linux => "",
+        crate::catalog::models::Platform::Macos => "brew install mpv && ",
+    };
+    format!(
+        "{install}mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' \
+         '#!/bin/sh' \
+         'device=0' \
+         'if [ \"${{1:-}}\" = \"--device\" ]; then device=\"${{2:-0}}\"; shift 2; fi' \
+         'case \"$(uname -s)\" in' \
+         '  Darwin) input=\"av://avfoundation:${{device}}:none\" ;;' \
+         '  *) input=\"av://v4l2:/dev/video${{device}}\" ;;' \
+         'esac' \
+         'exec mpv --profile=low-latency --no-audio --untimed --vo=tct \"$@\" \"$input\"' \
+         > \"$HOME/.local/bin/t4e-ascii-camera\" && \
+         chmod +x \"$HOME/.local/bin/t4e-ascii-camera\""
+    )
 }
 
 fn materialize_lazyvim_command(platform: &crate::catalog::models::Platform) -> String {

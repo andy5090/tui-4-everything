@@ -68,6 +68,36 @@ fn registry_loads_and_validates() {
     assert_eq!(yewtube.checks[1].which.as_deref(), Some("t4e-yewtube"));
     assert!(!yewtube.key_hints.is_empty());
 
+    let ascii_camera = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "ascii-camera")
+        .expect("ASCII Camera exists");
+    assert_eq!(ascii_camera.risk_level(), RiskLevel::High);
+    assert!(
+        ascii_camera
+            .capabilities
+            .contains(&Capability::CameraCapture)
+    );
+    assert_eq!(
+        ascii_camera.run_command_for(Platform::Linux),
+        "t4e-ascii-camera"
+    );
+    assert!(ascii_camera.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::AsciiCamera
+            && installer.system_packages == ["mpv"]
+    }));
+    assert!(
+        catalog
+            .packs
+            .iter()
+            .find(|pack| pack.id == "video-pack")
+            .expect("video pack exists")
+            .tool_ids
+            .contains(&ascii_camera.id)
+    );
+
     let youtube_tui = catalog
         .tools
         .iter()

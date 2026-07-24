@@ -188,6 +188,7 @@ fn default_exposure() -> Exposure {
 pub enum Capability {
     Network,
     Account,
+    CameraCapture,
     FileRead,
     FileWrite,
     Delete,
@@ -200,7 +201,7 @@ impl Capability {
     pub fn risk_level(self) -> RiskLevel {
         match self {
             Self::Network | Self::Account | Self::FileRead => RiskLevel::Low,
-            Self::FileWrite | Self::Delete => RiskLevel::High,
+            Self::CameraCapture | Self::FileWrite | Self::Delete => RiskLevel::High,
             Self::System | Self::Commands | Self::Autonomous => RiskLevel::Danger,
         }
     }
@@ -209,6 +210,7 @@ impl Capability {
         match self {
             Self::Network => "NETWORK",
             Self::Account => "ACCOUNT",
+            Self::CameraCapture => "CAMERA_CAPTURE",
             Self::FileRead => "FILE_READ",
             Self::FileWrite => "FILE_WRITE",
             Self::Delete => "DELETE",
@@ -278,6 +280,8 @@ pub enum InstallMethod {
     YoutubeTui,
     #[serde(rename = "yewtube")]
     Yewtube,
+    #[serde(rename = "ascii_camera")]
+    AsciiCamera,
     #[serde(rename = "newsboat")]
     Newsboat,
     #[serde(rename = "fastfetch")]
@@ -306,6 +310,7 @@ impl InstallMethod {
             Self::Tplay => "tplay",
             Self::YoutubeTui => "youtube_tui",
             Self::Yewtube => "yewtube",
+            Self::AsciiCamera => "ascii_camera",
             Self::Newsboat => "newsboat",
             Self::Fastfetch => "fastfetch",
             Self::Script => "script",
