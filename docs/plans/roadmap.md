@@ -91,6 +91,9 @@ Provider implementation rules:
 - Composable output effects: implemented for the first trusted filter. Cowsay
   and Fortune can enable a remembered Rainbow output option; T4E installs the
   hidden lolcat dependency when needed and constructs the pipeline internally.
+- Managed YouTube playback renderers: Yewtube and YouTube TUI expose remembered
+  MPV, TCT, and CACA choices for external video playback through a shared T4E
+  launcher.
 - Ubuntu catalog hardening: package-source candidates and declared build
   dependencies are live-checked; installs are serialized; apt lock contention,
   missing pipx, Cargo build duration, and multi-binary apps are handled.

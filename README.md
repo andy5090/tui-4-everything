@@ -30,7 +30,7 @@ batch-install units.
 | System | ASCII Camera, Fastfetch |
 | Utilities | Glow, VisiData |
 | Games | bastet, ninvaders, nudoku |
-| Entertainment | cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
+| Entertainment | Figlet, cowsay, fortune, cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
 
 Support commands such as `mpv`, `yt-dlp`, `ffmpeg`, `jq`, `ripgrep`, and
 `lolcat` are internal dependencies and remain available through explicit
@@ -39,9 +39,11 @@ LazyVim uses an isolated `t4e-lazyvim` profile, leaving an existing Neovim
 configuration untouched. YouTube TUI provides browsing and search; tplay asks
 for a media URL or local path before rendering the media as terminal ASCII.
 On Linux, both media paths use T4E-managed current `yt-dlp` environments rather
-than the frequently outdated Ubuntu repository build. T4E also configures
-Yewtube to use `mpv` when its saved player is missing or unavailable, while
-preserving any working custom player.
+than the frequently outdated Ubuntu repository build. Yewtube and YouTube TUI
+offer a remembered external video player choice: `mpv` opens the normal video
+window, while `tct` and `caca` render video as colored terminal characters.
+T4E applies that choice only to external video playback through its managed
+mpv launcher; browsing and embedded audio remain under the application.
 ASCII Camera reuses mpv's terminal renderer and V4L2 input on Linux, so it does
 not install OpenCV. Camera access is classified as `HIGH` and requires approval
 on the first launch of each T4E session.
@@ -83,9 +85,9 @@ when it exits.
 
 The primary navigation is `HOME`, `AI`, `Activity`, `Settings`, and `Help`.
 HOME contains Quick Access, categorized Apps, and a compact
-fastfetch system summary with the detected OS ASCII logo. Left/Right switches
-between the app views and app list; Enter enters a list or runs an app. Press `/`
-to search the current view and `?` to open Help.
+fastfetch system summary with the detected OS ASCII logo and native fastfetch
+colors. Left/Right switches between the app views and app list; Enter enters a
+list or runs an app. Press `/` to search the current view and `?` to open Help.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.
@@ -99,8 +101,11 @@ Important actions are intentionally explicit:
   `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
   returns to the previous screen while keeping apps running, and `Alt+Q` closes
   the current app. `Backspace` and `Esc` are forwarded to the running app.
-  Text selection is the default mouse mode; `Alt+M` toggles T4E mouse controls
-  for lists, app tabs, scrolling, and App View footer actions.
+  T4E mouse controls are enabled by default for lists, app tabs, scrolling, and
+  App View footer actions. Dragging inside one panel highlights its text and
+  automatically copies it on release without the T4E panel border. Wrapped
+  single URLs are copied as one clean URL. `Alt+M` disables or restores T4E
+  mouse capture when native terminal selection is needed.
   `Alt+O` opens an HTTP(S) link from the current app, and `Alt+C` copies the
   original unwrapped link without App View borders. A single link is handled
   immediately; with several links, T4E shows a picker with the newest selected.
@@ -114,10 +119,13 @@ Important actions are intentionally explicit:
   dependency installation, and the AI control plane as support tools.
 - Apps with registered flags or output effects open a launch-options dialog.
   Space enables an option, Left/Right chooses an allowlisted value, and Enter
-  launches it. T4E remembers enabled options and selected values per app for
-  the next run. `cowsay` and `fortune` offer `Rainbow output`; T4E installs the
-  hidden `lolcat` support command when needed and applies it as a managed
-  output filter.
+  launches it. A missing app completes installation before T4E presents its
+  input or options; failed and cancelled installs never advance to launch
+  configuration. T4E remembers enabled options and selected values per app for
+  the next run. `cowsay`, `fortune`, and Figlet offer `Rainbow output`; T4E
+  installs the hidden `lolcat` support command when needed and applies it as a
+  managed output filter. Figlet prompts for a message before showing its font,
+  alignment, width, and color-effect options.
 - Apps with a required positional value, such as tplay, open an input dialog.
 - Settings includes `Reset saved preferences`, which restores runtime policy
   defaults and clears remembered app launch options.

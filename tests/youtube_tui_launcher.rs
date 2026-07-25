@@ -6,13 +6,12 @@ mod unix {
     use std::process::Command;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use serde_json::Value;
     use t4e::catalog::loader::load_catalog;
     use t4e::catalog::models::Platform;
     use t4e::installer::engine::{InstallPolicy, build_install_task};
 
     #[test]
-    fn managed_yewtube_launcher_routes_mpv_tct_and_caca_playback() {
+    fn managed_youtube_tui_launcher_routes_only_external_mpv_playback() {
         let root = temporary_directory();
         let fake_bin = root.join("bin");
         fs::create_dir_all(&fake_bin).expect("fake bin created");
@@ -21,27 +20,35 @@ mod unix {
             "#!/bin/sh\n[ \"$1\" = '-n' ] && shift\nexec \"$@\"\n",
         );
         write_executable(&fake_bin.join("apt-get"), "#!/bin/sh\nexit 0\n");
-        write_executable(&fake_bin.join("pipx"), "#!/bin/sh\nexit 0\n");
+        write_executable(&fake_bin.join("cargo"), "#!/bin/sh\nexit 0\n");
+        write_executable(
+            &fake_bin.join("python3"),
+            concat!(
+                "#!/bin/sh\n",
+                "if [ \"$1\" = '-m' ] && [ \"$2\" = 'venv' ]; then\n",
+                "  mkdir -p \"$3/bin\"\n",
+                "  printf '%s\\n' '#!/bin/sh' 'exit 0' > \"$3/bin/python\"\n",
+                "  chmod +x \"$3/bin/python\"\n",
+                "  exit 0\n",
+                "fi\n",
+                "exec /usr/bin/python3 \"$@\"\n"
+            ),
+        );
         write_executable(
             &fake_bin.join("mpv"),
             "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$T4E_TEST_MPV_LOG\"\n",
         );
         write_executable(
-            &fake_bin.join("yt"),
-            concat!(
-                "#!/bin/sh\n",
-                "config=\"${XDG_CONFIG_HOME:-$HOME/.config}/mps-youtube/config.json\"\n",
-                "player=\"$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[\"PLAYER\"])' \"$config\")\"\n",
-                "exec \"$player\" video-url\n"
-            ),
+            &fake_bin.join("youtube-tui"),
+            "#!/bin/sh\nexec mpv video-url\n",
         );
 
         let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
         let tool = catalog
             .tools
             .iter()
-            .find(|tool| tool.id == "yewtube")
-            .expect("yewtube exists");
+            .find(|tool| tool.id == "youtube-tui")
+            .expect("YouTube TUI exists");
         let installer = tool
             .installers
             .iter()
@@ -56,19 +63,13 @@ mod unix {
             .arg(&task.command)
             .env("HOME", &root)
             .env("PATH", &path)
-            .env_remove("XDG_CONFIG_HOME")
+            .env_remove("XDG_DATA_HOME")
             .status()
             .expect("installer runs");
         assert!(install.success());
 
-        let launcher = root.join(".local/bin/t4e-yewtube");
-        let config = root.join(".config/mps-youtube/config.json");
-        fs::create_dir_all(config.parent().expect("config parent"))
-            .expect("config directory created");
-        fs::write(&config, r#"{"PLAYER":"custom-player","OTHER":"kept"}"#)
-            .expect("custom config written");
+        let launcher = root.join(".local/bin/t4e-youtube-tui");
         let log = root.join("mpv.log");
-
         for (renderer, expected) in [
             ("MPV", "video-url\n"),
             (
@@ -82,7 +83,7 @@ mod unix {
                 .env("HOME", &root)
                 .env("PATH", &path)
                 .env("T4E_TEST_MPV_LOG", &log)
-                .env_remove("XDG_CONFIG_HOME")
+                .env_remove("XDG_DATA_HOME")
                 .status()
                 .expect("launcher runs");
             assert!(run.success(), "{renderer} launcher succeeds");
@@ -93,27 +94,7 @@ mod unix {
             );
         }
 
-        assert_eq!(
-            configured_player(&root),
-            root.join(".local/bin/t4e-mpv-terminal")
-                .display()
-                .to_string()
-        );
-        let value: Value =
-            serde_json::from_str(&fs::read_to_string(config).expect("config readable"))
-                .expect("config remains valid JSON");
-        assert_eq!(value["OTHER"], "kept");
-
         fs::remove_dir_all(root).expect("test directory removed");
-    }
-
-    fn configured_player(root: &Path) -> String {
-        let config = fs::read_to_string(root.join(".config/mps-youtube/config.json"))
-            .expect("config exists");
-        serde_json::from_str::<Value>(&config).expect("config is valid JSON")["PLAYER"]
-            .as_str()
-            .expect("player is a string")
-            .to_string()
     }
 
     fn temporary_directory() -> PathBuf {
@@ -121,7 +102,8 @@ mod unix {
             .duration_since(UNIX_EPOCH)
             .expect("system clock")
             .as_nanos();
-        let path = std::env::temp_dir().join(format!("t4e-yewtube-{}-{nonce}", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("t4e-youtube-tui-{}-{nonce}", std::process::id()));
         fs::create_dir(&path).expect("temporary directory created");
         path
     }

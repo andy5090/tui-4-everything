@@ -15,6 +15,13 @@ and date are assigned.
 - Compact fastfetch system information and OS ASCII logo on HOME with a
   built-in fallback.
 - Privacy-aware ASCII Camera launcher backed by mpv.
+- Remembered `MPV`, `TCT`, and `CACA` external video renderer choices for
+  Yewtube and YouTube TUI.
+- Figlet with prompted message input, font, centering, width, and optional
+  managed rainbow output.
+- Default-on mouse controls with panel-bounded drag selection, visible
+  selection feedback, automatic clipboard copy, border removal, and wrapped
+  URL cleanup.
 
 ### Changed
 
@@ -25,11 +32,25 @@ and date are assigned.
   roadmap that also covers Claude runtimes, Anthropic API, and
   OpenAI-compatible APIs.
 - Report managed sessions as background applications rather than workspaces.
+- Route YouTube external playback through a shared T4E-managed mpv launcher
+  without changing each application's browsing UI or embedded audio behavior.
+- Chain required positional input into launch options so applications can
+  safely combine quoted user text with allowlisted flags and output effects.
+- Defer launch input and options for missing applications until installation
+  succeeds; failed or cancelled installs remain on the application screen.
 
 ### Fixed
 
 - Pass structured ASCII Camera options to mpv using its required option syntax
   and migrate stale managed launchers before execution.
+- Preserve fastfetch's native ANSI colors in the HOME Information panel,
+  replace saved/install queue summaries with the current running-app count.
+- Distinguish HOME panel focus from retained selection: only the focused panel
+  shows the selection arrow, with no reversed white row background.
+- Spell out horizontal panel switching and vertical row movement in HOME
+  keyboard hints instead of using the ambiguous generic `arrows` label.
+- Prevent drag selection from combining aligned borders of adjacent panels
+  into one synthetic copy region.
 - Reclassify lolcat as a hidden output-effect dependency and offer it as a
   remembered `Rainbow output` launch option for cowsay and fortune, with
   automatic dependency installation.

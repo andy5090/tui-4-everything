@@ -5,8 +5,8 @@ use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
 use crate::catalog::models::{
-    AppCategory, CatalogRegistry, InstallMethod, OutputFilter, Platform, RiskLevel, Tool,
-    ToolCategory,
+    AppCategory, CatalogRegistry, InstallMethod, OutputFilter, Platform, RiskLevel, RunOption,
+    Tool, ToolCategory,
 };
 use crate::codex::service::CodexEvent;
 use crate::installer::diagnostics::FailureDiagnostics;
@@ -99,6 +99,7 @@ pub enum AppEffect {
     SendAppInput { pane_id: String, input: AppInput },
     CloseApp(String),
     SetMouseCapture(bool),
+    CopySelection { start: (u16, u16), end: (u16, u16) },
     ReadAppLinks { pane_id: String, action: LinkAction },
     CopyUrl(String),
     OpenUrl(String),
@@ -137,6 +138,8 @@ pub struct LaunchOptionSelection {
 pub struct LaunchOptionsState {
     pub tool_id: String,
     pub tool_name: String,
+    pub command: String,
+    pub argument: Option<String>,
     pub selected: usize,
     pub selections: Vec<LaunchOptionSelection>,
 }
@@ -210,6 +213,12 @@ pub struct LaunchApproval {
     pub request: ToolLaunchRequest,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MouseSelection {
+    pub start: (u16, u16),
+    pub end: (u16, u16),
+}
+
 #[derive(Debug)]
 pub struct AppState {
     pub catalog: CatalogRegistry,
@@ -229,6 +238,7 @@ pub struct AppState {
     pub search_mode: bool,
     pub should_quit: bool,
     pub mouse_enabled: bool,
+    pub mouse_selection: Option<MouseSelection>,
     pub queue: Vec<InstallJob>,
     pub logs: Vec<String>,
     pub status: String,
@@ -250,6 +260,8 @@ pub struct AppState {
     pub launch_approval: Option<LaunchApproval>,
     pending_tool_launch: Option<ToolLaunchRequest>,
     pending_tool_install: Option<String>,
+    pending_tool_configuration: Option<String>,
+    installed_scan_complete: bool,
     approved_camera_tools: BTreeSet<String>,
     return_after_app_close: bool,
     pub ai_account: String,
@@ -319,7 +331,8 @@ impl AppState {
             search_query: String::new(),
             search_mode: false,
             should_quit: false,
-            mouse_enabled: false,
+            mouse_enabled: true,
+            mouse_selection: None,
             queue: saved.queue,
             logs: saved.logs,
             status: "Ready".to_string(),
@@ -341,6 +354,8 @@ impl AppState {
             launch_approval: None,
             pending_tool_launch: None,
             pending_tool_install: None,
+            pending_tool_configuration: None,
+            installed_scan_complete: false,
             approved_camera_tools: BTreeSet::new(),
             return_after_app_close: false,
             ai_account: "connecting".to_string(),
@@ -360,6 +375,7 @@ impl AppState {
     pub fn handle_key(&mut self, key: KeyEvent) {
         if key.modifiers.contains(KeyModifiers::ALT) && key.code == KeyCode::Char('m') {
             self.mouse_enabled = !self.mouse_enabled;
+            self.mouse_selection = None;
             self.effects
                 .push_back(AppEffect::SetMouseCapture(self.mouse_enabled));
             self.status = format!(
@@ -451,7 +467,36 @@ impl AppState {
             || self.search_mode
             || self.ai_input_mode
         {
+            self.mouse_selection = None;
             return;
+        }
+
+        match mouse.kind {
+            MouseEventKind::Down(MouseButton::Left) => {
+                self.mouse_selection = Some(MouseSelection {
+                    start: (mouse.column, mouse.row),
+                    end: (mouse.column, mouse.row),
+                });
+            }
+            MouseEventKind::Drag(MouseButton::Left) => {
+                if let Some(selection) = &mut self.mouse_selection {
+                    selection.end = (mouse.column, mouse.row);
+                }
+                return;
+            }
+            MouseEventKind::Up(MouseButton::Left) => {
+                if let Some(mut selection) = self.mouse_selection.take() {
+                    selection.end = (mouse.column, mouse.row);
+                    if selection.start != selection.end {
+                        self.effects.push_back(AppEffect::CopySelection {
+                            start: selection.start,
+                            end: selection.end,
+                        });
+                    }
+                }
+                return;
+            }
+            _ => {}
         }
 
         match mouse.kind {
@@ -797,17 +842,21 @@ impl AppState {
         if state == QueueState::Success {
             self.installed_tools.insert(tool_id.clone());
             self.push_recent(tool_id.clone(), "tool");
-            if self.pending_tool_install.as_deref() == Some(tool_id.as_str())
-                && let Some(request) = self.pending_tool_launch.take()
-            {
+            if self.pending_tool_install.as_deref() == Some(tool_id.as_str()) {
                 self.pending_tool_install = None;
-                self.effects.push_back(AppEffect::LaunchTool(request));
+                if let Some(request) = self.pending_tool_launch.take() {
+                    self.effects.push_back(AppEffect::LaunchTool(request));
+                } else if self.pending_tool_configuration.as_deref() == Some(tool_id.as_str()) {
+                    self.pending_tool_configuration = None;
+                    self.request_tool_configuration(&tool_id);
+                }
             }
         } else if state == QueueState::Failed
             && self.pending_tool_install.as_deref() == Some(tool_id.as_str())
         {
             self.pending_tool_launch = None;
             self.pending_tool_install = None;
+            self.pending_tool_configuration = None;
         }
         self.trim_logs();
         if self.queue_running {
@@ -819,6 +868,7 @@ impl AppState {
         if self.pending_tool_install.as_deref() == Some(tool_id) {
             self.pending_tool_launch = None;
             self.pending_tool_install = None;
+            self.pending_tool_configuration = None;
         }
         self.queue_running = false;
         self.status = format!("Authorization cancelled for {tool_id}: {error}");
@@ -876,6 +926,7 @@ impl AppState {
 
     pub fn apply_installed_tools(&mut self, tool_ids: BTreeSet<String>) {
         self.installed_tools = tool_ids;
+        self.installed_scan_complete = true;
     }
 
     pub fn mark_uninstall_started(&mut self, tool_id: &str) {
@@ -1669,8 +1720,21 @@ impl AppState {
     }
 
     fn request_selected_tool_launch(&mut self) {
-        let Some(tool) = self.selected_action_tool() else {
+        let Some(tool_id) = self.selected_action_tool().map(|tool| tool.id.clone()) else {
             self.status = "No app selected".to_string();
+            return;
+        };
+        self.request_tool_configuration(&tool_id);
+    }
+
+    fn request_tool_configuration(&mut self, requested_tool_id: &str) {
+        let Some(tool) = self
+            .catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == requested_tool_id)
+        else {
+            self.status = "App is no longer available".to_string();
             return;
         };
         let tool_id = tool.id.clone();
@@ -1691,6 +1755,10 @@ impl AppState {
             }
             self.screen = Screen::AppView;
             self.status = format!("Returned to {tool_name}");
+            return;
+        }
+        if self.installed_scan_complete && !self.installed_tools.contains(&tool_id) {
+            self.install_then_configure(tool_id);
             return;
         }
         if let Some(argument) = launch_argument {
@@ -1716,6 +1784,17 @@ impl AppState {
             );
             return;
         }
+        self.open_launch_options(tool_id, tool_name, command, None, options);
+    }
+
+    fn open_launch_options(
+        &mut self,
+        tool_id: String,
+        tool_name: String,
+        command: String,
+        argument: Option<String>,
+        options: Vec<RunOption>,
+    ) {
         let saved_preferences = self.launch_preferences.get(&tool_id);
         let selections = options
             .iter()
@@ -1743,6 +1822,8 @@ impl AppState {
         self.launch_options = Some(LaunchOptionsState {
             tool_id,
             tool_name,
+            command,
+            argument,
             selected: 0,
             selections,
         });
@@ -1784,18 +1865,30 @@ impl AppState {
                     self.status = "Launch tool is no longer available".to_string();
                     return;
                 };
-                self.effects
-                    .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
-                        tool_id: tool.id.clone(),
-                        command: format!(
-                            "{} {}",
-                            tool.run_command_for_current_platform(),
-                            shell_quote(value)
-                        ),
-                        keep_open: tool.run.keep_open,
-                        output_filter: None,
-                    }));
-                self.status = format!("Opening {}", tool.name);
+                let tool_id = tool.id.clone();
+                let tool_name = tool.name.clone();
+                let keep_open = tool.run.keep_open;
+                let options = tool.run_options.clone();
+                let base_command = tool.run_command_for_current_platform().to_string();
+                let command = format!("{base_command} {}", shell_quote(value));
+                if options.is_empty() {
+                    self.effects
+                        .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+                            tool_id,
+                            command,
+                            keep_open,
+                            output_filter: None,
+                        }));
+                    self.status = format!("Opening {tool_name}");
+                } else {
+                    self.open_launch_options(
+                        tool_id,
+                        tool_name,
+                        base_command,
+                        Some(shell_quote(value)),
+                        options,
+                    );
+                }
             }
             _ => {}
         }
@@ -1871,7 +1964,7 @@ impl AppState {
             self.status = "Launch option tool is no longer available".to_string();
             return;
         };
-        let mut command = tool.run_command_for_current_platform().to_string();
+        let mut command = options.command;
         let mut output_filter = None;
         let mut preferences = BTreeMap::new();
         for (option, selection) in tool.run_options.iter().zip(&options.selections) {
@@ -1896,6 +1989,10 @@ impl AppState {
             if option.output_filter.is_some() {
                 output_filter = option.output_filter;
             }
+        }
+        if let Some(argument) = options.argument {
+            command.push(' ');
+            command.push_str(&argument);
         }
         let tool_id = tool.id.clone();
         let tool_name = tool.name.clone();
@@ -1962,8 +2059,19 @@ impl AppState {
 
     pub fn install_tool_then_launch(&mut self, tool_id: String, request: ToolLaunchRequest) {
         self.pending_tool_launch = Some(request);
+        self.pending_tool_configuration = None;
         self.pending_tool_install = Some(tool_id.clone());
+        self.begin_pending_install(tool_id);
+    }
 
+    fn install_then_configure(&mut self, tool_id: String) {
+        self.pending_tool_launch = None;
+        self.pending_tool_configuration = Some(tool_id.clone());
+        self.pending_tool_install = Some(tool_id.clone());
+        self.begin_pending_install(tool_id);
+    }
+
+    fn begin_pending_install(&mut self, tool_id: String) {
         if let Some(index) = self
             .queue
             .iter()
@@ -1977,7 +2085,7 @@ impl AppState {
                     self.queue_tool_ids(vec![tool_id.clone()]);
                 }
                 QueueState::Installing => {
-                    self.status = format!("Installing {tool_id}; it will open when ready");
+                    self.status = format!("Installing {tool_id}; options will open when ready");
                     return;
                 }
                 QueueState::Queued | QueueState::Idle => {}
@@ -1986,7 +2094,7 @@ impl AppState {
             self.queue_tool_ids(vec![tool_id.clone()]);
         }
 
-        self.status = format!("{tool_id} is not installed; installing before launch");
+        self.status = format!("{tool_id} is not installed; installing before setup");
         self.request_execute_selected();
     }
 
@@ -2180,6 +2288,7 @@ impl AppState {
                 self.queue_running = false;
                 self.pending_tool_launch = None;
                 self.pending_tool_install = None;
+                self.pending_tool_configuration = None;
                 self.status = "Installation confirmation cancelled".to_string();
             }
             KeyCode::Backspace => {

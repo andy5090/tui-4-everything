@@ -28,7 +28,7 @@ use crate::mux::tmux::reproducibility_hash;
 
 use super::events::Screen;
 use super::state::{AppEffect, AppInput, AppState};
-use super::ui::render;
+use super::ui::{extract_panel_selection, render};
 
 type TuiTerminal = Terminal<CrosstermBackend<Stdout>>;
 
@@ -36,6 +36,7 @@ static INSTALL_PROCESS_LOCK: Mutex<()> = Mutex::new(());
 
 pub fn run(mut app: AppState) -> Result<()> {
     let mut session = TerminalSession::new()?;
+    session.set_mouse_capture(app.mouse_enabled)?;
     let (event_sender, event_receiver) = mpsc::channel();
     let mut active = HashMap::<String, ActiveInstall>::new();
     let mut app_sizes = HashMap::<String, (u16, u16)>::new();
@@ -318,6 +319,23 @@ fn process_effects(
             AppEffect::SetMouseCapture(enabled) => {
                 if let Err(error) = session.set_mouse_capture(enabled) {
                     app.status = format!("Mouse mode failed: {error}");
+                }
+            }
+            AppEffect::CopySelection { start, end } => {
+                let size = session.terminal.size();
+                match size.ok().and_then(|size| {
+                    extract_panel_selection(app, size.width, size.height, start, end)
+                }) {
+                    Some(text) => match copy_to_clipboard(&text) {
+                        Ok(method) => {
+                            app.status =
+                                format!("Copied {} characters via {method}", text.chars().count())
+                        }
+                        Err(error) => app.status = format!("Could not copy selection: {error}"),
+                    },
+                    None => {
+                        app.status = "Drag inside one panel to copy text".to_string();
+                    }
                 }
             }
             AppEffect::ReadAppLinks { pane_id, action } => {

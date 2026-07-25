@@ -26,7 +26,7 @@ packs:
   - id: fun-pack
     title: Fun Pack
     exposure: starter
-    tool_ids: [cmatrix, asciiquarium, sl, lolcat, cowsay, fortune, tty-clock, nyancat, pipes-sh]
+    tool_ids: [cmatrix, asciiquarium, sl, lolcat, figlet, cowsay, fortune, tty-clock, nyancat, pipes-sh]
   - id: games-pack
     title: Games Pack
     exposure: starter
@@ -212,13 +212,22 @@ tools:
     exposure: starter
     run:
       cmd: "yt"
+    run_options:
+      - id: playback-renderer
+        label: "External video player"
+        flag: "--renderer"
+        values: ["MPV", "TCT", "CACA"]
+        default_enabled: true
+        default_value: "MPV"
     checks:
       - which: "yt"
       - which: "t4e-yewtube"
+      - which: "t4e-mpv-terminal"
     installers:
       - platform: macos
         method: brew
         package_hints: ["yewtube"]
+        executable: "t4e-yewtube"
       - platform: linux
         method: yewtube
         package_hints: ["yewtube"]
@@ -236,13 +245,22 @@ tools:
     exposure: starter
     run:
       cmd: "youtube-tui"
+    run_options:
+      - id: playback-renderer
+        label: "External video player"
+        flag: "--renderer"
+        values: ["MPV", "TCT", "CACA"]
+        default_enabled: true
+        default_value: "MPV"
     checks:
       - which: "youtube-tui"
       - which: "t4e-youtube-tui"
+      - which: "t4e-mpv-terminal"
     installers:
       - platform: macos
         method: cargo
         package_hints: ["youtube-tui"]
+        executable: "t4e-youtube-tui"
       - platform: linux
         method: youtube_tui
         package_hints: ["youtube-tui"]
@@ -872,6 +890,46 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["lolcat"]
+  - id: figlet
+    name: "Figlet"
+    description: "Turn a short message into large configurable ASCII-art lettering."
+    category: fun
+    tags: []
+    audience: general
+    capabilities: []
+    exposure: starter
+    run:
+      cmd: "figlet"
+      keep_open: true
+    launch_argument:
+      label: "Message"
+      placeholder: "T4E"
+    run_options:
+      - id: font
+        label: "Font"
+        flag: "-f"
+        values: ["standard", "small", "slant", "big", "banner"]
+        default_enabled: true
+        default_value: "standard"
+      - id: centered
+        label: "Center text"
+        flag: "-c"
+        default_value: null
+      - id: width
+        label: "Output width"
+        flag: "-w"
+        values: ["40", "60", "80", "100", "120"]
+        default_value: "80"
+      - id: rainbow-output
+        label: "Rainbow output"
+        output_filter: lolcat
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["figlet"]
+      - platform: linux
+        method: apt
+        package_hints: ["figlet"]
   - id: cowsay
     name: "cowsay"
     description: "Display text in a configurable ASCII speech bubble."

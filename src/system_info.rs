@@ -15,8 +15,11 @@ pub fn cached_system_overview() -> SystemOverview {
 }
 
 fn detect_system_overview() -> SystemOverview {
-    let logo = fastfetch_lines(&["--logo", "small", "--structure", "none", "--pipe"], false)
-        .unwrap_or_default();
+    let logo = fastfetch_lines(
+        &["--logo", "small", "--structure", "none", "--pipe", "false"],
+        false,
+    )
+    .unwrap_or_default();
     if let Some(lines) = fastfetch_lines(
         &[
             "--logo",
@@ -24,6 +27,7 @@ fn detect_system_overview() -> SystemOverview {
             "--structure",
             "OS:Host:Kernel:Uptime:CPU:Memory",
             "--pipe",
+            "false",
         ],
         true,
     ) {

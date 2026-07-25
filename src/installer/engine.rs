@@ -200,36 +200,121 @@ fn materialize_tplay_command(platform: &crate::catalog::models::Platform) -> Str
 }
 
 fn materialize_youtube_tui_command(platform: &crate::catalog::models::Platform) -> String {
-    match platform {
-        crate::catalog::models::Platform::Linux => {
-            "cargo install --locked youtube-tui && data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && python3 -m venv \"$data_dir/yt-dlp\" && \"$data_dir/yt-dlp/bin/python\" -m pip install --upgrade 'yt-dlp[default]' && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\"' 'exec env PATH=\"$data_dir/yt-dlp/bin:$PATH\" youtube-tui \"$@\"' > \"$HOME/.local/bin/t4e-youtube-tui\" && chmod +x \"$HOME/.local/bin/t4e-youtube-tui\"".to_string()
-        }
+    let install = match platform {
+        crate::catalog::models::Platform::Linux => concat!(
+            "cargo install --locked youtube-tui && ",
+            "data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && ",
+            "python3 -m venv \"$data_dir/yt-dlp\" && ",
+            "\"$data_dir/yt-dlp/bin/python\" -m pip install --upgrade 'yt-dlp[default]'"
+        ),
         crate::catalog::models::Platform::Macos => {
-            "cargo install --locked youtube-tui".to_string()
+            "brew install mpv yt-dlp && cargo install --locked youtube-tui"
         }
-    }
+    };
+    let launcher = concat!(
+        "data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && ",
+        "player_dir=\"$data_dir/player\" && mkdir -p \"$player_dir\" \"$HOME/.local/bin\" && ",
+        "printf '%s\\n' '#!/bin/sh' ",
+        "'exec env PATH=\"$T4E_REAL_PATH\" \"$HOME/.local/bin/t4e-mpv-terminal\" \"$@\"' ",
+        "> \"$player_dir/mpv\" && chmod +x \"$player_dir/mpv\" && ",
+        "printf '%s\\n' '#!/bin/sh' ",
+        "'renderer=mpv' ",
+        "'while [ \"$#\" -gt 0 ]; do' ",
+        "'  case \"$1\" in' ",
+        "'    --renderer) renderer=\"${2:-}\"; shift 2 ;;' ",
+        "'    --renderer=*) renderer=\"${1#*=}\"; shift ;;' ",
+        "'    *) break ;;' ",
+        "'  esac' ",
+        "'done' ",
+        "'renderer=\"$(printf \"%s\" \"$renderer\" | tr \"[:upper:]\" \"[:lower:]\")\"' ",
+        "'case \"$renderer\" in mpv|tct|caca) ;; *) printf \"Unsupported video renderer: %s\\n\" \"$renderer\" >&2; exit 2 ;; esac' ",
+        "'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\"' ",
+        "'real_path=\"$PATH\"' ",
+        "'host_pid=\"$$\"' ",
+        "'exec env T4E_MPV_RENDERER=\"$renderer\" T4E_REAL_PATH=\"$real_path\" T4E_VIDEO_HOST=youtube-tui T4E_VIDEO_HOST_PID=\"$host_pid\" PATH=\"$data_dir/player:$data_dir/yt-dlp/bin:$real_path\" youtube-tui \"$@\"' ",
+        "> \"$HOME/.local/bin/t4e-youtube-tui\" && ",
+        "chmod +x \"$HOME/.local/bin/t4e-youtube-tui\""
+    );
+    [
+        install,
+        " && ",
+        managed_mpv_player_install_command(),
+        " && ",
+        launcher,
+    ]
+    .concat()
 }
 
 fn materialize_yewtube_command(platform: &crate::catalog::models::Platform) -> String {
-    match platform {
+    let install = match platform {
         crate::catalog::models::Platform::Linux => concat!(
             "command -v pipx >/dev/null 2>&1 || sudo -n env DEBIAN_FRONTEND=noninteractive ",
             "apt-get -o DPkg::Lock::Timeout=300 install -y pipx; ",
-            "pipx install --force yewtube && mkdir -p \"$HOME/.local/bin\" && ",
-            "printf '%s\\n' '#!/bin/sh' ",
-            "'config_dir=\"${XDG_CONFIG_HOME:-$HOME/.config}/mps-youtube\"' ",
-            "'config=\"$config_dir/config.json\"' ",
-            "'player=\"$(python3 -c \"import json,sys; print(json.load(open(sys.argv[1])).get(\\\"PLAYER\\\", \\\"\\\"))\" \"$config\" 2>/dev/null)\"' ",
-            "'if [ -z \"$player\" ] || ! command -v \"$player\" >/dev/null 2>&1; then' ",
-            "'  mkdir -p \"$config_dir\"' ",
-            "'  python3 -c \"import json,os,sys; p=sys.argv[1]; d=json.load(open(p)) if os.path.exists(p) else {}; d[\\\"PLAYER\\\"]=\\\"mpv\\\"; q=p+\\\".tmp\\\"; json.dump(d,open(q,\\\"w\\\"),indent=2); os.replace(q,p)\" \"$config\"' ",
-            "'fi' ",
-            "'exec yt \"$@\"' > \"$HOME/.local/bin/t4e-yewtube\" && ",
-            "chmod +x \"$HOME/.local/bin/t4e-yewtube\""
-        )
-        .to_string(),
-        crate::catalog::models::Platform::Macos => "brew install yewtube".to_string(),
-    }
+            "pipx install --force yewtube"
+        ),
+        crate::catalog::models::Platform::Macos => "brew install yewtube mpv",
+    };
+    let launcher = concat!(
+        "mkdir -p \"$HOME/.local/bin\" && ",
+        "printf '%s\\n' '#!/bin/sh' ",
+        "'renderer=mpv' ",
+        "'while [ \"$#\" -gt 0 ]; do' ",
+        "'  case \"$1\" in' ",
+        "'    --renderer) renderer=\"${2:-}\"; shift 2 ;;' ",
+        "'    --renderer=*) renderer=\"${1#*=}\"; shift ;;' ",
+        "'    *) break ;;' ",
+        "'  esac' ",
+        "'done' ",
+        "'renderer=\"$(printf \"%s\" \"$renderer\" | tr \"[:upper:]\" \"[:lower:]\")\"' ",
+        "'case \"$renderer\" in mpv|tct|caca) ;; *) printf \"Unsupported video renderer: %s\\n\" \"$renderer\" >&2; exit 2 ;; esac' ",
+        "'config_dir=\"${XDG_CONFIG_HOME:-$HOME/.config}/mps-youtube\"' ",
+        "'config=\"$config_dir/config.json\"' ",
+        "'player=\"$HOME/.local/bin/t4e-mpv-terminal\"' ",
+        "'mkdir -p \"$config_dir\"' ",
+        "'python3 -c \"import json,os,sys; p=sys.argv[1]; d=json.load(open(p)) if os.path.exists(p) else {}; d[\\\"PLAYER\\\"]=sys.argv[2]; q=p+\\\".tmp\\\"; json.dump(d,open(q,\\\"w\\\"),indent=2); os.replace(q,p)\" \"$config\" \"$player\"' ",
+        "'exec env T4E_MPV_RENDERER=\"$renderer\" yt \"$@\"' ",
+        "> \"$HOME/.local/bin/t4e-yewtube\" && ",
+        "chmod +x \"$HOME/.local/bin/t4e-yewtube\""
+    );
+    [
+        install,
+        " && ",
+        managed_mpv_player_install_command(),
+        " && ",
+        launcher,
+    ]
+    .concat()
+}
+
+fn managed_mpv_player_install_command() -> &'static str {
+    concat!(
+        "mkdir -p \"$HOME/.local/bin\" && ",
+        "printf '%s\\n' '#!/bin/sh' ",
+        "'renderer=\"${T4E_MPV_RENDERER:-mpv}\"' ",
+        "'play_terminal() {' ",
+        "'  host_pid=\"${T4E_VIDEO_HOST_PID:-}\"' ",
+        "'  case \"$host_pid\" in \"\"|*[!0-9]*) host_pid= ;; esac' ",
+        "'  if [ \"${T4E_VIDEO_HOST:-}\" = youtube-tui ] && [ -n \"$host_pid\" ] && [ \"$host_pid\" != \"$$\" ] && [ -w /dev/tty ]; then' ",
+        "'    cleanup() { kill -CONT \"$host_pid\" 2>/dev/null || true; printf \"\\033[2J\\033[H\" > /dev/tty; }' ",
+        "'    kill -STOP \"$host_pid\" 2>/dev/null || true' ",
+        "'    trap cleanup EXIT HUP INT TERM' ",
+        "'    mpv \"$@\" < /dev/tty > /dev/tty 2>&1' ",
+        "'    status=$?' ",
+        "'    trap - EXIT HUP INT TERM' ",
+        "'    cleanup' ",
+        "'    exit \"$status\"' ",
+        "'  fi' ",
+        "'  exec mpv \"$@\"' ",
+        "'}' ",
+        "'case \"$renderer\" in' ",
+        "'  mpv) exec mpv \"$@\" ;;' ",
+        "'  tct) play_terminal --vo=tct --profile=sw-fast --really-quiet \"$@\" ;;' ",
+        "'  caca) play_terminal --vo=caca --really-quiet \"$@\" ;;' ",
+        "'  *) printf \"Unsupported video renderer: %s\\n\" \"$renderer\" >&2; exit 2 ;;' ",
+        "'esac' ",
+        "> \"$HOME/.local/bin/t4e-mpv-terminal\" && ",
+        "chmod +x \"$HOME/.local/bin/t4e-mpv-terminal\""
+    )
 }
 
 fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform) -> String {

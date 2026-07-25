@@ -202,6 +202,59 @@ fn catalog_builds_launch_command_from_allowlisted_options() {
 }
 
 #[test]
+fn missing_app_finishes_installation_before_showing_launch_options() {
+    let mut app = app();
+    app.apply_installed_tools(Default::default());
+    open_catalog_search(&mut app, "cmatrix");
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(app.launch_options.is_none());
+    let Some(AppEffect::Execute(job)) = app.take_effect() else {
+        panic!("missing app should begin installation");
+    };
+    let mut completed = *job;
+    completed
+        .item
+        .transition(QueueState::Installing)
+        .expect("install starts");
+    completed
+        .item
+        .transition(QueueState::Success)
+        .expect("install succeeds");
+    app.apply_execution(completed);
+
+    assert!(app.launch_options.is_some());
+    assert!(app.launch_argument.is_none());
+    assert!(app.take_effect().is_none());
+}
+
+#[test]
+fn failed_installation_does_not_open_launch_options() {
+    let mut app = app();
+    app.apply_installed_tools(Default::default());
+    open_catalog_search(&mut app, "cmatrix");
+    app.handle_key(key(KeyCode::Enter));
+
+    let Some(AppEffect::Execute(job)) = app.take_effect() else {
+        panic!("missing app should begin installation");
+    };
+    let mut completed = *job;
+    completed
+        .item
+        .transition(QueueState::Installing)
+        .expect("install starts");
+    completed
+        .item
+        .transition(QueueState::Failed)
+        .expect("install fails");
+    app.apply_execution(completed);
+
+    assert!(app.launch_options.is_none());
+    assert!(app.launch_argument.is_none());
+    assert!(app.take_effect().is_none());
+}
+
+#[test]
 fn launch_options_survive_state_reload_and_ignore_option_order() {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
     let workspaces =
@@ -272,6 +325,33 @@ fn removed_saved_option_value_falls_back_to_catalog_default() {
 }
 
 #[test]
+fn youtube_apps_pass_the_selected_external_video_renderer_to_managed_launchers() {
+    for (tool_id, renderer_steps, expected_command) in [
+        ("yewtube", 1, "t4e-yewtube --renderer TCT"),
+        ("youtube-tui", 2, "t4e-youtube-tui --renderer CACA"),
+    ] {
+        let mut app = app();
+        app.handle_key(key(KeyCode::Char('2')));
+        app.handle_key(key(KeyCode::Char('/')));
+        for ch in tool_id.chars() {
+            app.handle_key(key(KeyCode::Char(ch)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Enter));
+        for _ in 0..renderer_steps {
+            app.handle_key(key(KeyCode::Right));
+        }
+        app.handle_key(key(KeyCode::Enter));
+
+        assert!(matches!(
+            app.take_effect(),
+            Some(AppEffect::LaunchTool(request))
+                if request.tool_id == tool_id && request.command == expected_command
+        ));
+    }
+}
+
+#[test]
 fn one_shot_fun_app_requests_a_persistent_output_pane() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -311,6 +391,42 @@ fn compatible_app_can_enable_lolcat_as_a_structured_output_filter() {
         Some(AppEffect::LaunchTool(request))
             if request.tool_id == "fortune"
                 && request.command == "fortune"
+                && request.output_filter == Some(OutputFilter::Lolcat)
+    ));
+}
+
+#[test]
+fn figlet_collects_text_then_applies_options_before_the_quoted_message() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "figlet".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(app.launch_argument.is_some());
+    for ch in "T4E's shell".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(app.launch_options.is_some());
+    app.handle_key(key(KeyCode::Right));
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Char(' ')));
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Char(' ')));
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request))
+            if request.tool_id == "figlet"
+                && request.command == "figlet -f small -c 'T4E'\"'\"'s shell'"
+                && request.keep_open
                 && request.output_filter == Some(OutputFilter::Lolcat)
     ));
 }
@@ -868,11 +984,7 @@ fn ascii_camera_uninstall_keeps_the_shared_mpv_package() {
 #[test]
 fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
     let mut app = app();
-    app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT));
-    assert!(matches!(
-        app.take_effect(),
-        Some(AppEffect::SetMouseCapture(true))
-    ));
+    assert!(app.mouse_enabled, "mouse controls are enabled by default");
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
@@ -946,8 +1058,6 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
 #[test]
 fn mouse_clicks_header_navigation_tabs() {
     let mut app = app();
-    app.handle_key(KeyEvent::new(KeyCode::Char('m'), KeyModifiers::ALT));
-    app.take_effect();
 
     app.handle_mouse(
         MouseEvent {
@@ -981,6 +1091,48 @@ fn mouse_clicks_header_navigation_tabs() {
         24,
     );
     assert_eq!(app.screen, Screen::Help);
+}
+
+#[test]
+fn mouse_drag_requests_automatic_panel_selection_copy() {
+    let mut app = app();
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 2,
+            row: 4,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Drag(MouseButton::Left),
+            column: 12,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+    assert!(app.mouse_selection.is_some());
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Up(MouseButton::Left),
+            column: 12,
+            row: 5,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+
+    assert!(app.mouse_selection.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::CopySelection {
+            start: (2, 4),
+            end: (12, 5)
+        })
+    ));
 }
 
 #[test]
@@ -1079,7 +1231,17 @@ fn narrow_layout_keeps_every_screen_target_and_back_key_visible() {
 #[test]
 fn home_shows_compact_fastfetch_information_and_application_entry_points() {
     let mut app = app();
-    app.system_overview.logo = vec!["ASCII-OS".to_string()];
+    app.system_overview.logo = vec!["\u{1b}[31mASCII-OS\u{1b}[0m".to_string()];
+    app.remember_app_view(
+        "t4e-information-running".to_string(),
+        vec![ManagedApp {
+            pane_id: "%71".to_string(),
+            window_index: 0,
+            window_name: "yazi".to_string(),
+            pane_index: 0,
+            process: "yazi".to_string(),
+        }],
+    );
     let backend = TestBackend::new(120, 35);
     let mut terminal = Terminal::new(backend).expect("test terminal");
     terminal
@@ -1098,6 +1260,20 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
     assert!(rendered.contains("All Apps"));
     assert!(rendered.contains("Information"));
     assert!(rendered.contains("ASCII-OS"));
+    assert!(
+        terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .any(|cell| cell.symbol() == "A" && cell.fg == Color::Red),
+        "fastfetch ANSI logo color should reach the rendered cells"
+    );
+    assert!(rendered.contains("Running: 1 apps"));
+    assert!(!rendered.contains("Installs:"));
+    assert!(!rendered.contains("Saved:"));
+    assert!(rendered.contains("←/→ panel"));
+    assert!(rendered.contains("↑/↓ or j/k move"));
     for label in ["OS:", "Host:", "Kernel:", "CPU:", "Memory:"] {
         assert!(
             rendered.contains(label),

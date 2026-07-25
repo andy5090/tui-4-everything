@@ -133,7 +133,7 @@ fn pipx_install_bootstraps_the_package_manager() {
 }
 
 #[test]
-fn yewtube_install_defaults_an_invalid_player_to_mpv() {
+fn yewtube_install_creates_managed_terminal_video_renderers() {
     let mut tool = fake_tool(vec![Capability::Network]);
     tool.id = "yewtube".to_string();
     tool.run.cmd = "yt".to_string();
@@ -145,6 +145,11 @@ fn yewtube_install_defaults_an_invalid_player_to_mpv() {
         },
         Check {
             which: Some("t4e-yewtube".to_string()),
+            version: None,
+            custom: None,
+        },
+        Check {
+            which: Some("t4e-mpv-terminal".to_string()),
             version: None,
             custom: None,
         },
@@ -164,11 +169,16 @@ fn yewtube_install_defaults_an_invalid_player_to_mpv() {
 
     assert!(task.command.contains("pipx install --force yewtube"));
     assert!(task.command.contains("mps-youtube"));
-    assert!(task.command.contains("command -v \"$player\""));
-    assert!(task.command.contains("d[\\\"PLAYER\\\"]=\\\"mpv\\\""));
+    assert!(task.command.contains("T4E_MPV_RENDERER"));
+    assert!(task.command.contains("d[\\\"PLAYER\\\"]=sys.argv[2]"));
+    assert!(task.command.contains("--vo=tct --profile=sw-fast"));
+    assert!(task.command.contains("--vo=caca"));
     assert!(task.command.contains("t4e-yewtube"));
     assert_eq!(task.check_command.as_deref(), Some("yt"));
-    assert_eq!(task.additional_check_commands, ["t4e-yewtube"]);
+    assert_eq!(
+        task.additional_check_commands,
+        ["t4e-yewtube", "t4e-mpv-terminal"]
+    );
     assert!(task.requires_privileges);
 }
 
@@ -318,6 +328,11 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
             version: None,
             custom: None,
         },
+        Check {
+            which: Some("t4e-mpv-terminal".to_string()),
+            version: None,
+            custom: None,
+        },
     ];
     let installer = Installer {
         platform: Platform::Linux,
@@ -338,10 +353,23 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
         task.command
             .contains("pip install --upgrade 'yt-dlp[default]'")
     );
-    assert!(task.command.contains("PATH=\"$data_dir/yt-dlp/bin:$PATH\""));
+    assert!(
+        task.command
+            .contains("PATH=\"$data_dir/player:$data_dir/yt-dlp/bin:$real_path\"")
+    );
+    assert!(task.command.contains("T4E_REAL_PATH"));
+    assert!(task.command.contains("T4E_MPV_RENDERER"));
+    assert!(task.command.contains("T4E_VIDEO_HOST_PID"));
+    assert!(task.command.contains("kill -STOP"));
+    assert!(task.command.contains("< /dev/tty > /dev/tty 2>&1"));
+    assert!(task.command.contains("--vo=tct --profile=sw-fast"));
+    assert!(task.command.contains("--vo=caca"));
     assert!(task.command.contains("t4e-youtube-tui"));
     assert_eq!(task.check_command.as_deref(), Some("youtube-tui"));
-    assert_eq!(task.additional_check_commands, ["t4e-youtube-tui"]);
+    assert_eq!(
+        task.additional_check_commands,
+        ["t4e-youtube-tui", "t4e-mpv-terminal"]
+    );
     assert!(task.requires_privileges);
     assert!(!task.requires_confirmation);
 }

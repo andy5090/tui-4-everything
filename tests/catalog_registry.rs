@@ -67,6 +67,10 @@ fn registry_loads_and_validates() {
     }));
     assert_eq!(yewtube.checks[0].which.as_deref(), Some("yt"));
     assert_eq!(yewtube.checks[1].which.as_deref(), Some("t4e-yewtube"));
+    assert_eq!(yewtube.run_options[0].values, ["MPV", "TCT", "CACA"]);
+    assert_eq!(yewtube.run_options[0].default_value.as_deref(), Some("MPV"));
+    assert!(yewtube.run_options[0].default_enabled);
+    assert_eq!(yewtube.run_command_for(Platform::Macos), "t4e-yewtube");
     assert!(!yewtube.key_hints.is_empty());
 
     let ascii_camera = catalog
@@ -108,6 +112,15 @@ fn registry_loads_and_validates() {
     assert_eq!(
         youtube_tui.run_command_for(Platform::Linux),
         "t4e-youtube-tui"
+    );
+    assert_eq!(
+        youtube_tui.run_command_for(Platform::Macos),
+        "t4e-youtube-tui"
+    );
+    assert_eq!(youtube_tui.run_options[0].values, ["MPV", "TCT", "CACA"]);
+    assert_eq!(
+        youtube_tui.run_options[0].default_value.as_deref(),
+        Some("MPV")
     );
     assert!(youtube_tui.installers.iter().any(|installer| {
         installer.platform == Platform::Linux
@@ -295,6 +308,7 @@ fn one_shot_fun_tools_have_visible_default_output() {
     let expected = [
         ("cowsay", "cowsay T4E"),
         ("fortune", "fortune"),
+        ("figlet", "figlet"),
         ("fastfetch", "fastfetch"),
     ];
 
@@ -314,7 +328,7 @@ fn one_shot_fun_tools_have_visible_default_output() {
         .find(|tool| tool.id == "lolcat")
         .expect("lolcat support tool exists");
     assert!(!lolcat.is_launchable_app());
-    for tool_id in ["cowsay", "fortune"] {
+    for tool_id in ["cowsay", "fortune", "figlet"] {
         let tool = catalog
             .tools
             .iter()
@@ -324,6 +338,16 @@ fn one_shot_fun_tools_have_visible_default_output() {
             option.id == "rainbow-output" && option.output_filter == Some(OutputFilter::Lolcat)
         }));
     }
+    let figlet = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "figlet")
+        .expect("Figlet exists");
+    assert!(figlet.launch_argument.is_some());
+    assert_eq!(
+        figlet.run_options[0].values,
+        ["standard", "small", "slant", "big", "banner"]
+    );
 }
 
 #[test]

@@ -1,9 +1,11 @@
 use ansi_to_tui::IntoText as _;
-use ratatui::Frame;
+use ratatui::backend::TestBackend;
+use ratatui::buffer::Buffer;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap};
+use ratatui::{Frame, Terminal};
 
 use crate::catalog::models::RiskLevel;
 use crate::installer::queue::QueueState;
@@ -15,6 +17,9 @@ use super::state::{AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_L
 const ACCENT: Color = Color::Cyan;
 const MUTED: Color = Color::DarkGray;
 const SELECTED: Color = Color::Yellow;
+
+type ScreenPoint = (u16, u16);
+type PanelSelection = (Rect, ScreenPoint, ScreenPoint);
 
 pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
     let area = frame.area();
@@ -33,6 +38,7 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         if app.link_picker.is_some() {
             render_link_picker(frame, app, area);
         }
+        render_mouse_selection(frame, app);
         return;
     }
 
@@ -71,6 +77,162 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         render_confirmation(frame, app, area);
     } else if app.ai_confirmation.is_some() {
         render_ai_confirmation(frame, app, area);
+    }
+    render_mouse_selection(frame, app);
+}
+
+pub(crate) fn extract_panel_selection(
+    app: &mut AppState,
+    width: u16,
+    height: u16,
+    start: ScreenPoint,
+    end: ScreenPoint,
+) -> Option<String> {
+    if width < 2 || height < 2 {
+        return None;
+    }
+    let backend = TestBackend::new(width, height);
+    let mut terminal = Terminal::new(backend).ok()?;
+    terminal.draw(|frame| render(frame, app)).ok()?;
+    selection_text(terminal.backend().buffer(), start, end)
+}
+
+fn render_mouse_selection(frame: &mut Frame<'_>, app: &AppState) {
+    let Some(selection) = app.mouse_selection else {
+        return;
+    };
+    let Some((panel, start, end)) =
+        panel_selection(frame.buffer_mut(), selection.start, selection.end)
+    else {
+        return;
+    };
+    let buffer = frame.buffer_mut();
+    for_each_selected_cell(panel, start, end, |x, y| {
+        if let Some(cell) = buffer.cell_mut((x, y)) {
+            cell.set_style(Style::default().add_modifier(Modifier::REVERSED));
+        }
+    });
+}
+
+fn selection_text(buffer: &Buffer, start: ScreenPoint, end: ScreenPoint) -> Option<String> {
+    let (panel, start, end) = panel_selection(buffer, start, end)?;
+    let mut lines = Vec::<String>::new();
+    let mut current_row = None;
+    for_each_selected_cell(panel, start, end, |x, y| {
+        if current_row != Some(y) {
+            lines.push(String::new());
+            current_row = Some(y);
+        }
+        if let Some(cell) = buffer.cell((x, y)) {
+            lines
+                .last_mut()
+                .expect("selection row exists")
+                .push_str(cell.symbol());
+        }
+    });
+    for line in &mut lines {
+        *line = line.trim_end().to_string();
+    }
+    while lines.first().is_some_and(String::is_empty) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(String::is_empty) {
+        lines.pop();
+    }
+    if lines.is_empty() {
+        return None;
+    }
+
+    let compact = lines.iter().map(|line| line.trim()).collect::<Vec<_>>();
+    if compact
+        .first()
+        .is_some_and(|line| line.starts_with("https://") || line.starts_with("http://"))
+        && compact
+            .iter()
+            .all(|line| !line.is_empty() && line.split_whitespace().count() == 1)
+    {
+        return Some(compact.concat());
+    }
+    Some(lines.join("\n"))
+}
+
+fn panel_selection(
+    buffer: &Buffer,
+    start: ScreenPoint,
+    end: ScreenPoint,
+) -> Option<PanelSelection> {
+    let panel = enclosing_panel(buffer, start)?;
+    let left = panel.x.saturating_add(1);
+    let right = panel.right().saturating_sub(2);
+    let top = panel.y.saturating_add(1);
+    let bottom = panel.bottom().saturating_sub(2);
+    if start.0 < left || start.0 > right || start.1 < top || start.1 > bottom {
+        return None;
+    }
+    let end = (end.0.clamp(left, right), end.1.clamp(top, bottom));
+    let (start, end) = if (start.1, start.0) <= (end.1, end.0) {
+        (start, end)
+    } else {
+        (end, start)
+    };
+    Some((panel, start, end))
+}
+
+fn enclosing_panel(buffer: &Buffer, point: ScreenPoint) -> Option<Rect> {
+    let area = *buffer.area();
+    let mut panels = Vec::new();
+    for top in area.y..point.1 {
+        for left in area.x..point.0 {
+            if buffer.cell((left, top)).map(|cell| cell.symbol()) != Some("┌") {
+                continue;
+            }
+            for right in point.0.saturating_add(1)..area.right() {
+                if buffer.cell((right, top)).map(|cell| cell.symbol()) != Some("┐") {
+                    continue;
+                }
+                for bottom in point.1.saturating_add(1)..area.bottom() {
+                    if buffer.cell((left, bottom)).map(|cell| cell.symbol()) != Some("└")
+                        || buffer.cell((right, bottom)).map(|cell| cell.symbol()) != Some("┘")
+                    {
+                        continue;
+                    }
+                    let sides_are_intact = (top + 1..bottom).all(|y| {
+                        buffer.cell((left, y)).map(|cell| cell.symbol()) == Some("│")
+                            && buffer.cell((right, y)).map(|cell| cell.symbol()) == Some("│")
+                    });
+                    let bottom_is_intact = (left + 1..right)
+                        .all(|x| buffer.cell((x, bottom)).map(|cell| cell.symbol()) == Some("─"));
+                    if sides_are_intact && bottom_is_intact {
+                        panels.push(Rect::new(
+                            left,
+                            top,
+                            right.saturating_sub(left).saturating_add(1),
+                            bottom.saturating_sub(top).saturating_add(1),
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    panels
+        .into_iter()
+        .max_by_key(|panel| u32::from(panel.width) * u32::from(panel.height))
+}
+
+fn for_each_selected_cell(
+    panel: Rect,
+    start: ScreenPoint,
+    end: ScreenPoint,
+    mut visit: impl FnMut(u16, u16),
+) {
+    let left = panel.x + 1;
+    let right = panel.right() - 2;
+    for y in start.1..=end.1 {
+        let row_start = if y == start.1 { start.0 } else { left };
+        let row_end = if y == end.1 { end.0 } else { right };
+        for x in row_start..=row_end {
+            visit(x, y);
+        }
     }
 }
 
@@ -134,13 +296,12 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         .collect::<Vec<_>>();
     let library_selected = (app.home_filter_index < 3).then_some(app.home_filter_index);
     let mut library_state = ListState::default().with_selected(library_selected);
+    let quick_access_focused = app.home_focus == HomeFocus::Views && app.home_filter_index < 3;
     frame.render_stateful_widget(
         List::new(library_filters)
-            .block(panel("Quick Access"))
-            .highlight_style(home_selection_style(
-                app.home_focus == HomeFocus::Views && app.home_filter_index < 3,
-            ))
-            .highlight_symbol("> "),
+            .block(home_panel("Quick Access", quick_access_focused))
+            .highlight_style(home_selection_style(quick_access_focused))
+            .highlight_symbol(home_selection_symbol(quick_access_focused)),
         library_sections[0],
         &mut library_state,
     );
@@ -157,13 +318,12 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         .collect::<Vec<_>>();
     let category_selected = app.home_filter_index.checked_sub(3);
     let mut category_state = ListState::default().with_selected(category_selected);
+    let categories_focused = app.home_focus == HomeFocus::Views && app.home_filter_index >= 3;
     frame.render_stateful_widget(
         List::new(categories)
-            .block(panel("Apps"))
-            .highlight_style(home_selection_style(
-                app.home_focus == HomeFocus::Views && app.home_filter_index >= 3,
-            ))
-            .highlight_symbol("> "),
+            .block(home_panel("Apps", categories_focused))
+            .highlight_style(home_selection_style(categories_focused))
+            .highlight_symbol(home_selection_symbol(categories_focused)),
         library_sections[1],
         &mut category_state,
     );
@@ -221,11 +381,12 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             app.search_query
         )
     };
+    let app_list_focused = app.home_focus == HomeFocus::AppList;
     frame.render_stateful_widget(
         List::new(app_items)
-            .block(panel(&app_title))
-            .highlight_style(home_selection_style(app.home_focus == HomeFocus::AppList))
-            .highlight_symbol("> "),
+            .block(home_panel(&app_title, app_list_focused))
+            .highlight_style(home_selection_style(app_list_focused))
+            .highlight_symbol(home_selection_symbol(app_list_focused)),
         apps_area,
         &mut app_state,
     );
@@ -234,14 +395,14 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         app.system_overview
             .lines
             .iter()
-            .map(|line| Line::from(line.as_str()))
+            .map(|line| ansi_line(line))
             .collect::<Vec<_>>()
     } else {
         let logo_width = app
             .system_overview
             .logo
             .iter()
-            .map(|line| line.chars().count())
+            .map(|line| ansi_line(line).width())
             .max()
             .unwrap_or_default();
         let row_count = app
@@ -256,12 +417,12 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                     .logo
                     .get(index)
                     .map_or("", String::as_str);
-                let mut spans = vec![Span::styled(
-                    format!("{logo:<logo_width$}"),
-                    Style::default().fg(ACCENT),
-                )];
+                let logo = ansi_line(logo);
+                let padding = logo_width.saturating_sub(logo.width());
+                let mut spans = logo.spans;
                 if let Some(detail) = app.system_overview.lines.get(index) {
-                    spans.push(Span::raw(format!("  {detail}")));
+                    spans.push(Span::raw(" ".repeat(padding + 2)));
+                    spans.extend(ansi_line(detail).spans);
                 }
                 Line::from(spans)
             })
@@ -282,15 +443,10 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             )),
         ]),
         Line::from(vec![
-            Span::styled("Installs: ", Style::default().fg(Color::Yellow)),
-            Span::raw(format!("{} queued or completed", app.queue.len())),
-        ]),
-        Line::from(vec![
-            Span::styled("Saved: ", Style::default().fg(Color::Magenta)),
+            Span::styled("Running: ", Style::default().fg(Color::Green)),
             Span::raw(format!(
-                "{} favorites, {} recents",
-                app.favorites.len(),
-                app.recents.len()
+                "{} apps",
+                app.app_view.as_ref().map_or(0, |view| view.apps.len())
             )),
         ]),
     ]);
@@ -323,11 +479,20 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     }
     information.extend([
         Line::from(""),
-        Line::from("←/→ panel   Enter run   / search   I/U/R install/remove/reset"),
+        Line::from("←/→ switch panel   ↑/↓ move selection"),
+        Line::from("Enter run   / search   I/U/R install/remove/reset"),
     ]);
     let information_title = format!("Information · {}", app.system_overview.source);
     let information = Paragraph::new(information).block(panel(&information_title));
     frame.render_widget(information, information_area);
+}
+
+fn ansi_line(value: &str) -> Line<'static> {
+    value
+        .into_text()
+        .ok()
+        .and_then(|text| text.lines.into_iter().next())
+        .unwrap_or_else(|| Line::from(value.to_string()))
 }
 
 fn home_layout(area: Rect) -> [Rect; 3] {
@@ -358,10 +523,20 @@ fn home_selection_style(focused: bool) -> Style {
     if focused {
         selection_style()
     } else {
-        Style::default()
-            .fg(Color::Gray)
-            .add_modifier(Modifier::REVERSED)
+        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
     }
+}
+
+fn home_selection_symbol(focused: bool) -> &'static str {
+    if focused { "> " } else { "  " }
+}
+
+fn home_panel(title: &str, focused: bool) -> Block<'_> {
+    panel(title).border_style(if focused {
+        Style::default().fg(ACCENT)
+    } else {
+        Style::default()
+    })
 }
 
 fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
@@ -965,9 +1140,18 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             "{} | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
             app.status
         )
+    } else if app.screen == Screen::Home {
+        if area.width < 90 {
+            "←/→ panel  ↑/↓ move  Enter run  Backspace back  ? help".to_string()
+        } else {
+            format!(
+                "{} | ←/→ panel  ↑/↓ or j/k move  Enter run  Backspace back  ? help",
+                app.status
+            )
+        }
     } else {
         format!(
-            "{} | arrows/jk move  Enter open/run  Backspace back  ? help",
+            "{} | ↑/↓ or j/k move  Enter open/run  Backspace back  ? help",
             app.status
         )
     };
@@ -1047,7 +1231,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("Alt+Left / Right    switch running apps"),
             Line::from("Alt+Backspace       leave an app running in the background"),
             Line::from("Alt+Q               close the current app"),
-            Line::from("Alt+M               toggle text selection and T4E mouse controls"),
+            Line::from("Mouse drag         copy text inside one panel without its border"),
+            Line::from("Alt+M               disable / enable T4E mouse controls"),
             Line::from("Alt+O / Alt+C       open or copy a link from the current app"),
             Line::from("Backspace / Esc     return to HOME outside a running app"),
             Line::from("q                   return to HOME, then quit"),
@@ -1392,11 +1577,65 @@ fn risk_style(risk: RiskLevel) -> Style {
 
 #[cfg(test)]
 mod tests {
-    use super::compact_usage;
+    use ratatui::buffer::Buffer;
+    use ratatui::layout::Rect;
+    use ratatui::style::{Color, Modifier, Style};
+    use ratatui::widgets::{Block, Borders, Widget};
+
+    use super::{
+        ACCENT, compact_usage, home_selection_style, home_selection_symbol, selection_text,
+    };
 
     #[test]
     fn usage_summary_keeps_only_limit_name_and_percent() {
         let raw = r#"{"rateLimits":{"limitName":"Codex Plan","primary":{"usedPercent":12.4}}}"#;
         assert_eq!(compact_usage(raw), "Codex Plan: 12% used");
+    }
+
+    #[test]
+    fn inactive_home_selection_has_no_arrow_or_reversed_background() {
+        assert_eq!(home_selection_symbol(false), "  ");
+        assert_eq!(
+            home_selection_style(false),
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+        );
+        assert_ne!(home_selection_style(false).bg, Some(Color::White));
+    }
+
+    #[test]
+    fn panel_selection_excludes_outline_and_rejoins_a_wrapped_url() {
+        let area = Rect::new(0, 0, 24, 5);
+        let mut buffer = Buffer::empty(area);
+        Block::default()
+            .borders(Borders::ALL)
+            .render(area, &mut buffer);
+        buffer.set_string(1, 1, "https://example.com/a", Style::default());
+        buffer.set_string(1, 2, "?token=xyz", Style::default());
+
+        let copied = selection_text(&buffer, (1, 1), (10, 2)).expect("selection copies");
+
+        assert_eq!(copied, "https://example.com/a?token=xyz");
+        assert!(!copied.contains(['┌', '┐', '└', '┘', '│']));
+        assert!(selection_text(&buffer, (0, 0), (10, 2)).is_none());
+    }
+
+    #[test]
+    fn panel_selection_cannot_merge_adjacent_panel_borders() {
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 5));
+        let left = Rect::new(0, 0, 10, 5);
+        let right = Rect::new(10, 0, 10, 5);
+        Block::default()
+            .borders(Borders::ALL)
+            .render(left, &mut buffer);
+        Block::default()
+            .borders(Borders::ALL)
+            .render(right, &mut buffer);
+        buffer.set_string(1, 1, "LEFT", Style::default());
+        buffer.set_string(11, 1, "RIGHT", Style::default());
+
+        let copied = selection_text(&buffer, (1, 1), (18, 1)).expect("left panel selection");
+
+        assert_eq!(copied, "LEFT");
+        assert!(!copied.contains("RIGHT"));
     }
 }
