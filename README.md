@@ -86,8 +86,9 @@ when it exits.
 The primary navigation is `HOME`, `AI`, `Activity`, `Settings`, and `Help`.
 HOME contains Quick Access, categorized Apps, and a compact
 fastfetch system summary with the detected OS ASCII logo and native fastfetch
-colors. Left/Right switches between the app views and app list; Enter enters a
-list or runs an app. Press `/` to search the current view and `?` to open Help.
+colors. A persistent search input sits above Quick Access and can be focused by
+clicking it or pressing `/`. Left/Right switches between the app views and app
+list; Enter enters a list or runs an app, and `?` opens Help.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.
@@ -100,7 +101,8 @@ Important actions are intentionally explicit:
 - The main flow is HOME -> Apps or Category -> app -> run. In App View,
   `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
   returns to the previous screen while keeping apps running, and `Alt+Q` closes
-  the current app. `Backspace` and `Esc` are forwarded to the running app.
+  the current app. On HOME, `Alt+Q` exits T4E even when search is focused.
+  `Backspace` and `Esc` are forwarded to the running app.
   T4E mouse controls are enabled by default for lists, app tabs, scrolling, and
   App View footer actions. Dragging inside one panel highlights its text and
   automatically copies it on release without the T4E panel border. Wrapped

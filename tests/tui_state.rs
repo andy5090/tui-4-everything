@@ -989,7 +989,7 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
             column: 3,
-            row: 6,
+            row: 9,
             modifiers: KeyModifiers::NONE,
         },
         24,
@@ -999,7 +999,7 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
         MouseEvent {
             kind: MouseEventKind::ScrollDown,
             column: 3,
-            row: 6,
+            row: 9,
             modifiers: KeyModifiers::NONE,
         },
         24,
@@ -1094,12 +1094,48 @@ fn mouse_clicks_header_navigation_tabs() {
 }
 
 #[test]
+fn mouse_click_opens_the_home_search_input_above_quick_access() {
+    let mut app = app();
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: 3,
+            row: 4,
+            modifiers: KeyModifiers::NONE,
+        },
+        24,
+    );
+    assert!(app.search_mode);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
+
+    for ch in "figlet".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    assert_eq!(app.search_query, "figlet");
+    assert_eq!(app.home_tools().len(), 1);
+}
+
+#[test]
+fn alt_q_quits_home_even_while_search_is_focused() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('/')));
+    assert!(app.search_mode);
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::ALT));
+
+    assert!(app.should_quit);
+    assert!(!app.search_mode);
+    assert!(app.search_query.is_empty());
+}
+
+#[test]
 fn mouse_drag_requests_automatic_panel_selection_copy() {
     let mut app = app();
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: 2,
+            column: 30,
             row: 4,
             modifiers: KeyModifiers::NONE,
         },
@@ -1108,7 +1144,7 @@ fn mouse_drag_requests_automatic_panel_selection_copy() {
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Drag(MouseButton::Left),
-            column: 12,
+            column: 40,
             row: 5,
             modifiers: KeyModifiers::NONE,
         },
@@ -1118,7 +1154,7 @@ fn mouse_drag_requests_automatic_panel_selection_copy() {
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Up(MouseButton::Left),
-            column: 12,
+            column: 40,
             row: 5,
             modifiers: KeyModifiers::NONE,
         },
@@ -1129,8 +1165,8 @@ fn mouse_drag_requests_automatic_panel_selection_copy() {
     assert!(matches!(
         app.take_effect(),
         Some(AppEffect::CopySelection {
-            start: (2, 4),
-            end: (12, 5)
+            start: (30, 4),
+            end: (40, 5)
         })
     ));
 }
@@ -1256,6 +1292,7 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
         .collect::<String>();
 
     assert!(rendered.contains("Apps"));
+    assert!(rendered.contains("Search apps..."));
     assert!(rendered.contains("Quick Access"));
     assert!(rendered.contains("All Apps"));
     assert!(rendered.contains("Information"));

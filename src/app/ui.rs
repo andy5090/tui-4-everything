@@ -280,10 +280,33 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 
 fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     let [library_area, apps_area, information_area] = home_layout(area);
+    let left_sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(8)])
+        .split(library_area);
     let library_sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(5), Constraint::Min(6)])
-        .split(library_area);
+        .split(left_sections[1]);
+    let search_value = if app.search_query.is_empty() {
+        Span::styled("Search apps...", Style::default().fg(MUTED))
+    } else {
+        Span::raw(app.search_query.clone())
+    };
+    let search_cursor = app.search_mode.then(|| {
+        Span::styled(
+            "│",
+            Style::default().fg(SELECTED).add_modifier(Modifier::BOLD),
+        )
+    });
+    let mut search_line = vec![Span::raw(" "), search_value];
+    if let Some(cursor) = search_cursor {
+        search_line.push(cursor);
+    }
+    frame.render_widget(
+        Paragraph::new(Line::from(search_line)).block(home_panel("Search", app.search_mode)),
+        left_sections[0],
+    );
     let library_filters = HomeFilter::ALL[..3]
         .iter()
         .map(|filter| {
@@ -496,11 +519,22 @@ fn ansi_line(value: &str) -> Line<'static> {
 }
 
 fn home_layout(area: Rect) -> [Rect; 3] {
-    if area.width >= 110 {
+    if area.width >= 120 {
         let columns = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Length(24),
+                Constraint::Min(40),
+                Constraint::Length(56),
+            ])
+            .split(area);
+        return [columns[0], columns[1], columns[2]];
+    }
+    if area.width >= 110 {
+        let columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(22),
                 Constraint::Min(40),
                 Constraint::Length(48),
             ])
@@ -1132,7 +1166,10 @@ fn risk_explanation(risk: RiskLevel) -> &'static str {
 
 fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let hint = if app.search_mode {
-        format!("Search: {}_   Enter apply   Esc cancel", app.search_query)
+        format!(
+            "Search: {}_   Enter apply   Esc cancel   Alt+Q quit",
+            app.search_query
+        )
     } else if app.ai_input_mode {
         "AI prompt input   Enter send   Esc cancel".to_string()
     } else if app.screen == Screen::Logs {
@@ -1230,7 +1267,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("Activity Home / End jump to newest / oldest entry"),
             Line::from("Alt+Left / Right    switch running apps"),
             Line::from("Alt+Backspace       leave an app running in the background"),
-            Line::from("Alt+Q               close the current app"),
+            Line::from("Alt+Q               close the current app; quit from HOME"),
             Line::from("Mouse drag         copy text inside one panel without its border"),
             Line::from("Alt+M               disable / enable T4E mouse controls"),
             Line::from("Alt+O / Alt+C       open or copy a link from the current app"),
@@ -1583,8 +1620,18 @@ mod tests {
     use ratatui::widgets::{Block, Borders, Widget};
 
     use super::{
-        ACCENT, compact_usage, home_selection_style, home_selection_symbol, selection_text,
+        ACCENT, compact_usage, home_layout, home_selection_style, home_selection_symbol,
+        selection_text,
     };
+
+    #[test]
+    fn desktop_home_gives_information_more_width_without_squeezing_apps() {
+        let [quick_access, apps, information] = home_layout(Rect::new(0, 0, 160, 30));
+
+        assert_eq!(quick_access.width, 24);
+        assert_eq!(information.width, 56);
+        assert!(apps.width >= 40);
+    }
 
     #[test]
     fn usage_summary_keeps_only_limit_name_and_percent() {

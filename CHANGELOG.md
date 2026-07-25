@@ -19,6 +19,8 @@ and date are assigned.
   Yewtube and YouTube TUI.
 - Figlet with prompted message input, font, centering, width, and optional
   managed rainbow output.
+- Persistent HOME search input above Quick Access with keyboard and mouse
+  focus.
 - Default-on mouse controls with panel-bounded drag selection, visible
   selection feedback, automatic clipboard copy, border removal, and wrapped
   URL cleanup.
@@ -38,6 +40,10 @@ and date are assigned.
   safely combine quoted user text with allowlisted flags and output effects.
 - Defer launch input and options for missing applications until installation
   succeeds; failed or cancelled installs remain on the application screen.
+- Widen the desktop HOME Information panel while retaining minimum app-list
+  width and the compact layout at smaller terminal sizes.
+- Keep `Alt+Q` as a HOME-level quit command while the persistent search input
+  is focused.
 
 ### Fixed
 

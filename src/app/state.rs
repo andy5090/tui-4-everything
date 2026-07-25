@@ -388,6 +388,14 @@ impl AppState {
             );
             return;
         }
+        if self.screen == Screen::Home
+            && key.modifiers.contains(KeyModifiers::ALT)
+            && key.code == KeyCode::Char('q')
+        {
+            self.search_mode = false;
+            self.should_quit = true;
+            return;
+        }
         if self.screen == Screen::AppView {
             self.handle_app_view_key(key);
             return;
@@ -507,6 +515,16 @@ impl AppState {
             }
             MouseEventKind::Down(MouseButton::Left) if mouse.row < 3 => {
                 self.select_navigation_tab_at(mouse.column);
+            }
+            MouseEventKind::Down(MouseButton::Left)
+                if self.screen == Screen::Home
+                    && mouse.column < 24
+                    && (3..=5).contains(&mouse.row) =>
+            {
+                self.mouse_selection = None;
+                self.home_focus = HomeFocus::AppList;
+                self.search_mode = true;
+                self.status = "Search HOME apps".to_string();
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.select_list_row(mouse.column, mouse.row)
@@ -1580,10 +1598,10 @@ impl AppState {
         }
         match self.screen {
             Screen::Home if self.home_focus == HomeFocus::Views => {
-                let filter_index = if (4..=6).contains(&row) {
-                    Some(usize::from(row - 4))
-                } else if row >= 9 {
-                    Some(3 + usize::from(row - 9))
+                let filter_index = if (7..=9).contains(&row) {
+                    Some(usize::from(row - 7))
+                } else if row >= 12 {
+                    Some(3 + usize::from(row - 12))
                 } else {
                     None
                 };
