@@ -317,9 +317,11 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             ))
         })
         .collect::<Vec<_>>();
-    let library_selected = (app.home_filter_index < 3).then_some(app.home_filter_index);
+    let library_selected =
+        (!app.search_mode && app.home_filter_index < 3).then_some(app.home_filter_index);
     let mut library_state = ListState::default().with_selected(library_selected);
-    let quick_access_focused = app.home_focus == HomeFocus::Views && app.home_filter_index < 3;
+    let quick_access_focused =
+        !app.search_mode && app.home_focus == HomeFocus::Views && app.home_filter_index < 3;
     frame.render_stateful_widget(
         List::new(library_filters)
             .block(home_panel("Quick Access", quick_access_focused))
@@ -339,9 +341,12 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             ))
         })
         .collect::<Vec<_>>();
-    let category_selected = app.home_filter_index.checked_sub(3);
+    let category_selected = (!app.search_mode)
+        .then(|| app.home_filter_index.checked_sub(3))
+        .flatten();
     let mut category_state = ListState::default().with_selected(category_selected);
-    let categories_focused = app.home_focus == HomeFocus::Views && app.home_filter_index >= 3;
+    let categories_focused =
+        !app.search_mode && app.home_focus == HomeFocus::Views && app.home_filter_index >= 3;
     frame.render_stateful_widget(
         List::new(categories)
             .block(home_panel("Apps", categories_focused))
@@ -355,18 +360,24 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     let app_items = tools
         .iter()
         .map(|tool| {
-            let state =
-                if app.is_tool_running(&tool.id) {
-                    "RUNNING"
-                } else if app.installed_tools.contains(&tool.id) {
-                    "INSTALLED"
-                } else if app.queue.iter().any(|job| {
-                    job.item.tool_id == tool.id && job.item.state == QueueState::Installing
-                }) {
-                    "INSTALLING"
-                } else {
-                    ""
-                };
+            let is_installing = app
+                .queue
+                .iter()
+                .any(|job| job.item.tool_id == tool.id && job.item.state == QueueState::Installing);
+            let (state, state_style) = if app.is_tool_running(&tool.id) {
+                ("RUNNING", Style::default().fg(ACCENT))
+            } else if is_installing {
+                (
+                    "INSTALLING",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
+            } else if app.installed_tools.contains(&tool.id) {
+                ("INSTALLED", Style::default().fg(Color::Green))
+            } else {
+                ("", Style::default())
+            };
             ListItem::new(Line::from(vec![
                 Span::raw(format!(
                     "{} ",
@@ -381,14 +392,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                     format!("{:<14}", tool.app_category().label()),
                     Style::default().fg(MUTED),
                 ),
-                Span::styled(
-                    state,
-                    if state == "RUNNING" {
-                        Style::default().fg(ACCENT)
-                    } else {
-                        Style::default().fg(Color::Green)
-                    },
-                ),
+                Span::styled(state, state_style),
             ]))
         })
         .collect::<Vec<_>>();
@@ -404,7 +408,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             app.search_query
         )
     };
-    let app_list_focused = app.home_focus == HomeFocus::AppList;
+    let app_list_focused = !app.search_mode && app.home_focus == HomeFocus::AppList;
     frame.render_stateful_widget(
         List::new(app_items)
             .block(home_panel(&app_title, app_list_focused))
@@ -500,10 +504,11 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             )),
         ]);
     }
+    let [primary_hint, action_hint] = home_information_hints(app);
     information.extend([
         Line::from(""),
-        Line::from("←/→ switch panel   ↑/↓ move selection"),
-        Line::from("Enter run   / search   I/U/R install/remove/reset"),
+        Line::from(primary_hint),
+        Line::from(action_hint),
     ]);
     let active_install = app.selected_home_tool().and_then(|tool| {
         app.queue
@@ -542,6 +547,26 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             Paragraph::new(log_lines).block(panel(&format!("Installing · {}", tool.name))),
             log_area,
         );
+    }
+}
+
+fn home_information_hints(app: &AppState) -> [&'static str; 2] {
+    if app.search_mode {
+        return [
+            "Type search   Backspace delete",
+            "↓/→ results   Enter apply   Esc cancel",
+        ];
+    }
+    match app.home_focus {
+        HomeFocus::Views if app.home_filter_index == 0 => [
+            "↑ search   ↓ move view   → apps",
+            "Enter open view   / search",
+        ],
+        HomeFocus::Views => ["↑/↓ move view   → apps", "Enter open view   / search"],
+        HomeFocus::AppList => [
+            "← views   ↑/↓ move app",
+            "Enter run   I/U/R install/remove/reset",
+        ],
     }
 }
 
@@ -588,12 +613,8 @@ fn home_layout(area: Rect) -> [Rect; 3] {
     [columns[0], right[0], right[1]]
 }
 
-fn home_selection_style(focused: bool) -> Style {
-    if focused {
-        selection_style()
-    } else {
-        Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
-    }
+fn home_selection_style(_focused: bool) -> Style {
+    Style::default().add_modifier(Modifier::BOLD)
 }
 
 fn home_selection_symbol(focused: bool) -> &'static str {
@@ -1113,7 +1134,7 @@ fn render_logs(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         .logs
         .iter()
         .rev()
-        .map(|entry| Line::from(format!("> {}", entry)))
+        .map(|entry| activity_line(entry))
         .collect::<Vec<_>>();
     frame.render_widget(
         Paragraph::new(lines)
@@ -1132,6 +1153,102 @@ fn render_logs(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     );
 }
 
+fn activity_line(entry: &str) -> Line<'_> {
+    let mut spans = vec![Span::styled("> ", Style::default().fg(MUTED))];
+    let (timestamp, message) = entry
+        .strip_prefix('[')
+        .and_then(|entry| entry.split_once("] "))
+        .map_or((None, entry), |(timestamp, message)| {
+            (Some(timestamp), message)
+        });
+    if let Some(timestamp) = timestamp {
+        spans.push(Span::styled(
+            format!("[{timestamp}] "),
+            Style::default().fg(MUTED),
+        ));
+    }
+
+    if let Some((tool_id, stream_and_text)) = message.split_once(" [")
+        && let Some((stream, text)) = stream_and_text.split_once("]: ")
+    {
+        let stream_color = match stream {
+            "output" => Color::Green,
+            "progress" => Color::Yellow,
+            "error" | "err" => Color::Red,
+            _ => ACCENT,
+        };
+        spans.extend([
+            Span::styled(
+                tool_id.to_string(),
+                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("[{stream}]"),
+                Style::default()
+                    .fg(stream_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(": "),
+            Span::styled(text.to_string(), activity_message_style(text)),
+        ]);
+        return Line::from(spans);
+    }
+
+    if let Some((event, text)) = message.split_once(": ") {
+        let event_color = match event {
+            "queue" => Color::Cyan,
+            "install" => Color::Green,
+            "uninstall" | "reinstall" => Color::Yellow,
+            "codex" | "codex diagnostic" => Color::Magenta,
+            "settings" => Color::Blue,
+            "workspace" => ACCENT,
+            _ => Color::White,
+        };
+        spans.extend([
+            Span::styled(
+                format!("{event}:"),
+                Style::default()
+                    .fg(event_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::raw(" "),
+            Span::styled(text.to_string(), activity_message_style(text)),
+        ]);
+    } else {
+        spans.push(Span::styled(
+            message.to_string(),
+            activity_message_style(message),
+        ));
+    }
+    Line::from(spans)
+}
+
+fn activity_message_style(message: &str) -> Style {
+    let message = message.to_ascii_lowercase();
+    if [
+        "failed",
+        "failure",
+        "error",
+        "denied",
+        "cancelled",
+        "timed out",
+        "-> failed",
+    ]
+    .iter()
+    .any(|word| message.contains(word))
+    {
+        Style::default().fg(Color::Red)
+    } else if ["completed", "success", "installed", "ready"]
+        .iter()
+        .any(|word| message.contains(word))
+    {
+        Style::default().fg(Color::Green)
+    } else {
+        Style::default()
+    }
+}
+
 fn activity_message(entry: &str) -> &str {
     entry
         .strip_prefix('[')
@@ -1142,10 +1259,9 @@ fn activity_message(entry: &str) -> &str {
 fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     let chunks = responsive_split(area, 88);
     let values = [
-        format!("Default mux              {}", app.settings.default_mux),
         format!(
-            "Install timeout           {} sec",
-            app.settings.install_timeout_sec
+            "Mouse controls            {}",
+            if app.mouse_enabled { "on" } else { "off" }
         ),
         format!(
             "Maximum install attempts  {}",
@@ -1172,28 +1288,69 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         &mut state,
     );
 
-    let detail = Text::from(vec![
-        Line::styled(
-            "Execution policy",
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
-        Line::from(""),
-        Line::from("Changes are saved immediately."),
-        Line::from("Timeout and retries apply to new install runs."),
-        Line::from("Confirm-all requires typed approval for every tool."),
-        Line::from("Reset restores runtime defaults and clears saved app options."),
-        Line::from(""),
-        Line::styled(
-            "h/l or arrows adjust  Space toggles  Enter resets",
-            Style::default().fg(MUTED),
-        ),
-    ]);
+    let detail = setting_detail(app);
     frame.render_widget(
         Paragraph::new(detail)
-            .block(panel("Policy details"))
+            .block(panel("Setting details"))
             .wrap(Wrap { trim: true }),
         chunks[1],
     );
+}
+
+fn setting_detail(app: &AppState) -> Text<'static> {
+    let (title, value, description, effect, controls) = match app.settings_index {
+        0 => (
+            "Mouse controls",
+            if app.mouse_enabled { "On" } else { "Off" }.to_string(),
+            "Enables clicking, scrolling, and drag-to-copy in T4E panels.",
+            "The choice is saved. Alt+M remains available as a global toggle.",
+            "Left/Right or Space toggle",
+        ),
+        1 => (
+            "Maximum install attempts",
+            app.settings.max_install_attempts.to_string(),
+            "Total automatic attempts allowed for one installation.",
+            "Adjusts from 1 to 5. Cancelled installs stop immediately instead of retrying.",
+            "Left/Right adjusts by one attempt",
+        ),
+        2 => (
+            "Confirm all installs",
+            if app.settings.confirm_all_installs {
+                "On"
+            } else {
+                "Off"
+            }
+            .to_string(),
+            "Requests approval before every package-manager installation.",
+            "Script and DANGER installs still require typed approval even when this setting is off.",
+            "Left/Right or Space toggle",
+        ),
+        _ => (
+            "Reset saved preferences",
+            "Ready".to_string(),
+            "Restores runtime settings and clears remembered launch options.",
+            "Favorites, recent apps, activity history, and installed applications are kept.",
+            "Enter resets",
+        ),
+    };
+    Text::from(vec![
+        Line::styled(title, Style::default().add_modifier(Modifier::BOLD)),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("Current: ", Style::default().fg(ACCENT)),
+            Span::raw(value),
+        ]),
+        Line::from(""),
+        Line::from(description),
+        Line::from(""),
+        Line::from(effect),
+        Line::from(""),
+        Line::styled(controls, Style::default().fg(MUTED)),
+        Line::styled(
+            "Changes are saved automatically.",
+            Style::default().fg(MUTED),
+        ),
+    ])
 }
 
 fn risk_explanation(risk: RiskLevel) -> &'static str {
@@ -1208,7 +1365,7 @@ fn risk_explanation(risk: RiskLevel) -> &'static str {
 fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let hint = if app.search_mode {
         format!(
-            "Search: {}_   Enter apply   Esc cancel   Alt+Q quit",
+            "Search all apps: {}_   ↓/→ results   Enter apply   Esc cancel   Alt+Q quit",
             app.search_query
         )
     } else if app.ai_input_mode {
@@ -1219,13 +1376,17 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             app.status
         )
     } else if app.screen == Screen::Home {
+        let navigation = match app.home_focus {
+            HomeFocus::Views if app.home_filter_index == 0 => {
+                "↑ search  ↓ view  → apps  Enter open"
+            }
+            HomeFocus::Views => "↑/↓ view  → apps  Enter open",
+            HomeFocus::AppList => "← views  ↑/↓ app  Enter run",
+        };
         if area.width < 90 {
-            "←/→ panel  ↑/↓ move  Enter run  Backspace back  ? help".to_string()
+            format!("{navigation}  Backspace back  ? help")
         } else {
-            format!(
-                "{} | ←/→ panel  ↑/↓ or j/k move  Enter run  Backspace back  ? help",
-                app.status
-            )
+            format!("{} | {navigation}  Backspace back  ? help", app.status)
         }
     } else {
         format!(
@@ -1661,7 +1822,7 @@ mod tests {
     use ratatui::widgets::{Block, Borders, Widget};
 
     use super::{
-        ACCENT, compact_usage, home_layout, home_selection_style, home_selection_symbol,
+        activity_line, compact_usage, home_layout, home_selection_style, home_selection_symbol,
         selection_text,
     };
 
@@ -1681,11 +1842,27 @@ mod tests {
     }
 
     #[test]
+    fn activity_highlighting_separates_timestamp_stream_event_and_failure() {
+        let output =
+            activity_line("[2026-07-26 12:34:56 +09:00] yazi [progress]: Compiling dependency");
+        assert_eq!(output.spans[1].style.fg, Some(Color::DarkGray));
+        assert_eq!(output.spans[2].content, "yazi");
+        assert_eq!(output.spans[2].style.fg, Some(Color::Cyan));
+        assert_eq!(output.spans[4].content, "[progress]");
+        assert_eq!(output.spans[4].style.fg, Some(Color::Yellow));
+
+        let failure = activity_line("[2026-07-26 12:34:56 +09:00] install: failed youtube-tui");
+        assert_eq!(failure.spans[2].content, "install:");
+        assert_eq!(failure.spans[2].style.fg, Some(Color::Green));
+        assert_eq!(failure.spans[4].style.fg, Some(Color::Red));
+    }
+
+    #[test]
     fn inactive_home_selection_has_no_arrow_or_reversed_background() {
         assert_eq!(home_selection_symbol(false), "  ");
         assert_eq!(
             home_selection_style(false),
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD)
+            Style::default().add_modifier(Modifier::BOLD)
         );
         assert_ne!(home_selection_style(false).bg, Some(Color::White));
     }

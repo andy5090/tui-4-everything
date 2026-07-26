@@ -1107,7 +1107,8 @@ fn mouse_click_opens_the_home_search_input_above_quick_access() {
         24,
     );
     assert!(app.search_mode);
-    assert_eq!(app.home_focus, HomeFocus::AppList);
+    assert_eq!(app.home_focus, HomeFocus::Views);
+    assert_eq!(app.selected_home_filter(), HomeFilter::AllApps);
 
     for ch in "figlet".chars() {
         app.handle_key(key(KeyCode::Char(ch)));
@@ -1309,8 +1310,8 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
     assert!(rendered.contains("Running: 1 apps"));
     assert!(!rendered.contains("Installs:"));
     assert!(!rendered.contains("Saved:"));
-    assert!(rendered.contains("←/→ panel"));
-    assert!(rendered.contains("↑/↓ or j/k move"));
+    assert!(rendered.contains("→ apps"));
+    assert!(rendered.contains("↑/↓ move view"));
     for label in ["OS:", "Host:", "Kernel:", "CPU:", "Memory:"] {
         assert!(
             rendered.contains(label),
@@ -1360,6 +1361,107 @@ fn home_information_shows_live_logs_for_the_selected_installing_app() {
     assert!(rendered.contains("attempt 1/"));
     assert!(rendered.contains("Downloading selected app"));
     assert!(rendered.contains("Compiling selected app"));
+}
+
+#[test]
+fn home_distinguishes_installing_from_installed_with_status_priority_and_color() {
+    let mut app = app();
+    let tool_id = app
+        .selected_home_tool()
+        .expect("HOME selects an app")
+        .id
+        .clone();
+    app.handle_key(key(KeyCode::Char('I')));
+    app.mark_execution_started(&tool_id);
+    app.installed_tools.insert(tool_id);
+
+    let backend = TestBackend::new(160, 35);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("HOME renders");
+    let cells = terminal.backend().buffer().content();
+    let installing_is_yellow = cells
+        .windows("INSTALLING".len())
+        .filter(|window| {
+            window.iter().map(|cell| cell.symbol()).collect::<String>() == "INSTALLING"
+        })
+        .any(|window| window.iter().all(|cell| cell.fg == Color::Yellow));
+
+    assert!(
+        installing_is_yellow,
+        "the HOME installing status should be yellow"
+    );
+    assert!(
+        !cells.windows("INSTALLED".len()).any(|window| window
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>()
+            == "INSTALLED"),
+        "an actively installing app must not be labeled installed"
+    );
+}
+
+#[test]
+fn home_up_from_quick_access_opens_search_and_hints_follow_focus() {
+    let mut app = app();
+    app.home_filter_index = 0;
+    assert_eq!(app.home_focus, HomeFocus::Views);
+
+    app.handle_key(key(KeyCode::Up));
+    assert!(app.search_mode);
+
+    app.handle_key(key(KeyCode::Esc));
+    assert!(!app.search_mode);
+    app.home_filter_index = 3;
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(app.home_focus, HomeFocus::AppList);
+
+    let backend = TestBackend::new(160, 35);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("HOME renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(rendered.contains("← views"));
+    assert!(rendered.contains("↑/↓ move app"));
+    assert!(!rendered.contains("←/→ switch panel"));
+}
+
+#[test]
+fn home_search_ignores_the_previous_view_and_arrows_open_results() {
+    let mut app = app();
+    app.home_filter_index = HomeFilter::ALL
+        .iter()
+        .position(|filter| *filter == HomeFilter::Favorites)
+        .expect("Favorites exists");
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "yazi".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+
+    assert_eq!(app.selected_home_filter(), HomeFilter::AllApps);
+    assert_eq!(
+        app.home_tools().first().expect("global result exists").id,
+        "yazi"
+    );
+
+    app.handle_key(key(KeyCode::Down));
+    assert!(!app.search_mode);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
+
+    app.handle_key(key(KeyCode::Char('/')));
+    assert!(app.search_mode);
+    app.handle_key(key(KeyCode::Right));
+    assert!(!app.search_mode);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
 }
 
 #[test]
@@ -1630,16 +1732,51 @@ fn settings_controls_update_execution_policy() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('7')));
     app.handle_key(key(KeyCode::Right));
-    assert_eq!(app.settings.default_mux, "zellij");
-    app.handle_key(key(KeyCode::Down));
-    app.handle_key(key(KeyCode::Right));
-    assert_eq!(app.settings.install_timeout_sec, 660);
+    assert!(!app.mouse_enabled);
+    assert!(!app.settings.mouse_enabled);
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::SetMouseCapture(false))
+    ));
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Right));
     assert_eq!(app.settings.max_install_attempts, 3);
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Char(' ')));
     assert!(app.settings.confirm_all_installs);
+}
+
+#[test]
+fn settings_explain_the_selected_policy_and_reset_scope() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('7')));
+    for (index, expected) in [
+        "clicking, scrolling, and drag-to-copy",
+        "Total automatic attempts",
+        "Script and DANGER installs",
+        "Favorites, recent apps, activity history",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        app.settings_index = index;
+        let backend = TestBackend::new(120, 30);
+        let mut terminal = Terminal::new(backend).expect("test terminal");
+        terminal
+            .draw(|frame| render(frame, &mut app))
+            .expect("settings render");
+        let rendered = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(
+            rendered.contains(expected),
+            "setting {index} is missing its selected detail"
+        );
+    }
 }
 
 #[test]
@@ -1658,7 +1795,7 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
         .into(),
     );
     app.handle_key(key(KeyCode::Char('7')));
-    for _ in 0..4 {
+    for _ in 0..3 {
         app.handle_key(key(KeyCode::Down));
     }
     app.handle_key(key(KeyCode::Enter));

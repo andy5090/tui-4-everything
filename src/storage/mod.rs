@@ -47,15 +47,22 @@ pub struct RecentItem {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserSettings {
     pub default_mux: String,
+    #[serde(default = "enabled_by_default")]
+    pub mouse_enabled: bool,
     pub install_timeout_sec: u64,
     pub max_install_attempts: u32,
     pub confirm_all_installs: bool,
+}
+
+fn enabled_by_default() -> bool {
+    true
 }
 
 impl Default for UserSettings {
     fn default() -> Self {
         Self {
             default_mux: "tmux".to_string(),
+            mouse_enabled: true,
             install_timeout_sec: 600,
             max_install_attempts: 2,
             confirm_all_installs: false,

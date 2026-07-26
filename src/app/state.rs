@@ -314,6 +314,7 @@ impl AppState {
         }
         reconcile_saved_queue(&catalog, &mut saved);
         saved.logs.push(timestamp_log("T4E dashboard started"));
+        let mouse_enabled = saved.settings.mouse_enabled;
         Self {
             catalog,
             workspaces,
@@ -331,7 +332,7 @@ impl AppState {
             search_query: String::new(),
             search_mode: false,
             should_quit: false,
-            mouse_enabled: true,
+            mouse_enabled,
             mouse_selection: None,
             queue: saved.queue,
             logs: saved.logs,
@@ -375,6 +376,7 @@ impl AppState {
     pub fn handle_key(&mut self, key: KeyEvent) {
         if key.modifiers.contains(KeyModifiers::ALT) && key.code == KeyCode::Char('m') {
             self.mouse_enabled = !self.mouse_enabled;
+            self.settings.mouse_enabled = self.mouse_enabled;
             self.mouse_selection = None;
             self.effects
                 .push_back(AppEffect::SetMouseCapture(self.mouse_enabled));
@@ -522,9 +524,7 @@ impl AppState {
                     && (3..=5).contains(&mouse.row) =>
             {
                 self.mouse_selection = None;
-                self.home_focus = HomeFocus::AppList;
-                self.search_mode = true;
-                self.status = "Search HOME apps".to_string();
+                self.begin_home_search();
             }
             MouseEventKind::Down(MouseButton::Left) => {
                 self.select_list_row(mouse.column, mouse.row)
@@ -614,6 +614,16 @@ impl AppState {
                     .iter()
                     .any(|tag| tag.to_ascii_lowercase().contains(&query))
         };
+
+        if self.search_mode || !query.is_empty() {
+            return self
+                .catalog
+                .tools
+                .iter()
+                .filter(|tool| tool.is_launchable_app())
+                .filter(matches_query)
+                .collect();
+        }
 
         match filter {
             HomeFilter::Recent => self
@@ -1193,6 +1203,12 @@ impl AppState {
 
     fn handle_search_key(&mut self, code: KeyCode) {
         match code {
+            KeyCode::Down | KeyCode::Right | KeyCode::Enter if self.screen == Screen::Home => {
+                self.search_mode = false;
+                self.home_focus = HomeFocus::AppList;
+                self.home_app_index = 0;
+                self.status = format!("Showing search results for {}", self.search_query);
+            }
             KeyCode::Esc | KeyCode::Enter => self.search_mode = false,
             KeyCode::Backspace => {
                 self.search_query.pop();
@@ -1313,8 +1329,7 @@ impl AppState {
                 }
                 KeyCode::Enter => self.request_selected_tool_launch(),
                 KeyCode::Char('/') => {
-                    self.home_focus = HomeFocus::AppList;
-                    self.search_mode = true;
+                    self.begin_home_search();
                 }
                 KeyCode::Char('I') => self.queue_selected_tool(),
                 KeyCode::Char('U') => self.request_selected_uninstall(),
@@ -1391,7 +1406,7 @@ impl AppState {
                 KeyCode::Up | KeyCode::Char('k') => self.move_setting(-1),
                 KeyCode::Left | KeyCode::Char('h') => self.adjust_setting(-1),
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => self.adjust_setting(1),
-                KeyCode::Enter if self.settings_index == 4 => self.reset_saved_preferences(),
+                KeyCode::Enter if self.settings_index == 3 => self.reset_saved_preferences(),
                 _ => {}
             },
             Screen::Help => {}
@@ -1621,7 +1636,7 @@ impl AppState {
                 self.workspace_index = index;
             }
             Screen::Agents if index < self.agent_tools().len() => self.agent_index = index,
-            Screen::Settings if index < 5 => self.settings_index = index,
+            Screen::Settings if index < 4 => self.settings_index = index,
             Screen::AppView
             | Screen::Logs
             | Screen::Home
@@ -1669,6 +1684,10 @@ impl AppState {
     fn move_home_selection(&mut self, delta: isize) {
         match self.home_focus {
             HomeFocus::Views => {
+                if delta < 0 && self.home_filter_index == 0 {
+                    self.begin_home_search();
+                    return;
+                }
                 self.home_filter_index =
                     move_index(self.home_filter_index, HomeFilter::ALL.len(), delta);
                 self.home_app_index = 0;
@@ -1680,8 +1699,18 @@ impl AppState {
         }
     }
 
+    fn begin_home_search(&mut self) {
+        self.home_filter_index = HomeFilter::ALL
+            .iter()
+            .position(|filter| *filter == HomeFilter::AllApps)
+            .unwrap_or_default();
+        self.home_app_index = 0;
+        self.search_mode = true;
+        self.status = "Search all HOME apps".to_string();
+    }
+
     fn move_setting(&mut self, delta: isize) {
-        self.settings_index = move_index(self.settings_index, 5, delta);
+        self.settings_index = move_index(self.settings_index, 4, delta);
     }
 
     fn queue_selected_tool(&mut self) {
@@ -2437,28 +2466,22 @@ impl AppState {
     }
 
     fn adjust_setting(&mut self, delta: isize) {
-        if self.settings_index == 4 {
+        if self.settings_index == 3 {
             return;
         }
         match self.settings_index {
             0 => {
-                const OPTIONS: [&str; 3] = ["tmux", "zellij", "none"];
-                let current = OPTIONS
-                    .iter()
-                    .position(|value| *value == self.settings.default_mux)
-                    .unwrap_or_default();
-                let next = (current as isize + delta).rem_euclid(OPTIONS.len() as isize) as usize;
-                self.settings.default_mux = OPTIONS[next].to_string();
+                self.mouse_enabled = !self.mouse_enabled;
+                self.settings.mouse_enabled = self.mouse_enabled;
+                self.mouse_selection = None;
+                self.effects
+                    .push_back(AppEffect::SetMouseCapture(self.mouse_enabled));
             }
             1 => {
-                let next = self.settings.install_timeout_sec as i64 + delta as i64 * 60;
-                self.settings.install_timeout_sec = next.clamp(60, 3600) as u64;
-            }
-            2 => {
                 let next = self.settings.max_install_attempts as isize + delta;
                 self.settings.max_install_attempts = next.clamp(1, 5) as u32;
             }
-            3 => {
+            2 => {
                 self.settings.confirm_all_installs = !self.settings.confirm_all_installs;
             }
             _ => {}
@@ -2468,6 +2491,10 @@ impl AppState {
 
     fn reset_saved_preferences(&mut self) {
         self.settings = UserSettings::default();
+        self.mouse_enabled = self.settings.mouse_enabled;
+        self.mouse_selection = None;
+        self.effects
+            .push_back(AppEffect::SetMouseCapture(self.mouse_enabled));
         self.launch_preferences.clear();
         self.status = "Runtime settings and saved app options reset".to_string();
         self.logs.push(timestamp_log(

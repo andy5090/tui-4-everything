@@ -26,6 +26,8 @@ and date are assigned.
 - Default-on mouse controls with panel-bounded drag selection, visible
   selection feedback, automatic clipboard copy, border removal, and wrapped
   URL cleanup.
+- Syntax-like Activity highlighting for timestamps, event types, tool output
+  streams, successful operations, and failures.
 
 ### Changed
 
@@ -60,6 +62,16 @@ and date are assigned.
   replace saved/install queue summaries with the current running-app count.
 - Distinguish HOME panel focus from retained selection: only the focused panel
   shows the selection arrow, with no reversed white row background.
+- Show active HOME installs in bold yellow and prioritize `INSTALLING` over a
+  stale or pre-existing `INSTALLED` marker.
+- Let keyboard navigation move upward from Quick Access into Search and tailor
+  HOME key hints to the currently focused view or app list.
+- Search across all HOME applications regardless of the previous view, clear
+  view selection while typing, and move into results with Down or Right.
+- Replace the unused visible mux preference with persistent mouse controls and
+  show purpose, scope, limits, and controls for each selected setting.
+- Keep install timeouts as an internal safety mechanism with per-app overrides
+  instead of exposing the fallback duration as a routine user preference.
 - Spell out horizontal panel switching and vertical row movement in HOME
   keyboard hints instead of using the ambiguous generic `arrows` label.
 - Prevent drag selection from combining aligned borders of adjacent panels

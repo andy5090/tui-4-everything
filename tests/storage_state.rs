@@ -81,3 +81,26 @@ fn legacy_state_uses_defaults_for_new_user_fields() {
     assert!(actual.launch_preferences.is_empty());
     let _ = fs::remove_dir_all(path.parent().expect("state parent"));
 }
+
+#[test]
+fn legacy_settings_enable_mouse_controls_when_the_field_is_missing() {
+    let path = temp_file();
+    fs::create_dir_all(path.parent().expect("state parent")).expect("directory creates");
+    fs::write(
+        &path,
+        r#"{
+            "settings": {
+                "default_mux": "tmux",
+                "install_timeout_sec": 600,
+                "max_install_attempts": 2,
+                "confirm_all_installs": false
+            }
+        }"#,
+    )
+    .expect("legacy state writes");
+
+    let actual = load_state(&path).expect("legacy state loads");
+
+    assert!(actual.settings.mouse_enabled);
+    let _ = fs::remove_dir_all(path.parent().expect("state parent"));
+}
