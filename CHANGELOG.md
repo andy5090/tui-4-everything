@@ -6,6 +6,8 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-27
+
 ### Added
 
 - OS-style HOME Quick Access for running, favorite, and recent applications,
