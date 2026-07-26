@@ -28,6 +28,8 @@ and date are assigned.
   URL cleanup.
 - Syntax-like Activity highlighting for timestamps, event types, tool output
   streams, successful operations, and failures.
+- Codex-generated T4E source artwork, its 74-column ASCII rendering, and a
+  reproducible `ffmpeg`-based image-to-ASCII conversion script.
 
 ### Changed
 
@@ -72,6 +74,8 @@ and date are assigned.
   show purpose, scope, limits, and controls for each selected setting.
 - Keep install timeouts as an internal safety mechanism with per-app overrides
   instead of exposing the fallback duration as a routine user preference.
+- Replace the hand-authored README wordmark with the mechanically converted
+  Codex-generated branding asset.
 - Spell out horizontal panel switching and vertical row movement in HOME
   keyboard hints instead of using the ambiguous generic `arrows` label.
 - Prevent drag selection from combining aligned borders of adjacent panels

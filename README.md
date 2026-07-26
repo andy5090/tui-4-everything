@@ -2,34 +2,27 @@
 
 ```text
 +------------------------------------------------------------------------------+
-|  T4E :: TERMINAL APPLICATION ENVIRONMENT                         [ ONLINE ]  |
+| T4E // TERMINAL APPLICATION ENVIRONMENT [ CODEX -> ASCII ]                   |
 +------------------------------------------------------------------------------+
-|                                                                              |
-|   TTTTTTTTTTTTTTTTTTTTTTT     444444444       EEEEEEEEEEEEEEEEEEEEEEE        |
-|   T:::::::::::::::::::::T     4::::::::4       E:::::::::::::::::::::E       |
-|   T:::::::::::::::::::::T    4:::::::::4       E:::::::::::::::::::::E       |
-|   T:::::TT:::::::TT:::::T   4::::44::::4       EE::::::EEEEEEEEE::::E        |
-|   TTTTTT  T:::::T  TTTTTT  4::::4 4::::4         E:::::E       EEEEEE        |
-|           T:::::T         4::::4  4::::4         E:::::E                     |
-|           T:::::T        4::::4   4::::4         E::::::EEEEEEEEEE           |
-|           T:::::T       4::::444444::::444       E:::::::::::::::E           |
-|           T:::::T       4::::::::::::::::4       E:::::::::::::::E           |
-|           T:::::T       4444444444:::::444       E::::::EEEEEEEEEE           |
-|           T:::::T                 4::::4         E:::::E                     |
-|           T:::::T                 4::::4         E:::::E       EEEEEE        |
-|         TT:::::::TT               4::::4       EE::::::EEEEEEEE:::::E        |
-|         T:::::::::T             44::::::44     E:::::::::::::::::::::E       |
-|         T:::::::::T             4::::::::4     E:::::::::::::::::::::E       |
-|         TTTTTTTTTTT             4444444444     EEEEEEEEEEEEEEEEEEEEEEE       |
-|                                                                              |
-+--[ APPS ]--------[ AI ]--------[ AUTOMATION ]--------[ ONE TERMINAL ]--------+
-|                                                                              |
-|  $ t4e                                                                       |
-|  > discover, install, run, and orchestrate terminal applications             |
-|  > provider-neutral AI control plane                                         |
-|  > every tool, one terminal                                                  |
-|                                                                              |
-+--------------------------------------------------------- tui-4-everything ---+
+|    #####################            ###########         ##################   |
+|    #####################           ############         ##################   |
+|    #####################          #############         ##################   |
+|    #####################         ##############         #################    |
+|           #######              ######### ######         ######               |
+|           #######             ########   ######         ######               |
+|           #######            ########    ######         ################     |
+|           #######            #######     ######         ################     |
+|           #######            ##################         ################     |
+|           #######            ##################         ################     |
+|           #######            ##################         ######               |
+|           #######            ##################         ######               |
+|           #######                        ######         ##################   |
+|           #######                        ######         ##################   |
+|           #######                        ######         ##################   |
+|           #######                        ######         #################    |
++------------------------------------------------------------------------------+
+| ONE TERMINAL. EVERY TOOL. AI AT THE CONTROLS.                                |
++------------------------------------------------------------------------------+
 ```
 
 T4E is a curated terminal application manager and AI-controlled terminal
@@ -244,6 +237,24 @@ Default catalog and workspace registries are embedded in the binary, so the
 packaged executable works outside the source tree. Legacy pack and workspace
 records remain embedded for CLI compatibility and validation. Release archives also ship
 editable Registry copies, the README, architecture notes, and a SHA-256 file.
+
+## Branding
+
+The README wordmark is mechanically derived from a high-contrast source image
+created with Codex's subscription-included image generation. The source PNG and
+plain ASCII output are stored in [`assets/branding`](assets/branding).
+
+Regenerate the 74-column result with:
+
+```bash
+scripts/image-to-ascii.sh \
+  assets/branding/t4e-ascii-source.png \
+  74 18 80 '1400:500:(iw-1400)/2:(ih-500)/2' \
+  > assets/branding/t4e-ascii.txt
+```
+
+The converter requires `ffmpeg`, `od`, and `awk`. Width, height, brightness
+threshold, and an optional FFmpeg crop expression are positional arguments.
 
 ## Versioning
 
