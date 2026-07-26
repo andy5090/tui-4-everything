@@ -47,6 +47,9 @@ and date are assigned.
 
 ### Fixed
 
+- Force migration from the legacy YouTube TUI launcher to a versioned managed
+  launcher so reinstall preflight cannot preserve an option-incompatible
+  wrapper.
 - Pass structured ASCII Camera options to mpv using its required option syntax
   and migrate stale managed launchers before execution.
 - Preserve fastfetch's native ANSI colors in the HOME Information panel,

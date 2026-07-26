@@ -254,18 +254,18 @@ tools:
         default_value: "MPV"
     checks:
       - which: "youtube-tui"
-      - which: "t4e-youtube-tui"
+      - which: "t4e-youtube-tui-v2"
       - which: "t4e-mpv-terminal"
     installers:
       - platform: macos
         method: cargo
         package_hints: ["youtube-tui"]
-        executable: "t4e-youtube-tui"
+        executable: "t4e-youtube-tui-v2"
       - platform: linux
         method: youtube_tui
         package_hints: ["youtube-tui"]
         system_packages: ["pkg-config", "libmpv-dev", "libsixel-dev", "libxcb1-dev", "mpv", "python3-venv"]
-        executable: "t4e-youtube-tui"
+        executable: "t4e-youtube-tui-v2"
   - id: tplay
     name: "tplay"
     description: "Play local or online media, including YouTube, as colored terminal ASCII art."

@@ -232,8 +232,9 @@ fn materialize_youtube_tui_command(platform: &crate::catalog::models::Platform) 
         "'real_path=\"$PATH\"' ",
         "'host_pid=\"$$\"' ",
         "'exec env T4E_MPV_RENDERER=\"$renderer\" T4E_REAL_PATH=\"$real_path\" T4E_VIDEO_HOST=youtube-tui T4E_VIDEO_HOST_PID=\"$host_pid\" PATH=\"$data_dir/player:$data_dir/yt-dlp/bin:$real_path\" youtube-tui \"$@\"' ",
-        "> \"$HOME/.local/bin/t4e-youtube-tui\" && ",
-        "chmod +x \"$HOME/.local/bin/t4e-youtube-tui\""
+        "> \"$HOME/.local/bin/t4e-youtube-tui-v2\" && ",
+        "chmod +x \"$HOME/.local/bin/t4e-youtube-tui-v2\" && ",
+        "ln -sf t4e-youtube-tui-v2 \"$HOME/.local/bin/t4e-youtube-tui\""
     );
     [
         install,

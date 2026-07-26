@@ -111,11 +111,11 @@ fn registry_loads_and_validates() {
     assert_eq!(youtube_tui.run.cmd, "youtube-tui");
     assert_eq!(
         youtube_tui.run_command_for(Platform::Linux),
-        "t4e-youtube-tui"
+        "t4e-youtube-tui-v2"
     );
     assert_eq!(
         youtube_tui.run_command_for(Platform::Macos),
-        "t4e-youtube-tui"
+        "t4e-youtube-tui-v2"
     );
     assert_eq!(youtube_tui.run_options[0].values, ["MPV", "TCT", "CACA"]);
     assert_eq!(

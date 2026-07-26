@@ -324,7 +324,7 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
             custom: None,
         },
         Check {
-            which: Some("t4e-youtube-tui".to_string()),
+            which: Some("t4e-youtube-tui-v2".to_string()),
             version: None,
             custom: None,
         },
@@ -339,7 +339,7 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
         method: InstallMethod::YoutubeTui,
         package_hints: vec!["youtube-tui".to_string()],
         system_packages: vec!["mpv".to_string(), "python3-venv".to_string()],
-        executable: Some("t4e-youtube-tui".to_string()),
+        executable: Some("t4e-youtube-tui-v2".to_string()),
         install_cmd: None,
         requires_confirm: false,
     };
@@ -364,11 +364,11 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
     assert!(task.command.contains("< /dev/tty > /dev/tty 2>&1"));
     assert!(task.command.contains("--vo=tct --profile=sw-fast"));
     assert!(task.command.contains("--vo=caca"));
-    assert!(task.command.contains("t4e-youtube-tui"));
+    assert!(task.command.contains("t4e-youtube-tui-v2"));
     assert_eq!(task.check_command.as_deref(), Some("youtube-tui"));
     assert_eq!(
         task.additional_check_commands,
-        ["t4e-youtube-tui", "t4e-mpv-terminal"]
+        ["t4e-youtube-tui-v2", "t4e-mpv-terminal"]
     );
     assert!(task.requires_privileges);
     assert!(!task.requires_confirmation);

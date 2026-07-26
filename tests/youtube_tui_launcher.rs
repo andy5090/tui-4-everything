@@ -68,7 +68,12 @@ mod unix {
             .expect("installer runs");
         assert!(install.success());
 
-        let launcher = root.join(".local/bin/t4e-youtube-tui");
+        let launcher = root.join(".local/bin/t4e-youtube-tui-v2");
+        assert_eq!(
+            fs::read_link(root.join(".local/bin/t4e-youtube-tui"))
+                .expect("compatibility launcher is a symlink"),
+            Path::new("t4e-youtube-tui-v2")
+        );
         let log = root.join("mpv.log");
         for (renderer, expected) in [
             ("MPV", "video-url\n"),

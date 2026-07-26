@@ -328,7 +328,7 @@ fn removed_saved_option_value_falls_back_to_catalog_default() {
 fn youtube_apps_pass_the_selected_external_video_renderer_to_managed_launchers() {
     for (tool_id, renderer_steps, expected_command) in [
         ("yewtube", 1, "t4e-yewtube --renderer TCT"),
-        ("youtube-tui", 2, "t4e-youtube-tui --renderer CACA"),
+        ("youtube-tui", 2, "t4e-youtube-tui-v2 --renderer CACA"),
     ] {
         let mut app = app();
         app.handle_key(key(KeyCode::Char('2')));

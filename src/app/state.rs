@@ -2670,7 +2670,7 @@ fn uninstall_command(
         ),
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
         InstallMethod::Tplay => "rm -f \"$HOME/.local/bin/t4e-tplay\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && (cargo uninstall tplay || ! command -v tplay >/dev/null 2>&1)".to_string(),
-        InstallMethod::YoutubeTui => "rm -f \"$HOME/.local/bin/t4e-youtube-tui\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && (cargo uninstall youtube-tui || ! command -v youtube-tui >/dev/null 2>&1)".to_string(),
+        InstallMethod::YoutubeTui => "rm -f \"$HOME/.local/bin/t4e-youtube-tui\" \"$HOME/.local/bin/t4e-youtube-tui-v2\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && (cargo uninstall youtube-tui || ! command -v youtube-tui >/dev/null 2>&1)".to_string(),
         InstallMethod::Yewtube => "rm -f \"$HOME/.local/bin/t4e-yewtube\" && if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq yewtube; then pipx uninstall yewtube; fi".to_string(),
         InstallMethod::AsciiCamera => {
             "rm -f \"$HOME/.local/bin/t4e-ascii-camera\" \"$HOME/.local/bin/t4e-ascii-camera-v2\""
