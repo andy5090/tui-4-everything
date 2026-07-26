@@ -1,5 +1,16 @@
 # T4E
 
+```text
+ _______   _  _     ______
+|__   __| | || |   |  ____|
+   | |    | || |_  | |__
+   | |    |__   _| |  __|
+   | |       | |   | |____
+   |_|       |_|   |______|
+
+       T U I   F O R   E V E R Y T H I N G
+```
+
 T4E is a curated terminal application manager and AI-controlled terminal
 environment. The current AI backend uses the signed-in `codex` CLI account
 through `codex app-server`; provider-neutral support for Claude runtimes,

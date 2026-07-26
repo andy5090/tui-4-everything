@@ -21,6 +21,7 @@ and date are assigned.
   managed rainbow output.
 - Persistent HOME search input above Quick Access with keyboard and mouse
   focus.
+- Large ASCII T4E wordmark in the project README.
 - Default-on mouse controls with panel-bounded drag selection, visible
   selection feedback, automatic clipboard copy, border removal, and wrapped
   URL cleanup.
