@@ -76,6 +76,8 @@ and date are assigned.
   instead of exposing the fallback duration as a routine user preference.
 - Replace the hand-authored README wordmark with the mechanically converted
   Codex-generated branding asset.
+- Upgrade the generated wordmark source to commercial campaign typography and
+  preserve its lighting and extrusion with a multi-level ASCII character ramp.
 - Spell out horizontal panel switching and vertical row movement in HOME
   keyboard hints instead of using the ambiguous generic `arrows` label.
 - Prevent drag selection from combining aligned borders of adjacent panels
