@@ -28,7 +28,9 @@ mod unix {
                 "if [ \"$1\" = '-m' ] && [ \"$2\" = 'venv' ]; then\n",
                 "  mkdir -p \"$3/bin\"\n",
                 "  printf '%s\\n' '#!/bin/sh' 'exit 0' > \"$3/bin/python\"\n",
+                "  printf '%s\\n' '#!/bin/sh' 'exit 0' > \"$3/bin/yt-dlp\"\n",
                 "  chmod +x \"$3/bin/python\"\n",
+                "  chmod +x \"$3/bin/yt-dlp\"\n",
                 "  exit 0\n",
                 "fi\n",
                 "exec /usr/bin/python3 \"$@\"\n"
@@ -36,7 +38,15 @@ mod unix {
         );
         write_executable(
             &fake_bin.join("mpv"),
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$T4E_TEST_MPV_LOG\"\n",
+            concat!(
+                "#!/bin/sh\n",
+                "if [ \"${1:-}\" = '--vo=help' ]; then\n",
+                "  printf '  tct true-color terminals\\n  caca libcaca\\n'\n",
+                "  exit 0\n",
+                "fi\n",
+                "command -v yt-dlp > \"$T4E_TEST_YTDLP_LOG\"\n",
+                "printf '%s\\n' \"$@\" > \"$T4E_TEST_MPV_LOG\"\n"
+            ),
         );
         write_executable(
             &fake_bin.join("youtube-tui"),
@@ -88,6 +98,7 @@ mod unix {
                 .env("HOME", &root)
                 .env("PATH", &path)
                 .env("T4E_TEST_MPV_LOG", &log)
+                .env("T4E_TEST_YTDLP_LOG", root.join("yt-dlp.log"))
                 .env_remove("XDG_DATA_HOME")
                 .status()
                 .expect("launcher runs");
@@ -98,6 +109,14 @@ mod unix {
                 "{renderer} arguments"
             );
         }
+        assert_eq!(
+            fs::read_to_string(root.join("yt-dlp.log"))
+                .expect("managed yt-dlp path logged")
+                .trim(),
+            root.join(".local/share/t4e/youtube-tui/yt-dlp/bin/yt-dlp")
+                .display()
+                .to_string()
+        );
 
         fs::remove_dir_all(root).expect("test directory removed");
     }

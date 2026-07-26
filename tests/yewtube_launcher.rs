@@ -24,7 +24,14 @@ mod unix {
         write_executable(&fake_bin.join("pipx"), "#!/bin/sh\nexit 0\n");
         write_executable(
             &fake_bin.join("mpv"),
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$T4E_TEST_MPV_LOG\"\n",
+            concat!(
+                "#!/bin/sh\n",
+                "if [ \"${1:-}\" = '--vo=help' ]; then\n",
+                "  printf '  tct true-color terminals\\n  caca libcaca\\n'\n",
+                "  exit 0\n",
+                "fi\n",
+                "printf '%s\\n' \"$@\" > \"$T4E_TEST_MPV_LOG\"\n"
+            ),
         );
         write_executable(
             &fake_bin.join("yt"),

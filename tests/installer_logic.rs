@@ -357,7 +357,7 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
         task.command
             .contains("PATH=\"$data_dir/player:$data_dir/yt-dlp/bin:$real_path\"")
     );
-    assert!(task.command.contains("T4E_REAL_PATH"));
+    assert!(task.command.contains("T4E_PLAYER_PATH"));
     assert!(task.command.contains("T4E_MPV_RENDERER"));
     assert!(task.command.contains("T4E_VIDEO_HOST_PID"));
     assert!(task.command.contains("kill -STOP"));

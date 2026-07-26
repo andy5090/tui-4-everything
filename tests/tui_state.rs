@@ -1321,6 +1321,48 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
 }
 
 #[test]
+fn home_information_shows_live_logs_for_the_selected_installing_app() {
+    let mut app = app();
+    let tool = app.selected_home_tool().expect("HOME selects an app");
+    let tool_id = tool.id.clone();
+    let tool_name = tool.name.clone();
+    app.handle_key(key(KeyCode::Char('I')));
+    app.mark_execution_started(&tool_id);
+    app.record_output(
+        &tool_id,
+        t4e::installer::execution::OutputChunk {
+            stream: t4e::installer::execution::OutputStream::Stdout,
+            text: "Downloading selected app\n".to_string(),
+        },
+    );
+    app.record_output(
+        &tool_id,
+        t4e::installer::execution::OutputChunk {
+            stream: t4e::installer::execution::OutputStream::Stderr,
+            text: "Compiling selected app\n".to_string(),
+        },
+    );
+
+    let backend = TestBackend::new(160, 35);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("HOME renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(rendered.contains(&format!("Installing · {tool_name}")));
+    assert!(rendered.contains("attempt 1/"));
+    assert!(rendered.contains("Downloading selected app"));
+    assert!(rendered.contains("Compiling selected app"));
+}
+
+#[test]
 fn help_tab_explains_capabilities_and_derived_risk() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('?')));

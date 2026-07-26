@@ -1,14 +1,35 @@
 # T4E
 
 ```text
- _______   _  _     ______
-|__   __| | || |   |  ____|
-   | |    | || |_  | |__
-   | |    |__   _| |  __|
-   | |       | |   | |____
-   |_|       |_|   |______|
-
-       T U I   F O R   E V E R Y T H I N G
++------------------------------------------------------------------------------+
+|  T4E :: TERMINAL APPLICATION ENVIRONMENT                         [ ONLINE ]  |
++------------------------------------------------------------------------------+
+|                                                                              |
+|   TTTTTTTTTTTTTTTTTTTTTTT     444444444       EEEEEEEEEEEEEEEEEEEEEEE        |
+|   T:::::::::::::::::::::T     4::::::::4       E:::::::::::::::::::::E       |
+|   T:::::::::::::::::::::T    4:::::::::4       E:::::::::::::::::::::E       |
+|   T:::::TT:::::::TT:::::T   4::::44::::4       EE::::::EEEEEEEEE::::E        |
+|   TTTTTT  T:::::T  TTTTTT  4::::4 4::::4         E:::::E       EEEEEE        |
+|           T:::::T         4::::4  4::::4         E:::::E                     |
+|           T:::::T        4::::4   4::::4         E::::::EEEEEEEEEE           |
+|           T:::::T       4::::444444::::444       E:::::::::::::::E           |
+|           T:::::T       4::::::::::::::::4       E:::::::::::::::E           |
+|           T:::::T       4444444444:::::444       E::::::EEEEEEEEEE           |
+|           T:::::T                 4::::4         E:::::E                     |
+|           T:::::T                 4::::4         E:::::E       EEEEEE        |
+|         TT:::::::TT               4::::4       EE::::::EEEEEEEE:::::E        |
+|         T:::::::::T             44::::::44     E:::::::::::::::::::::E       |
+|         T:::::::::T             4::::::::4     E:::::::::::::::::::::E       |
+|         TTTTTTTTTTT             4444444444     EEEEEEEEEEEEEEEEEEEEEEE       |
+|                                                                              |
++--[ APPS ]--------[ AI ]--------[ AUTOMATION ]--------[ ONE TERMINAL ]--------+
+|                                                                              |
+|  $ t4e                                                                       |
+|  > discover, install, run, and orchestrate terminal applications             |
+|  > provider-neutral AI control plane                                         |
+|  > every tool, one terminal                                                  |
+|                                                                              |
++--------------------------------------------------------- tui-4-everything ---+
 ```
 
 T4E is a curated terminal application manager and AI-controlled terminal
@@ -54,7 +75,9 @@ than the frequently outdated Ubuntu repository build. Yewtube and YouTube TUI
 offer a remembered external video player choice: `mpv` opens the normal video
 window, while `tct` and `caca` render video as colored terminal characters.
 T4E applies that choice only to external video playback through its managed
-mpv launcher; browsing and embedded audio remain under the application.
+mpv launcher; browsing and embedded audio remain under the application. The
+managed player keeps T4E's current `yt-dlp` on `PATH` and falls back to normal
+MPV when the installed mpv build lacks the selected terminal renderer.
 ASCII Camera reuses mpv's terminal renderer and V4L2 input on Linux, so it does
 not install OpenCV. Camera access is classified as `HIGH` and requires approval
 on the first launch of each T4E session.
@@ -99,7 +122,9 @@ HOME contains Quick Access, categorized Apps, and a compact
 fastfetch system summary with the detected OS ASCII logo and native fastfetch
 colors. A persistent search input sits above Quick Access and can be focused by
 clicking it or pressing `/`. Left/Right switches between the app views and app
-list; Enter enters a list or runs an app, and `?` opens Help.
+list; Enter enters a list or runs an app, and `?` opens Help. While the selected
+app is installing, the bottom of Information shows its channel, attempt, and
+four most recent live output lines.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.

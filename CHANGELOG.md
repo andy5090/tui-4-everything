@@ -22,6 +22,7 @@ and date are assigned.
 - Persistent HOME search input above Quick Access with keyboard and mouse
   focus.
 - Large ASCII T4E wordmark in the project README.
+- Live selected-app installation output at the bottom of HOME Information.
 - Default-on mouse controls with panel-bounded drag selection, visible
   selection feedback, automatic clipboard copy, border removal, and wrapped
   URL cleanup.
@@ -51,6 +52,8 @@ and date are assigned.
 - Force migration from the legacy YouTube TUI launcher to a versioned managed
   launcher so reinstall preflight cannot preserve an option-incompatible
   wrapper.
+- Preserve the managed current `yt-dlp` path during YouTube TUI playback and
+  fall back to normal MPV when TCT or CACA output is unavailable.
 - Pass structured ASCII Camera options to mpv using its required option syntax
   and migrate stale managed launchers before execution.
 - Preserve fastfetch's native ANSI colors in the HOME Information panel,

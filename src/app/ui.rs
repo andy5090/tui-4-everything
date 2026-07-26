@@ -505,9 +505,44 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         Line::from("←/→ switch panel   ↑/↓ move selection"),
         Line::from("Enter run   / search   I/U/R install/remove/reset"),
     ]);
+    let active_install = app.selected_home_tool().and_then(|tool| {
+        app.queue
+            .iter()
+            .find(|job| job.item.tool_id == tool.id && job.item.state == QueueState::Installing)
+            .map(|job| (tool, job))
+    });
+    let (information_summary_area, install_log_area) =
+        active_install.map_or((information_area, None), |_| {
+            let areas = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Min(8), Constraint::Length(7)])
+                .split(information_area);
+            (areas[0], Some(areas[1]))
+        });
     let information_title = format!("Information · {}", app.system_overview.source);
     let information = Paragraph::new(information).block(panel(&information_title));
-    frame.render_widget(information, information_area);
+    frame.render_widget(information, information_summary_area);
+    if let (Some((tool, job)), Some(log_area)) = (active_install, install_log_area) {
+        let mut log_lines = vec![Line::styled(
+            format!(
+                "attempt {}/{} · {}",
+                job.item.attempts.saturating_add(1),
+                app.settings.max_install_attempts,
+                job.item.channel
+            ),
+            Style::default().fg(MUTED),
+        )];
+        let recent = recent_tool_activity(app, &tool.id, 4);
+        if recent.is_empty() {
+            log_lines.push(Line::from("Waiting for installer output..."));
+        } else {
+            log_lines.extend(recent.into_iter().map(Line::from));
+        }
+        frame.render_widget(
+            Paragraph::new(log_lines).block(panel(&format!("Installing · {}", tool.name))),
+            log_area,
+        );
+    }
 }
 
 fn ansi_line(value: &str) -> Line<'static> {
@@ -688,19 +723,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                         Style::default().fg(Color::Red),
                     ));
                 }
-                let recent = app
-                    .logs
-                    .iter()
-                    .rev()
-                    .filter_map(|line| {
-                        let message = activity_message(line);
-                        (message.starts_with(&format!("{} [", tool.id))
-                            || message.starts_with(&format!("install: {}", tool.id))
-                            || message.starts_with(&format!("uninstall: {}", tool.id)))
-                        .then_some(message)
-                    })
-                    .take(4)
-                    .collect::<Vec<_>>();
+                let recent = recent_tool_activity(app, &tool.id, 4);
                 if !recent.is_empty() {
                     lines.push(Line::from(""));
                     lines.push(Line::styled(
@@ -711,7 +734,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                         },
                         Style::default().fg(MUTED),
                     ));
-                    lines.extend(recent.into_iter().rev().map(Line::from));
+                    lines.extend(recent.into_iter().map(Line::from));
                 }
             } else {
                 let (status, style) = catalog_install_status(app, &tool.id);
@@ -763,6 +786,24 @@ fn catalog_install_status(app: &AppState, tool_id: &str) -> (String, Style) {
     } else {
         ("NOT INSTALLED".to_string(), Style::default().fg(MUTED))
     }
+}
+
+fn recent_tool_activity<'a>(app: &'a AppState, tool_id: &str, limit: usize) -> Vec<&'a str> {
+    let mut recent = app
+        .logs
+        .iter()
+        .rev()
+        .filter_map(|line| {
+            let message = activity_message(line);
+            (message.starts_with(&format!("{tool_id} ["))
+                || message.starts_with(&format!("install: {tool_id}"))
+                || message.starts_with(&format!("uninstall: {tool_id}")))
+            .then_some(message)
+        })
+        .take(limit)
+        .collect::<Vec<_>>();
+    recent.reverse();
+    recent
 }
 
 fn render_install(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
