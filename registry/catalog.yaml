@@ -26,7 +26,7 @@ packs:
   - id: fun-pack
     title: Fun Pack
     exposure: starter
-    tool_ids: [cmatrix, asciiquarium, sl, lolcat, figlet, cowsay, fortune, tty-clock, nyancat, pipes-sh]
+    tool_ids: [cmatrix, asciiquarium, sl, lolcat, figlet, cowsay, fortune, tty-clock, big-clock, nyancat, pipes-sh]
   - id: games-pack
     title: Games Pack
     exposure: starter
@@ -1022,6 +1022,48 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["tty-clock"]
+  - id: big-clock
+    name: "Big Clock"
+    description: "Show a digital clock with extra-large digits that scale to fill the terminal. Built into T4E, so it never needs installation."
+    key_hints: ["q quit", "c or arrows cycle color"]
+    category: fun
+    tags: []
+    audience: general
+    capabilities: []
+    exposure: labs
+    run:
+      cmd: "big-clock"
+    run_options:
+      - id: seconds
+        label: "Show seconds"
+        flag: "-s"
+        default_value: null
+      - id: twelve-hour
+        label: "12-hour time"
+        flag: "-t"
+        default_value: null
+      - id: utc
+        label: "UTC time"
+        flag: "-u"
+        default_value: null
+      - id: date
+        label: "Show date"
+        flag: "-d"
+        default_value: null
+      - id: fill
+        label: "Stretch to fill pane"
+        flag: "-f"
+        default_value: null
+      - id: color
+        label: "Clock color (8: rainbow, 9: hue cycle)"
+        flag: "-C"
+        values: ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+        default_value: "2"
+    installers:
+      - platform: macos
+        method: builtin
+      - platform: linux
+        method: builtin
   - id: nyancat
     name: "nyancat"
     description: "Play the colorful Nyan Cat terminal animation."

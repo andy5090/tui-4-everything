@@ -56,7 +56,7 @@ batch-install units.
 | System | ASCII Camera, Fastfetch |
 | Utilities | Glow, VisiData |
 | Games | bastet, ninvaders, nudoku |
-| Entertainment | Figlet, cowsay, fortune, cmatrix, Asciiquarium, tty-clock, nyancat, pipes.sh, and visual utilities |
+| Entertainment | Figlet, cowsay, fortune, cmatrix, Asciiquarium, tty-clock, Big Clock, nyancat, pipes.sh, and visual utilities |
 
 Support commands such as `mpv`, `yt-dlp`, `ffmpeg`, `jq`, `ripgrep`, and
 `lolcat` are internal dependencies and remain available through explicit
@@ -80,6 +80,14 @@ Catalog exposure is internal release metadata: `starter` participates in the
 default curated release checks and `labs` is experimental. Exposure and legacy
 pack records remain hidden because they are release and compatibility metadata,
 not user-facing installation or permission decisions.
+
+Applications can also ship inside the t4e executable as builtin apps. Their
+catalog installers use the `builtin` method, they always count as installed,
+they never run a package manager, and they cannot be uninstalled. Big Clock is
+the first builtin app: an extra-large digital clock that scales its digits to
+fill the terminal, launched as a hidden `t4e builtin big-clock` subcommand
+inside the managed terminal. It lives in the Entertainment category with
+labs exposure.
 
 Each app declares any combination of `NETWORK`, `ACCOUNT`, `FILE_READ`,
 `FILE_WRITE`, `DELETE`, `SYSTEM`, `COMMANDS`, and `AUTONOMOUS` capabilities.

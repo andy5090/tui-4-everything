@@ -108,6 +108,13 @@ impl Tool {
         !self.tags.iter().any(|tag| tag == "support")
     }
 
+    /// Builtin apps ship inside the t4e executable and need no installation.
+    pub fn is_builtin(&self) -> bool {
+        self.installers
+            .iter()
+            .any(|installer| installer.method == InstallMethod::Builtin)
+    }
+
     pub fn risk_level(&self) -> RiskLevel {
         self.capabilities
             .iter()
@@ -128,20 +135,23 @@ impl Tool {
             "claude-code" | "codex-cli" | "opencode" => AppCategory::Ai,
             "bastet" | "ninvaders" | "nudoku" => AppCategory::Games,
             "cmatrix" | "asciiquarium" | "sl" | "lolcat" | "cowsay" | "fortune" | "tty-clock"
-            | "nyancat" | "pipes-sh" => AppCategory::Entertainment,
+            | "big-clock" | "nyancat" | "pipes-sh" => AppCategory::Entertainment,
             _ => AppCategory::Utilities,
         }
     }
 
-    pub fn run_command_for(&self, platform: Platform) -> &str {
+    pub fn run_command_for(&self, platform: Platform) -> String {
+        if self.is_builtin() {
+            return crate::builtin::launch_command(&self.run.cmd);
+        }
         self.installers
             .iter()
             .find(|installer| installer.platform == platform)
-            .and_then(|installer| installer.executable.as_deref())
-            .unwrap_or(&self.run.cmd)
+            .and_then(|installer| installer.executable.clone())
+            .unwrap_or_else(|| self.run.cmd.clone())
     }
 
-    pub fn run_command_for_current_platform(&self) -> &str {
+    pub fn run_command_for_current_platform(&self) -> String {
         self.run_command_for(if cfg!(target_os = "macos") {
             Platform::Macos
         } else {
@@ -316,6 +326,8 @@ pub enum Platform {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InstallMethod {
+    #[serde(rename = "builtin")]
+    Builtin,
     #[serde(rename = "brew")]
     Brew,
     #[serde(rename = "brew_cask")]
@@ -361,6 +373,7 @@ pub enum InstallMethod {
 impl InstallMethod {
     pub fn channel_name(&self) -> &'static str {
         match self {
+            Self::Builtin => "builtin",
             Self::Brew => "brew",
             Self::BrewCask => "brew_cask",
             Self::Apt => "apt",
