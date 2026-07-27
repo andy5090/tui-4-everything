@@ -26,10 +26,13 @@ cp "$ROOT_DIR/docs/architecture.md" "$STAGING_DIR/$PACKAGE_NAME/docs/architectur
 
 tar -C "$STAGING_DIR" -czf "$OUTPUT_DIR/$PACKAGE_NAME.tar.gz" "$PACKAGE_NAME"
 
-if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "$OUTPUT_DIR/$PACKAGE_NAME.tar.gz" >"$OUTPUT_DIR/$PACKAGE_NAME.tar.gz.sha256"
-else
-  shasum -a 256 "$OUTPUT_DIR/$PACKAGE_NAME.tar.gz" >"$OUTPUT_DIR/$PACKAGE_NAME.tar.gz.sha256"
-fi
+(
+  cd "$OUTPUT_DIR"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$PACKAGE_NAME.tar.gz" >"$PACKAGE_NAME.tar.gz.sha256"
+  else
+    shasum -a 256 "$PACKAGE_NAME.tar.gz" >"$PACKAGE_NAME.tar.gz.sha256"
+  fi
+)
 
 printf '%s\n' "$OUTPUT_DIR/$PACKAGE_NAME.tar.gz"

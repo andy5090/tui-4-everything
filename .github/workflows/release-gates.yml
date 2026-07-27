@@ -64,28 +64,70 @@ jobs:
   package:
     needs: [install-gate, runtime-gates]
     strategy:
+      fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, macos-14]
+        include:
+          # Keep the existing Apple Silicon release artifact unchanged.
+          - runner: macos-14
+            target: ""
+            binary: target/release/t4e
+            asset_label: macos-arm64
+            use_zig: false
+          # cargo-zigbuild links these targets with Zig's musl toolchains, so
+          # neither target needs a native GitHub-hosted runner.
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            binary: target/x86_64-unknown-linux-musl/release/t4e
+            asset_label: linux-x86_64-musl
+            use_zig: true
+          - runner: ubuntu-24.04
+            target: aarch64-unknown-linux-musl
+            binary: target/aarch64-unknown-linux-musl/release/t4e
+            asset_label: linux-aarch64-musl
+            use_zig: true
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release --locked
+      - name: Install Linux cross-compilation toolchain
+        if: matrix.use_zig
+        uses: mlugg/setup-zig@v2
+      - name: Install cargo-zigbuild
+        if: matrix.use_zig
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild
+      - name: Build release binary
+        run: |
+          if [[ -n "${{ matrix.target }}" ]]; then
+            rustup target add "${{ matrix.target }}"
+            cargo zigbuild --release --locked --target "${{ matrix.target }}"
+          else
+            cargo build --release --locked
+          fi
+      - name: Install AArch64 emulator for cross-binary validation
+        if: matrix.target == 'aarch64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes qemu-user-static
       - name: Verify embedded defaults outside the source tree
         run: |
           temp_dir="$(mktemp -d)"
           cd "$temp_dir"
-          "$GITHUB_WORKSPACE/target/release/t4e" validate
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+            qemu-aarch64-static "$GITHUB_WORKSPACE/${{ matrix.binary }}" validate
+          else
+            "$GITHUB_WORKSPACE/${{ matrix.binary }}" validate
+          fi
       - name: Package binary and checksum
         run: |
           version="${GITHUB_REF_NAME#v}"
           if [[ "$version" == "$GITHUB_REF_NAME" ]]; then version="0.1.0-dev"; fi
-          platform="$(printf '%s-%s' "$RUNNER_OS" "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')"
-          scripts/package_release.sh target/release/t4e artifacts/release "$version" "$platform"
+          scripts/package_release.sh "${{ matrix.binary }}" artifacts/release "$version" "${{ matrix.asset_label }}"
       - uses: actions/upload-artifact@v7
         with:
-          name: t4e-${{ runner.os }}-${{ runner.arch }}
+          name: t4e-${{ matrix.asset_label }}
           path: artifacts/release/*
 
   release:
