@@ -30,6 +30,17 @@ and date are assigned.
   streams, successful operations, and failures.
 - Codex-generated T4E source artwork, its 74-column ASCII rendering, and a
   reproducible `ffmpeg`-based image-to-ASCII conversion script.
+- Builtin application support: catalog apps can ship inside the t4e
+  executable, always count as installed, skip package-manager installs, and
+  cannot be uninstalled.
+- Big Clock, the first builtin application, renders an extra-large digital
+  clock that preserves glyph proportions while scaling to the terminal, with
+  optional seconds, 12-hour, UTC, date, and ANSI color launch options plus a
+  `-f` fill mode that stretches digits to the pane. While running, `c`/`C` or
+  the arrow keys cycle the clock color through eight palette colors, an
+  animated rainbow gradient, and a hue-cycling solid color, with smooth
+  hue-rotation transitions between solid colors. The black palette color
+  renders on a white canvas so the clock never disappears.
 
 ### Changed
 

@@ -2706,7 +2706,9 @@ fn uninstall_command(
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
         InstallMethod::Fastfetch if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' fastfetch 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch; fi".to_string(),
         InstallMethod::Fastfetch => "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch".to_string(),
-        InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => return None,
+        InstallMethod::Builtin | InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => {
+            return None;
+        }
     };
     Some(command)
 }

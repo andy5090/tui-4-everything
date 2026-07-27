@@ -135,6 +135,38 @@ enum Command {
         #[arg(long)]
         yes: bool,
     },
+    /// Apps bundled inside the t4e executable, launched by the managed catalog.
+    #[command(hide = true)]
+    Builtin {
+        #[command(subcommand)]
+        app: BuiltinApp,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum BuiltinApp {
+    /// Extra-large digital clock that scales to fill the terminal.
+    #[command(name = "big-clock")]
+    BigClock {
+        /// Show seconds.
+        #[arg(short = 's', long = "seconds")]
+        seconds: bool,
+        /// Use 12-hour time with AM/PM.
+        #[arg(short = 't', long = "twelve-hour")]
+        twelve_hour: bool,
+        /// Show UTC time.
+        #[arg(short = 'u', long = "utc")]
+        utc: bool,
+        /// Show the date below the time.
+        #[arg(short = 'd', long = "date")]
+        date: bool,
+        /// Stretch digits to fill the pane (default preserves glyph proportions).
+        #[arg(short = 'f', long = "fill")]
+        fill: bool,
+        /// Clock color as an ANSI color index (0-7), like tty-clock -C; 8 for an animated rainbow, 9 for a hue-cycling color.
+        #[arg(short = 'C', long = "color", default_value_t = 2, value_parser = clap::value_parser!(u8).range(0..=9))]
+        color: u8,
+    },
 }
 
 fn main() -> Result<()> {
@@ -606,6 +638,23 @@ fn main() -> Result<()> {
             fs::write(&output, serde_json::to_vec_pretty(&results)?)?;
             println!("{}", output.display());
         }
+        Some(Command::Builtin { app }) => match app {
+            BuiltinApp::BigClock {
+                seconds,
+                twelve_hour,
+                utc,
+                date,
+                fill,
+                color,
+            } => t4e::builtin::big_clock::run(t4e::builtin::big_clock::BigClockOptions {
+                seconds,
+                twelve_hour,
+                utc,
+                show_date: date,
+                color,
+                stretch: fill,
+            })?,
+        },
     }
 
     Ok(())

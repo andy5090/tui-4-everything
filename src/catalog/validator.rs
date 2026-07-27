@@ -89,7 +89,8 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
         }
 
         for installer in &tool.installers {
-            if installer.package_hints.is_empty()
+            let hints_required = !matches!(installer.method, InstallMethod::Builtin);
+            if (hints_required && installer.package_hints.is_empty())
                 || installer
                     .package_hints
                     .iter()

@@ -10,6 +10,9 @@ app-server requests for command or patch approval are denied by the client.
 ## Runtime Components
 
 - `app`: terminal lifecycle, state, rendering, and input handling.
+- `builtin`: applications embedded in the t4e executable and launched through
+  the hidden `builtin` subcommand; catalog entries use the `builtin` install
+  method, count as installed, and never touch a package manager.
 - `installer`: task materialization, pre/post checks, execution, retry,
   cancellation, diagnostics, and durable logs.
 - `mux`: structured tmux invocation, managed-session discovery, interactive

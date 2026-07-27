@@ -1,6 +1,7 @@
 pub mod adapters;
 pub mod agents;
 pub mod app;
+pub mod builtin;
 pub mod catalog;
 pub mod codex;
 pub mod gates;

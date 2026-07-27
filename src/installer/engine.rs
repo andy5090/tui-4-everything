@@ -98,6 +98,11 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         bail!("install_cmd is only allowed for script installers");
     }
 
+    if matches!(installer.method, InstallMethod::Builtin) {
+        // Builtin apps ship inside the t4e executable; installation is a no-op.
+        return Ok("true".to_string());
+    }
+
     if installer.package_hints.is_empty() {
         bail!("installer has no package hint");
     }
@@ -138,6 +143,9 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
         InstallMethod::Fastfetch => materialize_fastfetch_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
+        InstallMethod::Builtin => {
+            unreachable!("builtin installers return before package handling")
+        }
         InstallMethod::Other => {
             return Err(anyhow::anyhow!("unsupported install method"));
         }
