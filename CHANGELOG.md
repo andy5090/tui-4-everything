@@ -6,6 +6,12 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Added
+
+- Portable Linux `x86_64` and `aarch64` musl release archives, plus a
+  checksum-verifying installer with version, prefix, upgrade, and uninstall
+  support.
+
 ## [0.2.0] - 2026-07-27
 
 ### Added

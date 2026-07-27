@@ -39,6 +39,61 @@ Anthropic API, and OpenAI-compatible APIs is on the roadmap.
 - Codex CLI for the current AI backend
 - The relevant package manager (`apt`, Snap, Homebrew, Cargo, or pipx) for installs
 
+## Install a release
+
+GitHub Releases provide portable musl Linux archives for `x86_64` and `aarch64`,
+plus the existing macOS archive. Download the archive matching your CPU from the
+release page, then verify its adjacent `.sha256` file before extracting it. For
+the latest supported Linux release, use the one-command installer:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/andy5090/tui-4-everything/main/install.sh | bash
+```
+
+It detects `x86_64` or `aarch64`, verifies the release SHA-256 before it
+installs, and places `t4e` in `$HOME/.local/bin`. To install a specific version,
+append `-s -- --version VERSION`. For a manual, independently checkable
+installation on x86_64 Linux (replace `VERSION` with the release version):
+
+```bash
+curl -LO https://github.com/andy5090/tui-4-everything/releases/download/vVERSION/t4e-VERSION-linux-x86_64-musl.tar.gz
+curl -LO https://github.com/andy5090/tui-4-everything/releases/download/vVERSION/t4e-VERSION-linux-x86_64-musl.tar.gz.sha256
+sha256sum -c t4e-VERSION-linux-x86_64-musl.tar.gz.sha256
+tar -xzf t4e-VERSION-linux-x86_64-musl.tar.gz
+mkdir -p "$HOME/.local/bin"
+install -m 755 t4e-VERSION-linux-x86_64-musl/t4e "$HOME/.local/bin/t4e"
+```
+
+On macOS, use the matching `t4e-VERSION-macos-arm64.tar.gz` archive and verify
+with `shasum -a 256 -c <archive>.sha256`. On Linux ARM64, replace the archive
+label with `linux-aarch64-musl`. The archive also contains the editable Registry
+copies and release documentation.
+
+Ensure `$HOME/.local/bin` is on `PATH` (for example, add
+`export PATH="$HOME/.local/bin:$PATH"` to your shell profile), reopen the
+shell, and run `t4e`. T4E requires `tmux` 3.x to launch managed applications
+and a signed-in `codex` CLI for its current AI features; install them before
+using those capabilities. Rust is only required when building from source.
+
+To upgrade, rerun the installer (or repeat the checksum and install steps) with
+the newer release. To uninstall the installer-managed binary, run
+`curl -fsSL https://raw.githubusercontent.com/andy5090/tui-4-everything/main/install.sh | bash -s -- --uninstall`.
+Removing `$HOME/.local/bin/t4e` does the same; neither option removes apps
+installed through T4E, which can be removed individually from the catalog with
+`U` before uninstalling.
+
+## Release process
+
+Push a version tag in the form `vVERSION`. The `Real release gates` workflow
+runs Gates 1 through 5 first, then builds the existing macOS ARM64 binary and
+cross-compiles the portable `x86_64-unknown-linux-musl` and
+`aarch64-unknown-linux-musl` binaries on Ubuntu with Zig. The ARM64 validation
+runs through QEMU rather than assuming a native ARM runner. Only after all
+package jobs succeed does the workflow publish the GitHub Release, its archives,
+and their SHA-256 files. The Linux asset names are deterministic:
+`t4e-VERSION-linux-x86_64-musl.tar.gz` and
+`t4e-VERSION-linux-aarch64-musl.tar.gz`.
+
 ## Applications
 
 HOME presents OS-style app views. `Quick Access` contains `Running`,
