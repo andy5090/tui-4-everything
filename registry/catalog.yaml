@@ -34,7 +34,7 @@ packs:
   - id: edit-pack
     title: Editors & IDEs Pack
     exposure: starter
-    tool_ids: [micro, helix, lazyvim, visidata]
+    tool_ids: [termleaf, micro, helix, lazyvim, visidata]
   - id: agents-pack
     title: Agents Pack
     exposure: starter
@@ -1163,6 +1163,32 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["nudoku"]
+  - id: termleaf
+    name: "Termleaf"
+    description: "A distraction-free terminal text editor built for focused writing."
+    key_hints: ["F1 help", "Ctrl-S save", "Ctrl-Q quit"]
+    category: edit
+    tags: []
+    audience: general
+    capabilities: [FILE_READ, FILE_WRITE]
+    exposure: starter
+    run:
+      cmd: "termleaf"
+    checks:
+      - which: "termleaf"
+      - which: "termleaf-update"
+    installers:
+      - platform: macos
+        method: script
+        package_hints: ["termleaf"]
+        install_cmd: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/latest/download/termleaf-installer.sh | sh"
+        requires_confirm: true
+      - platform: linux
+        method: script
+        package_hints: ["termleaf"]
+        install_cmd: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/latest/download/termleaf-installer.sh | sh"
+        requires_confirm: true
+    notes: "Installed from the verified upstream release artifacts published by andy5090/termleaf."
   - id: micro
     name: "Micro"
     description: "A straightforward terminal text editor with familiar shortcuts."

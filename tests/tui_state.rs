@@ -1562,6 +1562,23 @@ fn ai_category_lists_its_three_apps() {
 }
 
 #[test]
+fn editors_category_includes_termleaf_as_a_default_app() {
+    let mut app = app();
+    app.home_filter_index = HomeFilter::ALL
+        .iter()
+        .position(|filter| *filter == HomeFilter::Category(AppCategory::Editors))
+        .expect("Editors category exists");
+
+    let visible = app.home_tools();
+    let termleaf = visible
+        .iter()
+        .find(|tool| tool.id == "termleaf")
+        .expect("termleaf is visible in Editors");
+    assert_eq!(termleaf.run.cmd, "termleaf");
+    assert_eq!(termleaf.exposure, t4e::catalog::models::Exposure::Starter);
+}
+
+#[test]
 fn global_catalog_entry_clears_a_transient_home_search() {
     let mut app = app();
     app.search_query = "stale-search".to_string();

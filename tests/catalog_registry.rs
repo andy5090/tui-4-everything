@@ -196,6 +196,39 @@ fn registry_loads_and_validates() {
         .expect("helix exists");
     assert_eq!(helix.category, ToolCategory::Ide);
 
+    let termleaf = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "termleaf")
+        .expect("termleaf exists");
+    assert_eq!(termleaf.run.cmd, "termleaf");
+    assert_eq!(termleaf.category, ToolCategory::Edit);
+    assert_eq!(termleaf.risk_level(), RiskLevel::High);
+    assert_eq!(
+        termleaf
+            .checks
+            .iter()
+            .filter_map(|check| check.which.as_deref())
+            .collect::<Vec<_>>(),
+        ["termleaf", "termleaf-update"]
+    );
+    assert!(termleaf.installers.iter().all(|installer| {
+        installer.method == InstallMethod::Script
+            && installer.requires_confirm
+            && installer.install_cmd.as_deref().is_some_and(|command| {
+                command.contains("andy5090/termleaf") && command.contains("termleaf-installer.sh")
+            })
+    }));
+    assert!(
+        catalog
+            .packs
+            .iter()
+            .find(|pack| pack.id == "edit-pack")
+            .expect("edit pack exists")
+            .tool_ids
+            .contains(&termleaf.id)
+    );
+
     let pipes = catalog
         .tools
         .iter()

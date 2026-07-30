@@ -131,7 +131,7 @@ impl Tool {
             | "yewtube" | "youtube-tui" | "tplay" => AppCategory::Media,
             "newsboat" | "lynx" => AppCategory::Internet,
             "yazi" | "ncdu" | "broot" => AppCategory::Files,
-            "micro" | "helix" | "lazyvim" => AppCategory::Editors,
+            "termleaf" | "micro" | "helix" | "lazyvim" => AppCategory::Editors,
             "claude-code" | "codex-cli" | "opencode" => AppCategory::Ai,
             "bastet" | "ninvaders" | "nudoku" => AppCategory::Games,
             "cmatrix" | "asciiquarium" | "sl" | "lolcat" | "cowsay" | "fortune" | "tty-clock"

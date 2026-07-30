@@ -106,7 +106,7 @@ batch-install units.
 | Internet | Newsboat, Lynx |
 | Media | Spotatui, Spotify Player, Ncspot, Cava, Termusic, Shellcast, Yewtube, YouTube TUI, tplay |
 | Files | Yazi, ncdu, broot |
-| Editors | Micro, Helix, LazyVim |
+| Editors | Termleaf, Micro, Helix, LazyVim |
 | AI | Claude Code, Codex CLI, OpenCode |
 | System | ASCII Camera, Fastfetch |
 | Utilities | Glow, VisiData |
@@ -117,8 +117,10 @@ Support commands such as `mpv`, `yt-dlp`, `ffmpeg`, `jq`, `ripgrep`, and
 `lolcat` are internal dependencies and remain available through explicit
 catalog search, but are not shown as applications on HOME.
 LazyVim uses an isolated `t4e-lazyvim` profile, leaving an existing Neovim
-configuration untouched. YouTube TUI provides browsing and search; tplay asks
-for a media URL or local path before rendering the media as terminal ASCII.
+configuration untouched. Termleaf provides a distraction-free writing editor
+with English and Korean input guidance. YouTube TUI provides browsing and
+search; tplay asks for a media URL or local path before rendering the media as
+terminal ASCII.
 On Linux, both media paths use T4E-managed current `yt-dlp` environments rather
 than the frequently outdated Ubuntu repository build. Yewtube and YouTube TUI
 offer a remembered external video player choice: `mpv` opens the normal video

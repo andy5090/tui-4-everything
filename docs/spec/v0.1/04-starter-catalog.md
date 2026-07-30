@@ -8,8 +8,8 @@
 - Files Pack (16)
 - Fun Pack (9)
 - Games Pack (3)
-- Editors & IDEs Pack (4)
-= 합계 54개 + (옵션 Search-only) Agents(3) = 총 57
+- Editors & IDEs Pack (5)
+= 합계 55개 + (옵션 Search-only) Agents(3) = 총 58
 v0.1 목표 40~80 범위 충족.
 
 > NOTE: “패키지명/가용성”은 OS/배포판마다 달라, v0.1은 package_hints + resolver 기반으로 설치 성공률을 확보한다.
@@ -78,11 +78,12 @@ v0.1 목표 40~80 범위 충족.
 2) ninvaders
 3) nudoku
 
-## 4.9 Editors & IDEs Pack (4)
-1) micro
-2) helix
-3) lazyvim
-4) visidata
+## 4.9 Editors & IDEs Pack (5)
+1) termleaf
+2) micro
+3) helix
+4) lazyvim
+5) visidata
 
 ## 4.10 Search-only (옵션)
 ### Agents Pack
