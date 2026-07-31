@@ -17,8 +17,10 @@ and date are assigned.
 
 ### Fixed
 
-- Let `Tab` and `Shift+Tab` leave HOME and move through Activity, Settings,
-  and Help, including while the HOME search input is focused.
+- Restore `Tab` as the HOME panel switcher and use `Shift+Tab` alone to cycle
+  HOME, Activity, Settings, and Help, including from focused HOME inputs.
+- Show the number of detected AI providers and keep `[`/`]` switching available
+  whenever multiple subscription or API providers are ready.
 
 ## [0.2.0] - 2026-07-27
 

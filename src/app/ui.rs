@@ -284,13 +284,30 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 
 fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     let [library_area, apps_column_area, trailing_area] = home_layout(area);
-    let split_apps_for_ai = area.width >= 110 && apps_column_area.height >= 16;
-    let (apps_area, ai_area, information_area) = if split_apps_for_ai {
-        let app_sections = Layout::default()
+    let split_right_columns_for_ai = area.width >= 110 && apps_column_area.height >= 16;
+    let (apps_area, ai_area, information_area) = if split_right_columns_for_ai {
+        let right_area = Rect::new(
+            apps_column_area.x,
+            apps_column_area.y,
+            trailing_area.right().saturating_sub(apps_column_area.x),
+            apps_column_area.height,
+        );
+        let right_sections = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
-            .split(apps_column_area);
-        (app_sections[0], Some(app_sections[1]), Some(trailing_area))
+            .split(right_area);
+        let upper_columns = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Length(apps_column_area.width),
+                Constraint::Min(1),
+            ])
+            .split(right_sections[0]);
+        (
+            upper_columns[0],
+            Some(right_sections[1]),
+            Some(upper_columns[1]),
+        )
     } else if app.home_focus == HomeFocus::Assistant {
         (apps_column_area, Some(trailing_area), None)
     } else {
@@ -533,12 +550,6 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             )),
         ]);
     }
-    let [primary_hint, action_hint] = home_information_hints(app);
-    information.extend([
-        Line::from(""),
-        Line::from(primary_hint),
-        Line::from(action_hint),
-    ]);
     let active_install = app.selected_home_tool().and_then(|tool| {
         app.queue
             .iter()
@@ -583,32 +594,9 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     }
 }
 
-fn home_information_hints(app: &AppState) -> [&'static str; 2] {
-    if app.search_mode {
-        return [
-            "Type search   Backspace delete",
-            "↓/→ results   Enter apply   Esc cancel",
-        ];
-    }
-    match app.home_focus {
-        HomeFocus::Views if app.home_filter_index == 0 => [
-            "↑ search   ↓ move view   → apps",
-            "Enter open view   / search",
-        ],
-        HomeFocus::Views => ["↑/↓ move view   → apps", "Enter open view   / search"],
-        HomeFocus::AppList => [
-            "← views   ↑/↓ move app",
-            "Enter run   I/U/R/u install/remove/reset/update",
-        ],
-        HomeFocus::Assistant => [
-            "← apps   [/] provider   a/Enter compose",
-            "A approve proposal   x interrupt",
-        ],
-    }
-}
-
 fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let focused = app.home_focus == HomeFocus::Assistant;
+    let provider_count = app.ai_ready_providers.len();
     let mut lines = vec![
         Line::from(vec![
             Span::styled(
@@ -623,7 +611,16 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         ]),
         Line::styled(
             if app.ai_ready() {
-                format!("account: {} · [/] switch", app.ai_account)
+                format!(
+                    "account: {} · {} ready{}",
+                    app.ai_account,
+                    provider_count,
+                    if provider_count > 1 {
+                        " · [/] switch"
+                    } else {
+                        ""
+                    }
+                )
             } else {
                 "Configure a CLI or API provider in Settings".to_string()
             },
@@ -1572,14 +1569,14 @@ fn risk_explanation(risk: RiskLevel) -> &'static str {
 fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let hint = if app.search_mode {
         format!(
-            "Search all apps: {}_   Tab tabs   ↓/→ results   Enter apply   Esc cancel   Alt+Q quit",
+            "Search all apps: {}_   Tab panel   Shift+Tab tabs   ↓/→ results   Enter apply   Esc cancel",
             app.search_query
         )
     } else if app.ai_input_mode {
-        "AI prompt input   Tab tabs   Enter send   Esc cancel".to_string()
+        "AI prompt input   Tab panel   Shift+Tab tabs   Enter send   Esc cancel".to_string()
     } else if app.screen == Screen::Logs {
         format!(
-            "{} | Tab/Shift+Tab tabs | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
+            "{} | Shift+Tab tabs | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
             app.status
         )
     } else if app.screen == Screen::Home {
@@ -1592,16 +1589,16 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             HomeFocus::Assistant => "← apps  a/Enter compose  [/] provider  A approve",
         };
         if area.width < 90 {
-            "Tab/S-Tab tabs  ←/→ focus  Backspace back  ? help".to_string()
+            "Tab panels  S-Tab tabs  ←/→ focus  Backspace back  ? help".to_string()
         } else {
             format!(
-                "{} | Tab/Shift+Tab tabs | {navigation}  Backspace back  ? help",
+                "{} | Tab panels · Shift+Tab tabs | {navigation}  Backspace back  ? help",
                 app.status
             )
         }
     } else {
         format!(
-            "{} | Tab/Shift+Tab tabs | ↑/↓ or j/k move  Enter open/run  Backspace back  ? help",
+            "{} | Shift+Tab tabs | ↑/↓ or j/k move  Enter open/run  Backspace back  ? help",
             app.status
         )
     };
@@ -1631,6 +1628,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             ),
             Line::from("Scripts always need approval; installs get postflight checks"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
+            Line::from("Tab HOME panels | Shift+Tab dashboard tabs"),
             Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
         ]
     } else {
@@ -1674,7 +1672,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("arrows / j k       move selection"),
             Line::from("Enter               enter an app list or run the selected app"),
             Line::from("I / U / R           install / uninstall / reset and reinstall"),
-            Line::from("Tab / Shift+Tab     switch HOME / Activity / Settings / Help tabs"),
+            Line::from("Tab                 switch HOME panels"),
+            Line::from("Shift+Tab           cycle HOME / Activity / Settings / Help tabs"),
             Line::from("/                   search apps in the current HOME view"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
             Line::from("Activity Home / End jump to newest / oldest entry"),

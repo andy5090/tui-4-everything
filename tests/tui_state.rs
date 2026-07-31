@@ -51,38 +51,40 @@ fn open_catalog_search(app: &mut AppState, query: &str) {
 }
 
 #[test]
-fn tab_switches_header_sections_outside_running_apps() {
+fn shift_tab_switches_header_sections_outside_running_apps() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
     app.handle_key(key(KeyCode::Down));
     assert_eq!(app.screen, Screen::Catalog);
     assert_eq!(app.catalog_index, 1);
 
-    app.handle_key(key(KeyCode::Tab));
+    app.handle_key(key(KeyCode::BackTab));
     assert_eq!(app.screen, Screen::Logs);
     assert_eq!(app.catalog_index, 1);
 
     app.handle_key(key(KeyCode::BackTab));
-    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.screen, Screen::Settings);
 }
 
 #[test]
-fn tab_reaches_settings_from_home_even_when_search_is_focused() {
+fn tab_switches_home_panels_and_shift_tab_cycles_dashboard_tabs() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('/')));
     assert!(app.search_mode);
 
     app.handle_key(key(KeyCode::Tab));
-    assert_eq!(app.screen, Screen::Logs);
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
     assert!(!app.search_mode);
 
     app.handle_key(key(KeyCode::Tab));
-    assert_eq!(app.screen, Screen::Settings);
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::Assistant);
 
     app.handle_key(key(KeyCode::BackTab));
     assert_eq!(app.screen, Screen::Logs);
     app.handle_key(key(KeyCode::BackTab));
-    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.screen, Screen::Settings);
 }
 
 #[test]
@@ -1370,7 +1372,7 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
     assert!(!rendered.contains("Installs:"));
     assert!(!rendered.contains("Saved:"));
     assert!(rendered.contains("→ apps"));
-    assert!(rendered.contains("↑/↓ move view"));
+    assert!(rendered.contains("↑/↓ view"));
     for label in ["OS:", "Host:", "Kernel:", "CPU:", "Memory:"] {
         assert!(
             rendered.contains(label),
@@ -1381,7 +1383,7 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
 }
 
 #[test]
-fn home_places_assistant_below_the_app_list_and_keeps_information_separate() {
+fn home_spans_assistant_below_the_app_and_information_columns() {
     let mut app = app();
     let app_title = app.selected_home_filter().label().to_string();
     let backend = TestBackend::new(120, 30);
@@ -1407,6 +1409,15 @@ fn home_places_assistant_below_the_app_list_and_keeps_information_separate() {
     let information_row = find_row("Information");
     assert!(assistant_row > app_row);
     assert!(information_row < assistant_row);
+    let buffer = terminal.backend().buffer();
+    assert_eq!(
+        buffer.cell((24, assistant_row as u16)).unwrap().symbol(),
+        "┌"
+    );
+    assert_eq!(
+        buffer.cell((119, assistant_row as u16)).unwrap().symbol(),
+        "┐"
+    );
 }
 
 #[test]
@@ -1427,7 +1438,8 @@ fn minimum_home_uses_the_compact_assistant_fallback() {
         .collect::<String>();
 
     assert!(rendered.contains("Assistant"));
-    assert!(rendered.contains("Tab/S-Tab tabs"));
+    assert!(rendered.contains("Tab panels"));
+    assert!(rendered.contains("S-Tab tabs"));
 }
 
 #[test]
@@ -1540,7 +1552,7 @@ fn home_up_from_quick_access_opens_search_and_hints_follow_focus() {
         .collect::<String>();
 
     assert!(rendered.contains("← views"));
-    assert!(rendered.contains("↑/↓ move app"));
+    assert!(rendered.contains("↑/↓ app"));
     assert!(!rendered.contains("←/→ switch panel"));
 }
 
@@ -1600,10 +1612,12 @@ fn help_tab_explains_capabilities_and_derived_risk() {
     assert!(rendered.contains("CAMERA_CAPTURE"));
 
     app.handle_key(key(KeyCode::Tab));
-    assert_eq!(app.screen, Screen::Home);
-    app.handle_key(key(KeyCode::BackTab));
     assert_eq!(app.screen, Screen::Help);
-    assert_eq!(app.home_focus, HomeFocus::Views);
+    app.handle_key(key(KeyCode::BackTab));
+    assert_eq!(app.screen, Screen::Home);
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::AppList);
 }
 
 #[test]
@@ -2132,6 +2146,40 @@ fn home_ai_is_disabled_without_a_ready_provider_and_enables_after_login() {
     app.handle_key(key(KeyCode::Char('a')));
     assert!(app.ai_input_mode);
     assert_eq!(app.ai_provider, AiProvider::Claude);
+}
+
+#[test]
+fn multiple_detected_ai_providers_can_be_switched_from_home() {
+    let mut app = app();
+    app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
+        provider: AiProvider::Claude,
+        account: "max subscription".to_string(),
+    }));
+    app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
+        provider: AiProvider::Gemini,
+        account: "configured credentials".to_string(),
+    }));
+    assert_eq!(app.ai_provider, AiProvider::Claude);
+
+    app.handle_key(key(KeyCode::Char(']')));
+    assert_eq!(app.ai_provider, AiProvider::Gemini);
+    app.handle_key(key(KeyCode::Char('[')));
+    assert_eq!(app.ai_provider, AiProvider::Claude);
+
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("HOME renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(rendered.contains("2 ready"));
+    assert!(rendered.contains("[/] switch"));
 }
 
 #[test]

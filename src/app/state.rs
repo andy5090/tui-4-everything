@@ -515,10 +515,17 @@ impl AppState {
             return;
         }
 
-        if matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
+        if key.code == KeyCode::BackTab {
             self.search_mode = false;
             self.ai_input_mode = false;
-            self.move_navigation_tab(if key.code == KeyCode::Tab { 1 } else { -1 });
+            self.move_navigation_tab(1);
+            return;
+        }
+
+        if key.code == KeyCode::Tab && self.screen == Screen::Home {
+            self.search_mode = false;
+            self.ai_input_mode = false;
+            self.move_home_focus(1);
             return;
         }
 
@@ -1906,6 +1913,19 @@ impl AppState {
             }
             HomeFocus::Assistant => {}
         }
+    }
+
+    fn move_home_focus(&mut self, delta: isize) {
+        let current = match self.home_focus {
+            HomeFocus::Views => 0,
+            HomeFocus::AppList => 1,
+            HomeFocus::Assistant => 2,
+        };
+        self.home_focus = match move_index(current, 3, delta) {
+            0 => HomeFocus::Views,
+            1 => HomeFocus::AppList,
+            _ => HomeFocus::Assistant,
+        };
     }
 
     fn focus_ai(&mut self) {
