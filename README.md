@@ -183,7 +183,7 @@ The primary navigation is `HOME`, `Activity`, `Settings`, and `Help`.
 HOME contains Quick Access, categorized Apps, and a compact
 fastfetch system summary with the detected OS ASCII logo and native fastfetch
 colors. A persistent search input sits above Quick Access and can be focused by
-clicking it or pressing `/`. Left/Right switches between the app views and app
+clicking it or pressing `Ctrl+F`. Left/Right switches between the app views and app
 list; Enter enters a list or runs an app, and `?` opens Help. While the selected
 app is installing, the bottom of Information shows its channel, attempt, and
 four most recent live output lines.

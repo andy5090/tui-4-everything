@@ -21,6 +21,8 @@ and date are assigned.
   HOME, Activity, Settings, and Help, including from focused HOME inputs.
 - Show the number of detected AI providers and keep `[`/`]` switching available
   whenever multiple subscription or API providers are ready.
+- Move HOME search to `Ctrl+F`; `/` now opens Assistant input with a slash so it
+  can begin a skill or command and remains normal text while composing.
 
 ## [0.2.0] - 2026-07-27
 

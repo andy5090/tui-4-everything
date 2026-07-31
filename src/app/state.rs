@@ -515,6 +515,15 @@ impl AppState {
             return;
         }
 
+        if self.screen == Screen::Home
+            && self.home_focus != HomeFocus::Assistant
+            && key.modifiers.contains(KeyModifiers::CONTROL)
+            && key.code == KeyCode::Char('f')
+        {
+            self.begin_home_search();
+            return;
+        }
+
         if key.code == KeyCode::BackTab {
             self.search_mode = false;
             self.ai_input_mode = false;
@@ -1541,8 +1550,11 @@ impl AppState {
                 }
                 KeyCode::Enter if self.home_focus == HomeFocus::Assistant => self.focus_ai(),
                 KeyCode::Enter => self.request_selected_tool_launch(),
-                KeyCode::Char('/') => {
-                    self.begin_home_search();
+                KeyCode::Char('/') if self.home_focus == HomeFocus::Assistant => {
+                    self.focus_ai();
+                    if self.ai_input_mode {
+                        self.ai_input.push('/');
+                    }
                 }
                 KeyCode::Char('I') => self.queue_selected_tool(),
                 KeyCode::Char('U') => self.request_selected_uninstall(),

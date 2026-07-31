@@ -616,7 +616,7 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
                     app.ai_account,
                     provider_count,
                     if provider_count > 1 {
-                        " · [/] switch"
+                        " · [ prev · ] next"
                     } else {
                         ""
                     }
@@ -658,7 +658,7 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let composer = if app.ai_input_mode {
         format!("> {}_", app.ai_input)
     } else if app.ai_ready() {
-        "a / Enter: ask AI · A: approve proposal".to_string()
+        "a / Enter: ask AI · /: skill · A: approve proposal".to_string()
     } else {
         "AI input disabled until a provider is ready".to_string()
     };
@@ -1582,11 +1582,11 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     } else if app.screen == Screen::Home {
         let navigation = match app.home_focus {
             HomeFocus::Views if app.home_filter_index == 0 => {
-                "↑ search  ↓ view  → apps  Enter open"
+                "↑ search  ↓ view  → apps  Ctrl+F search"
             }
-            HomeFocus::Views => "↑/↓ view  → apps  Enter open",
+            HomeFocus::Views => "↑/↓ view  → apps  Ctrl+F search",
             HomeFocus::AppList => "← views  ↑/↓ app  Enter run",
-            HomeFocus::Assistant => "← apps  a/Enter compose  [/] provider  A approve",
+            HomeFocus::Assistant => "← apps  a/Enter compose  / skill  [ or ] provider  A approve",
         };
         if area.width < 90 {
             "Tab panels  S-Tab tabs  ←/→ focus  Backspace back  ? help".to_string()
@@ -1628,7 +1628,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             ),
             Line::from("Scripts always need approval; installs get postflight checks"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
-            Line::from("Tab HOME panels | Shift+Tab dashboard tabs"),
+            Line::from("Ctrl+F HOME search | Tab panels | Shift+Tab dashboard tabs"),
             Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
         ]
     } else {
@@ -1674,7 +1674,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("I / U / R           install / uninstall / reset and reinstall"),
             Line::from("Tab                 switch HOME panels"),
             Line::from("Shift+Tab           cycle HOME / Activity / Settings / Help tabs"),
-            Line::from("/                   search apps in the current HOME view"),
+            Line::from("Ctrl+F              search apps from HOME Views or Apps"),
+            Line::from("/                   start an Assistant skill or command"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
             Line::from("Activity Home / End jump to newest / oldest entry"),
             Line::from("Alt+Left / Right    switch running apps"),

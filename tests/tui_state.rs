@@ -50,6 +50,10 @@ fn open_catalog_search(app: &mut AppState, query: &str) {
     app.handle_key(key(KeyCode::Enter));
 }
 
+fn open_home_search(app: &mut AppState) {
+    app.handle_key(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL));
+}
+
 #[test]
 fn shift_tab_switches_header_sections_outside_running_apps() {
     let mut app = app();
@@ -69,7 +73,7 @@ fn shift_tab_switches_header_sections_outside_running_apps() {
 #[test]
 fn tab_switches_home_panels_and_shift_tab_cycles_dashboard_tabs() {
     let mut app = app();
-    app.handle_key(key(KeyCode::Char('/')));
+    open_home_search(&mut app);
     assert!(app.search_mode);
 
     app.handle_key(key(KeyCode::Tab));
@@ -1181,7 +1185,7 @@ fn mouse_click_opens_the_home_search_input_above_quick_access() {
 #[test]
 fn alt_q_quits_home_even_while_search_is_focused() {
     let mut app = app();
-    app.handle_key(key(KeyCode::Char('/')));
+    open_home_search(&mut app);
     assert!(app.search_mode);
 
     app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::ALT));
@@ -1563,7 +1567,7 @@ fn home_search_ignores_the_previous_view_and_arrows_open_results() {
         .iter()
         .position(|filter| *filter == HomeFilter::Favorites)
         .expect("Favorites exists");
-    app.handle_key(key(KeyCode::Char('/')));
+    open_home_search(&mut app);
     for ch in "yazi".chars() {
         app.handle_key(key(KeyCode::Char(ch)));
     }
@@ -1578,7 +1582,7 @@ fn home_search_ignores_the_previous_view_and_arrows_open_results() {
     assert!(!app.search_mode);
     assert_eq!(app.home_focus, HomeFocus::AppList);
 
-    app.handle_key(key(KeyCode::Char('/')));
+    open_home_search(&mut app);
     assert!(app.search_mode);
     app.handle_key(key(KeyCode::Right));
     assert!(!app.search_mode);
@@ -1610,6 +1614,7 @@ fn help_tab_explains_capabilities_and_derived_risk() {
     assert!(rendered.contains("NETWORK"));
     assert!(rendered.contains("AUTONOMOUS"));
     assert!(rendered.contains("CAMERA_CAPTURE"));
+    assert!(rendered.contains("Ctrl+F"));
 
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(app.screen, Screen::Help);
@@ -2149,6 +2154,27 @@ fn home_ai_is_disabled_without_a_ready_provider_and_enables_after_login() {
 }
 
 #[test]
+fn slash_stays_in_the_assistant_instead_of_opening_home_search() {
+    let mut app = app();
+    app.home_focus = HomeFocus::Assistant;
+
+    app.handle_key(key(KeyCode::Char('/')));
+    assert!(!app.search_mode);
+    assert_eq!(app.home_focus, HomeFocus::Assistant);
+
+    app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
+        provider: AiProvider::Claude,
+        account: "max subscription".to_string(),
+    }));
+    app.handle_key(key(KeyCode::Char('/')));
+    assert!(app.ai_input_mode);
+    assert_eq!(app.ai_input, "/");
+    app.handle_key(key(KeyCode::Char('/')));
+    assert_eq!(app.ai_input, "//");
+    assert!(!app.search_mode);
+}
+
+#[test]
 fn multiple_detected_ai_providers_can_be_switched_from_home() {
     let mut app = app();
     app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
@@ -2179,7 +2205,7 @@ fn multiple_detected_ai_providers_can_be_switched_from_home() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(rendered.contains("2 ready"));
-    assert!(rendered.contains("[/] switch"));
+    assert!(rendered.contains("[ prev · ] next"));
 }
 
 #[test]
