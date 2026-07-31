@@ -1812,6 +1812,7 @@ fn settings_explain_the_selected_policy_and_reset_scope() {
         "clicking, scrolling, and drag-to-copy",
         "Total automatic attempts",
         "Script and DANGER installs",
+        "OpenAI-compatible Chat Completions",
         "Favorites, recent apps, activity history",
     ]
     .into_iter()
@@ -1853,7 +1854,7 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
         .into(),
     );
     app.handle_key(key(KeyCode::Char('7')));
-    for _ in 0..3 {
+    for _ in 0..4 {
         app.handle_key(key(KeyCode::Down));
     }
     app.handle_key(key(KeyCode::Enter));
@@ -1861,6 +1862,39 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
     assert_eq!(app.settings, UserSettings::default());
     assert!(app.launch_preferences.is_empty());
     assert!(app.status.contains("reset"));
+}
+
+#[test]
+fn api_provider_setup_keeps_keys_out_of_persistent_settings() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('7')));
+    for _ in 0..3 {
+        app.handle_key(key(KeyCode::Down));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    let setup = app
+        .api_provider_setup
+        .as_mut()
+        .expect("provider setup opens");
+    setup.field = 5;
+    setup.api_key = "session-secret-key".to_string();
+    assert!(!format!("{setup:?}").contains("session-secret-key"));
+    app.handle_key(key(KeyCode::Enter));
+
+    let Some(AppEffect::ConfigureApiProvider {
+        provider,
+        profile,
+        api_key,
+    }) = app.take_effect()
+    else {
+        panic!("provider configuration effect expected");
+    };
+    assert_eq!(provider, AiProvider::Zhipu);
+    assert_eq!(profile.api_key_env, "ZHIPU_API_KEY");
+    assert!(!format!("{api_key:?}").contains("session-secret-key"));
+    assert_eq!(api_key.into_inner(), "session-secret-key");
+    let persisted = serde_json::to_string(&app.settings).expect("settings serialize");
+    assert!(!persisted.contains("session-secret-key"));
 }
 
 #[test]

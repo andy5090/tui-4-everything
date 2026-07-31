@@ -178,9 +178,13 @@ elif command -v gemini >/dev/null 2>&1 && {
   [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ] || [ -s "${HOME:-}/.gemini/oauth_creds.json" ]
 }; then
   ai_provider="Gemini"
+elif [ -n "${ZHIPU_API_KEY:-}" ]; then
+  ai_provider="Zhipu AI"
+elif [ -n "${MOONSHOT_API_KEY:-}" ]; then
+  ai_provider="Kimi"
 fi
 if [ -n "$ai_provider" ]; then
   printf '%s AI provider credentials detected.\n' "$ai_provider"
 else
-  printf 'Notice: HOME AI stays disabled until Codex, Claude, or Gemini is installed and signed in.\n' >&2
+  printf 'Notice: HOME AI stays disabled until a CLI or API provider is configured.\n' >&2
 fi

@@ -27,15 +27,16 @@ T4E // TERMINAL APPLICATION ENVIRONMENT
 ONE TERMINAL. EVERY TOOL. AI AT THE CONTROLS.
 
 T4E is a curated terminal application manager and AI-controlled terminal
-environment. HOME AI uses an existing signed-in Codex, Claude, or Gemini CLI;
-T4E never stores provider credentials and disables AI when none is ready.
+environment. HOME AI uses an existing signed-in Codex, Claude, or Gemini CLI,
+or an API-key-backed Zhipu AI, Kimi, or custom OpenAI-compatible endpoint. T4E
+never persists API keys and disables AI when no provider is ready.
 
 ## Requirements
 
 - Rust stable toolchain
 - Linux or macOS
 - tmux 3.x as the current hidden app process backend
-- An authenticated Codex, Claude, or Gemini CLI for optional HOME AI
+- An authenticated CLI or configured API provider for optional HOME AI
 - The relevant package manager (`apt`, Snap, Homebrew, Cargo, or pipx) for installs
 
 ## Install a release
@@ -71,9 +72,9 @@ copies and release documentation.
 Ensure `$HOME/.local/bin` is on `PATH` (for example, add
 `export PATH="$HOME/.local/bin:$PATH"` to your shell profile), reopen the
 shell, and run `t4e`. T4E requires `tmux` 3.x to launch managed applications
-and an authenticated Codex, Claude, or Gemini CLI for HOME AI. Without one,
-application browsing and management continue normally while AI input stays
-disabled. Rust is only required when building from source.
+and a ready AI provider for HOME AI. Without one, application browsing and
+management continue normally while AI input stays disabled. Rust is only
+required when building from source.
 
 To upgrade, rerun the installer (or repeat the checksum and install steps) with
 the newer release. To uninstall the installer-managed binary, run
@@ -178,7 +179,7 @@ scripts/dev-watch.sh
 The script requires `cargo-watch` and restores the terminal screen and cursor
 when it exits.
 
-The primary navigation is `HOME`, `AI`, `Activity`, `Settings`, and `Help`.
+The primary navigation is `HOME`, `Activity`, `Settings`, and `Help`.
 HOME contains Quick Access, categorized Apps, and a compact
 fastfetch system summary with the detected OS ASCII logo and native fastfetch
 colors. A persistent search input sits above Quick Access and can be focused by
@@ -233,10 +234,17 @@ Important actions are intentionally explicit:
   removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
 - AI lives in HOME's assistant rail rather than a separate tab. `a` focuses the
-  composer, `[`/`]` switches among ready Codex, Claude, and Gemini providers,
+  composer, `[`/`]` switches among ready CLI and API providers,
   `x` interrupts supported turns, and `A` reviews a bounded proposal. Providers
   may propose catalog search, install planning, a pinned T4E-verified update, or
   an app launch; T4E performs none of them before explicit approval.
+- Settings can configure Zhipu AI (`ZHIPU_API_KEY`), Kimi
+  (`MOONSHOT_API_KEY`), and custom OpenAI-compatible Chat Completions endpoints.
+  The display name, base URL, model, and environment-variable name are saved;
+  a key entered in the dialog exists only for the current T4E process. For a
+  future session, export the named variable before starting T4E. Zhipu Coding
+  Plan and Kimi's China endpoint can be selected by editing the provider base
+  URL.
 - Individual app updates are available only when the current platform installer
   declares an exact version, structured version probe, pinned command,
   verification date, and evidence. A different installed version is shown as
@@ -245,8 +253,9 @@ Important actions are intentionally explicit:
 
 Script installers, DANGER apps, and AI-proposed side effects require an exact typed
 confirmation. Codex app-server approvals are denied, Claude runs with tools
-disabled, and Gemini uses plan mode; T4E remains authoritative for installation,
-verified updates, and process lifecycle.
+disabled, Gemini uses plan mode, and API providers receive only the bounded
+intent prompt; T4E remains authoritative for installation, verified updates,
+and process lifecycle.
 
 On Linux, `x` or `X` handles the package-manager command without requiring the
 user to type it. For apt, dnf, pacman, Snap, missing `pipx`, and declared Cargo

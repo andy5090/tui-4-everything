@@ -9,7 +9,8 @@ use t4e::catalog::models::InstallMethod;
 use t4e::installer::engine::InstallTask;
 use t4e::installer::execution::InstallJob;
 use t4e::storage::{
-    LaunchOptionPreference, PersistentState, RecentItem, UserSettings, load_state, save_state,
+    LaunchOptionPreference, PersistentState, RecentItem, UserSettings,
+    default_api_provider_profiles, load_state, save_state,
 };
 
 fn temp_file() -> PathBuf {
@@ -86,6 +87,10 @@ fn legacy_state_uses_defaults_for_new_user_fields() {
     assert!(actual.favorites.is_empty());
     assert!(actual.recents.is_empty());
     assert_eq!(actual.settings, UserSettings::default());
+    assert_eq!(
+        actual.settings.api_providers,
+        default_api_provider_profiles()
+    );
     assert!(actual.launch_preferences.is_empty());
     let _ = fs::remove_dir_all(path.parent().expect("state parent"));
 }
@@ -110,5 +115,9 @@ fn legacy_settings_enable_mouse_controls_when_the_field_is_missing() {
     let actual = load_state(&path).expect("legacy state loads");
 
     assert!(actual.settings.mouse_enabled);
+    assert_eq!(
+        actual.settings.api_providers,
+        default_api_provider_profiles()
+    );
     let _ = fs::remove_dir_all(path.parent().expect("state parent"));
 }

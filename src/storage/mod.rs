@@ -52,10 +52,52 @@ pub struct UserSettings {
     pub install_timeout_sec: u64,
     pub max_install_attempts: u32,
     pub confirm_all_installs: bool,
+    #[serde(default = "default_api_provider_profiles")]
+    pub api_providers: BTreeMap<String, ApiProviderProfile>,
 }
 
 fn enabled_by_default() -> bool {
     true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApiProviderProfile {
+    pub label: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key_env: String,
+}
+
+pub fn default_api_provider_profiles() -> BTreeMap<String, ApiProviderProfile> {
+    BTreeMap::from([
+        (
+            "custom".to_string(),
+            ApiProviderProfile {
+                label: "Custom".to_string(),
+                base_url: String::new(),
+                model: String::new(),
+                api_key_env: "OPENAI_COMPAT_API_KEY".to_string(),
+            },
+        ),
+        (
+            "kimi".to_string(),
+            ApiProviderProfile {
+                label: "Kimi".to_string(),
+                base_url: "https://api.moonshot.ai/v1".to_string(),
+                model: "kimi-k3".to_string(),
+                api_key_env: "MOONSHOT_API_KEY".to_string(),
+            },
+        ),
+        (
+            "zhipu".to_string(),
+            ApiProviderProfile {
+                label: "Zhipu AI".to_string(),
+                base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
+                model: "glm-5.2".to_string(),
+                api_key_env: "ZHIPU_API_KEY".to_string(),
+            },
+        ),
+    ])
 }
 
 impl Default for UserSettings {
@@ -66,6 +108,7 @@ impl Default for UserSettings {
             install_timeout_sec: 600,
             max_install_attempts: 2,
             confirm_all_installs: false,
+            api_providers: default_api_provider_profiles(),
         }
     }
 }

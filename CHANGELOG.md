@@ -8,6 +8,9 @@ and date are assigned.
 
 ### Added
 
+- HOME AI support for Zhipu AI, Kimi, and custom OpenAI-compatible Chat
+  Completions providers, with editable model/base URL profiles, environment or
+  session-only API keys, and secret-safe transport.
 - Portable Linux `x86_64` and `aarch64` musl release archives, plus a
   checksum-verifying installer with version, prefix, upgrade, and uninstall
   support.

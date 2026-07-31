@@ -41,11 +41,12 @@ pub fn run(mut app: AppState) -> Result<()> {
     let mut active = HashMap::<String, ActiveInstall>::new();
     let mut app_sizes = HashMap::<String, (u16, u16)>::new();
     let tmux = TmuxRuntime::new(SystemTmuxRunner);
-    let ai = AiService::spawn(
+    let ai = AiService::spawn_with_profiles(
         std::env::current_dir()
             .unwrap_or_default()
             .display()
             .to_string(),
+        app.settings.api_providers.clone(),
     );
     for readiness in ai.ready_providers().iter().cloned() {
         app.add_ai_provider(readiness);
@@ -488,6 +489,19 @@ fn process_effects(
                     });
                 }
             }
+            AppEffect::ConfigureApiProvider {
+                provider,
+                profile,
+                api_key,
+            } => match ai.configure_api_provider(provider, profile, api_key.into_inner()) {
+                Ok(readiness) => app.add_ai_provider(readiness),
+                Err(reason) => {
+                    app.apply_ai_event(crate::ai::service::AiEvent::ProviderUnavailable {
+                        provider,
+                        reason,
+                    })
+                }
+            },
         }
     }
 }

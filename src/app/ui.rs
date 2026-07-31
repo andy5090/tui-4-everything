@@ -79,6 +79,8 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
         render_confirmation(frame, app, area);
     } else if app.ai_confirmation.is_some() {
         render_ai_confirmation(frame, app, area);
+    } else if app.api_provider_setup.is_some() {
+        render_api_provider_setup(frame, app, area);
     }
     render_mouse_selection(frame, app);
 }
@@ -621,7 +623,7 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             if app.ai_ready() {
                 format!("account: {} · [/] switch", app.ai_account)
             } else {
-                "Connect Codex, Claude, or Gemini in Settings".to_string()
+                "Configure a CLI or API provider in Settings".to_string()
             },
             Style::default().fg(MUTED),
         ),
@@ -1390,6 +1392,18 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 "off"
             }
         ),
+        format!(
+            "AI API providers         {}/3 ready",
+            app.ai_ready_providers
+                .keys()
+                .filter(|provider| matches!(
+                    provider,
+                    crate::ai::service::AiProvider::Zhipu
+                        | crate::ai::service::AiProvider::Kimi
+                        | crate::ai::service::AiProvider::Custom
+                ))
+                .count()
+        ),
         "Reset saved preferences    Enter".to_string(),
     ];
     let items = values.into_iter().map(ListItem::new).collect::<Vec<_>>();
@@ -1440,6 +1454,13 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             "Script and DANGER installs still require typed approval even when this setting is off.",
             "Left/Right or Space toggle",
         ),
+        3 => (
+            "AI API providers",
+            format!("{} configured profiles", app.settings.api_providers.len()),
+            "OpenAI-compatible Chat Completions for Zhipu AI, Kimi, and custom endpoints.",
+            "Provider metadata is saved, but API keys are session-only unless supplied through the configured environment variable.",
+            "Enter configure",
+        ),
         _ => (
             "Reset saved preferences",
             "Ready".to_string(),
@@ -1466,6 +1487,75 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             Style::default().fg(MUTED),
         ),
     ])
+}
+
+fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(setup) = &app.api_provider_setup else {
+        return;
+    };
+    let popup = centered_rect(92, 20, area);
+    frame.render_widget(Clear, popup);
+    let key_mask = if setup.api_key.is_empty() {
+        "(use environment variable)".to_string()
+    } else {
+        "•".repeat(setup.api_key.chars().count().min(48))
+    };
+    let values = [
+        setup.provider.label().to_string(),
+        setup.label.clone(),
+        setup.base_url.clone(),
+        setup.model.clone(),
+        setup.api_key_env.clone(),
+        key_mask,
+    ];
+    let labels = [
+        "Provider",
+        "Display name",
+        "Base URL",
+        "Model",
+        "Key environment",
+        "Session API key",
+    ];
+    let mut lines = vec![
+        Line::styled(
+            "OpenAI-compatible API provider",
+            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+        ),
+        Line::from(""),
+    ];
+    for (index, (label, value)) in labels.iter().zip(values).enumerate() {
+        lines.push(Line::from(vec![
+            Span::styled(
+                if setup.field == index { "> " } else { "  " },
+                Style::default().fg(SELECTED),
+            ),
+            Span::styled(format!("{label:<17}"), Style::default().fg(MUTED)),
+            Span::styled(
+                value,
+                if setup.field == index {
+                    Style::default().fg(SELECTED).add_modifier(Modifier::BOLD)
+                } else {
+                    Style::default()
+                },
+            ),
+        ]));
+    }
+    lines.extend([
+        Line::from(""),
+        Line::from("The API key is kept in memory for this T4E session and never saved or logged."),
+        Line::from("For future sessions, set the named environment variable before starting T4E."),
+        Line::from(""),
+        Line::styled(
+            "←/→ provider   Tab/↑/↓ field   Enter next/save   Esc cancel",
+            Style::default().fg(MUTED),
+        ),
+    ]);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel("AI provider setup"))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
 }
 
 fn risk_explanation(risk: RiskLevel) -> &'static str {

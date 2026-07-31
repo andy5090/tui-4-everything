@@ -18,8 +18,8 @@ use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
 use crate::mux::tmux::compile_workspace;
 use crate::mux::workspace::{Workspace, WorkspaceRegistry};
 use crate::storage::{
-    LaunchOptionPreference, PersistentState, RecentItem, UserSettings, load_state,
-    log_dir_for_state, save_state,
+    ApiProviderProfile, LaunchOptionPreference, PersistentState, RecentItem, UserSettings,
+    default_api_provider_profiles, load_state, log_dir_for_state, save_state,
 };
 use crate::system_info::{SystemOverview, cached_system_overview};
 
@@ -105,11 +105,20 @@ pub enum AppEffect {
     LaunchTool(ToolLaunchRequest),
     LaunchWorkspace(Box<WorkspaceLaunchRequest>),
     OpenAppView(String),
-    SendAppInput { pane_id: String, input: AppInput },
+    SendAppInput {
+        pane_id: String,
+        input: AppInput,
+    },
     CloseApp(String),
     SetMouseCapture(bool),
-    CopySelection { start: (u16, u16), end: (u16, u16) },
-    ReadAppLinks { pane_id: String, action: LinkAction },
+    CopySelection {
+        start: (u16, u16),
+        end: (u16, u16),
+    },
+    ReadAppLinks {
+        pane_id: String,
+        action: LinkAction,
+    },
     CopyUrl(String),
     OpenUrl(String),
     Uninstall(UninstallRequest),
@@ -118,6 +127,26 @@ pub enum AppEffect {
     SnapshotWorkspace(Box<Workspace>),
     CodexPrompt(String),
     CodexInterrupt,
+    ConfigureApiProvider {
+        provider: AiProvider,
+        profile: ApiProviderProfile,
+        api_key: SessionApiKey,
+    },
+}
+
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct SessionApiKey(String);
+
+impl SessionApiKey {
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+
+impl std::fmt::Debug for SessionApiKey {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("SessionApiKey([REDACTED])")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -216,6 +245,32 @@ pub struct AiActionConfirmation {
     pub input: String,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+pub struct ApiProviderSetupState {
+    pub provider: AiProvider,
+    pub field: usize,
+    pub label: String,
+    pub base_url: String,
+    pub model: String,
+    pub api_key_env: String,
+    pub api_key: String,
+}
+
+impl std::fmt::Debug for ApiProviderSetupState {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ApiProviderSetupState")
+            .field("provider", &self.provider)
+            .field("field", &self.field)
+            .field("label", &self.label)
+            .field("base_url", &self.base_url)
+            .field("model", &self.model)
+            .field("api_key_env", &self.api_key_env)
+            .field("api_key", &"[REDACTED]")
+            .finish()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LaunchApproval {
     pub tool_name: String,
@@ -285,6 +340,7 @@ pub struct AppState {
     pub ai_usage: String,
     pub pending_ai_action: Option<AiAction>,
     pub ai_confirmation: Option<AiActionConfirmation>,
+    pub api_provider_setup: Option<ApiProviderSetupState>,
     effects: VecDeque<AppEffect>,
     state_path: Option<PathBuf>,
 }
@@ -383,6 +439,7 @@ impl AppState {
             ai_usage: "waiting for usage data".to_string(),
             pending_ai_action: None,
             ai_confirmation: None,
+            api_provider_setup: None,
             effects: VecDeque::new(),
             state_path,
         }
@@ -453,6 +510,11 @@ impl AppState {
             return;
         }
 
+        if self.api_provider_setup.is_some() {
+            self.handle_api_provider_setup_key(key.code);
+            return;
+        }
+
         if self.search_mode {
             self.handle_search_key(key.code);
             return;
@@ -490,6 +552,7 @@ impl AppState {
         if !self.mouse_enabled
             || self.confirmation.is_some()
             || self.ai_confirmation.is_some()
+            || self.api_provider_setup.is_some()
             || self.launch_argument.is_some()
             || self.launch_options.is_some()
             || self.launch_approval.is_some()
@@ -1235,8 +1298,8 @@ impl AppState {
             }
             AiEvent::ProviderUnavailable { provider, reason } => {
                 self.ai_ready_providers.remove(&provider);
-                self.ai_status = format!("{} unavailable: {reason}", provider.label());
                 self.refresh_ai_identity();
+                self.ai_status = format!("{} unavailable: {reason}", provider.label());
             }
             AiEvent::ThreadStarted { provider, id } if provider == self.ai_provider => {
                 self.ai_status = format!("{} thread {}", provider.label(), short_id(&id));
@@ -1547,7 +1610,8 @@ impl AppState {
                 KeyCode::Up | KeyCode::Char('k') => self.move_setting(-1),
                 KeyCode::Left | KeyCode::Char('h') => self.adjust_setting(-1),
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => self.adjust_setting(1),
-                KeyCode::Enter if self.settings_index == 3 => self.reset_saved_preferences(),
+                KeyCode::Enter if self.settings_index == 3 => self.begin_api_provider_setup(),
+                KeyCode::Enter if self.settings_index == 4 => self.reset_saved_preferences(),
                 _ => {}
             },
             Screen::Help => {}
@@ -1777,7 +1841,7 @@ impl AppState {
                 self.workspace_index = index;
             }
             Screen::Agents if index < self.agent_tools().len() => self.agent_index = index,
-            Screen::Settings if index < 4 => self.settings_index = index,
+            Screen::Settings if index < 5 => self.settings_index = index,
             Screen::AppView
             | Screen::Logs
             | Screen::Home
@@ -1863,7 +1927,7 @@ impl AppState {
         } else {
             self.ai_input_mode = false;
             self.ai_status =
-                "AI unavailable · connect Codex, Claude, or Gemini in Settings".to_string();
+                "AI unavailable · configure a CLI or API provider in Settings".to_string();
         }
     }
 
@@ -1892,7 +1956,7 @@ impl AppState {
     }
 
     fn move_setting(&mut self, delta: isize) {
-        self.settings_index = move_index(self.settings_index, 4, delta);
+        self.settings_index = move_index(self.settings_index, 5, delta);
     }
 
     fn queue_selected_tool(&mut self) {
@@ -2708,7 +2772,7 @@ impl AppState {
     }
 
     fn adjust_setting(&mut self, delta: isize) {
-        if self.settings_index == 3 {
+        if self.settings_index >= 3 {
             return;
         }
         match self.settings_index {
@@ -2729,6 +2793,139 @@ impl AppState {
             _ => {}
         }
         self.status = "Settings updated".to_string();
+    }
+
+    fn begin_api_provider_setup(&mut self) {
+        let provider = AiProvider::Zhipu;
+        let profile = self
+            .settings
+            .api_providers
+            .get(api_provider_id(provider))
+            .cloned()
+            .unwrap_or_else(|| default_api_profile(provider));
+        self.api_provider_setup = Some(ApiProviderSetupState {
+            provider,
+            field: 0,
+            label: profile.label,
+            base_url: profile.base_url,
+            model: profile.model,
+            api_key_env: profile.api_key_env,
+            api_key: String::new(),
+        });
+        self.status = "Configure an API provider; keys are never saved".to_string();
+    }
+
+    fn handle_api_provider_setup_key(&mut self, code: KeyCode) {
+        match code {
+            KeyCode::Esc => {
+                if let Some(mut setup) = self.api_provider_setup.take() {
+                    setup.api_key.clear();
+                }
+                self.status = "API provider setup cancelled".to_string();
+            }
+            KeyCode::Tab | KeyCode::Down => {
+                if let Some(setup) = &mut self.api_provider_setup {
+                    setup.field = (setup.field + 1).min(5);
+                }
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                if let Some(setup) = &mut self.api_provider_setup {
+                    setup.field = setup.field.saturating_sub(1);
+                }
+            }
+            KeyCode::Left
+                if self
+                    .api_provider_setup
+                    .as_ref()
+                    .is_some_and(|setup| setup.field == 0) =>
+            {
+                self.cycle_api_provider_setup(-1);
+            }
+            KeyCode::Right
+                if self
+                    .api_provider_setup
+                    .as_ref()
+                    .is_some_and(|setup| setup.field == 0) =>
+            {
+                self.cycle_api_provider_setup(1);
+            }
+            KeyCode::Backspace => {
+                if let Some(setup) = &mut self.api_provider_setup
+                    && let Some(value) = provider_setup_field_mut(setup)
+                {
+                    value.pop();
+                }
+            }
+            KeyCode::Enter => {
+                let should_save = self
+                    .api_provider_setup
+                    .as_ref()
+                    .is_some_and(|setup| setup.field == 5);
+                if should_save {
+                    self.save_api_provider_setup();
+                } else if let Some(setup) = &mut self.api_provider_setup {
+                    setup.field = (setup.field + 1).min(5);
+                }
+            }
+            KeyCode::Char(ch) => {
+                if let Some(setup) = &mut self.api_provider_setup
+                    && let Some(value) = provider_setup_field_mut(setup)
+                {
+                    value.push(ch);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn cycle_api_provider_setup(&mut self, delta: isize) {
+        const PROVIDERS: [AiProvider; 3] =
+            [AiProvider::Zhipu, AiProvider::Kimi, AiProvider::Custom];
+        let Some(current) = self.api_provider_setup.as_ref().map(|setup| setup.provider) else {
+            return;
+        };
+        let index = PROVIDERS
+            .iter()
+            .position(|provider| *provider == current)
+            .unwrap_or(0);
+        let provider = PROVIDERS[move_index(index, PROVIDERS.len(), delta)];
+        let profile = self
+            .settings
+            .api_providers
+            .get(api_provider_id(provider))
+            .cloned()
+            .unwrap_or_else(|| default_api_profile(provider));
+        self.api_provider_setup = Some(ApiProviderSetupState {
+            provider,
+            field: 0,
+            label: profile.label,
+            base_url: profile.base_url,
+            model: profile.model,
+            api_key_env: profile.api_key_env,
+            api_key: String::new(),
+        });
+    }
+
+    fn save_api_provider_setup(&mut self) {
+        let Some(mut setup) = self.api_provider_setup.take() else {
+            return;
+        };
+        let profile = ApiProviderProfile {
+            label: setup.label.trim().to_string(),
+            base_url: setup.base_url.trim().trim_end_matches('/').to_string(),
+            model: setup.model.trim().to_string(),
+            api_key_env: setup.api_key_env.trim().to_string(),
+        };
+        self.settings
+            .api_providers
+            .insert(api_provider_id(setup.provider).to_string(), profile.clone());
+        let api_key = std::mem::take(&mut setup.api_key);
+        self.effects.push_back(AppEffect::ConfigureApiProvider {
+            provider: setup.provider,
+            profile,
+            api_key: SessionApiKey(api_key),
+        });
+        self.status = format!("Checking {} API configuration", setup.provider.label());
     }
 
     fn reset_saved_preferences(&mut self) {
@@ -2822,6 +3019,37 @@ fn timestamp_log(message: impl AsRef<str>) -> String {
         chrono::Local::now().format("%Y-%m-%d %H:%M:%S %:z"),
         message.as_ref()
     )
+}
+
+fn api_provider_id(provider: AiProvider) -> &'static str {
+    match provider {
+        AiProvider::Zhipu => "zhipu",
+        AiProvider::Kimi => "kimi",
+        AiProvider::Custom => "custom",
+        AiProvider::Codex | AiProvider::Claude | AiProvider::Gemini => "",
+    }
+}
+
+fn default_api_profile(provider: AiProvider) -> ApiProviderProfile {
+    default_api_provider_profiles()
+        .remove(api_provider_id(provider))
+        .unwrap_or_else(|| ApiProviderProfile {
+            label: provider.label().to_string(),
+            base_url: String::new(),
+            model: String::new(),
+            api_key_env: String::new(),
+        })
+}
+
+fn provider_setup_field_mut(setup: &mut ApiProviderSetupState) -> Option<&mut String> {
+    match setup.field {
+        1 => Some(&mut setup.label),
+        2 => Some(&mut setup.base_url),
+        3 => Some(&mut setup.model),
+        4 => Some(&mut setup.api_key_env),
+        5 => Some(&mut setup.api_key),
+        _ => None,
+    }
 }
 
 fn build_current_task(

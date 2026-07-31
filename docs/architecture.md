@@ -2,8 +2,8 @@
 
 ## Trust Boundary
 
-An authenticated Codex, Claude, or Gemini provider interprets intent and
-proposes one bounded action. The t4e state machine
+An authenticated CLI or API provider interprets intent and proposes one bounded
+action. The t4e state machine
 validates IDs against the Registry, presents typed confirmation for side
 effects, and then invokes the existing install, verified-update, or app runtime.
 Providers never receive direct shell or tmux authority. Codex app-server
@@ -20,8 +20,9 @@ requests for command or patch approval are denied by the client.
 - `mux`: structured tmux invocation, managed-session discovery, interactive
   attach, live snapshots, and reproducibility hashing.
 - `codex`: JSONL app-server client and long-lived event service.
-- `ai`: provider readiness, Codex adaptation, and tool-disabled one-shot Claude
-  and Gemini adapters used by the HOME assistant rail.
+- `ai`: provider readiness, Codex adaptation, tool-disabled one-shot Claude and
+  Gemini adapters, and a non-streaming OpenAI-compatible Chat Completions
+  adapter for Zhipu AI, Kimi, and custom endpoints.
 - `mcp`: MCP 2025-06-18 stdio discovery and planning tools.
 - `adapters`: mpv JSON IPC plus process-verified yazi/newsboat controls.
 
@@ -31,6 +32,10 @@ The app-server client performs `initialize`, sends `initialized`, and verifies
 `account/read` before accepting turns. The integration suite also initializes
 the installed Codex binary. The opt-in live test exercises a structured turn
 against the user's existing Codex login. No Codex credential is read by t4e.
+API provider metadata is persisted in user settings, but keys are read from the
+configured environment variable or held only in process memory after dialog
+entry. HTTPS is required except for loopback custom endpoints, and credentials
+are sent to `curl` through standard input so they do not appear in its argv.
 
 MCP initialization negotiates revision `2025-06-18`, advertises only the tools
 capability, and reports tool execution failures inside `CallToolResult`.
