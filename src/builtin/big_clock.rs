@@ -494,11 +494,7 @@ fn fit_scale(text: &str, max_cols: u16, max_rows: u16, stretch: bool) -> GlyphSc
 /// Secondary text (date) renders at half the time scale, capped to fit width.
 fn date_scale_for(text: &str, time_scale: GlyphScale, max_cols: u16) -> GlyphScale {
     let (width, _) = pixel_size(text);
-    let width_cap = if width == 0 {
-        1
-    } else {
-        (max_cols / width).max(1)
-    };
+    let width_cap = max_cols.checked_div(width).unwrap_or(1).max(1);
     GlyphScale {
         pixel_cols: (time_scale.pixel_cols / 2).clamp(1, width_cap),
         pixel_rows: (time_scale.pixel_rows / 2).max(1),
