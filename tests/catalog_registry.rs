@@ -3,8 +3,8 @@ use std::path::Path;
 
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::{
-    AppCategory, Capability, Exposure, InstallMethod, OutputFilter, Platform, RiskLevel,
-    ToolCategory,
+    AppCategory, Audience, Capability, CatalogRegistry, Check, Exposure, InstallMethod, Installer,
+    OutputFilter, Platform, RiskLevel, RunSpec, Tool, ToolCategory, VerifiedUpdate, VersionProbe,
 };
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
@@ -408,4 +408,110 @@ fn workspace_validation_rejects_shell_operators_and_unapproved_executables() {
 
     workspaces.workspaces[0].layout.panes[0].cmd = "python malware.py".to_string();
     assert!(validate_workspaces(&catalog, &workspaces).is_err());
+}
+
+#[test]
+fn catalog_validation_accepts_well_formed_verified_update_metadata() {
+    let catalog = CatalogRegistry {
+        packs: vec![],
+        tools: vec![verified_update_tool(Some(VerifiedUpdate {
+            version: "1.2.3".to_string(),
+            version_probe: VersionProbe {
+                executable: "ripgrep".to_string(),
+                args: vec!["--version".to_string()],
+            },
+            command: "apt-get install -y ripgrep=1.2.3".to_string(),
+            verified_at: "2026-07-30".to_string(),
+            evidence: "https://example.com/ripgrep-1.2.3".to_string(),
+        }))],
+    };
+
+    validate_catalog(&catalog).expect("catalog validates");
+}
+
+#[test]
+fn catalog_validation_rejects_verified_update_without_exact_versioned_command() {
+    let catalog = CatalogRegistry {
+        packs: vec![],
+        tools: vec![verified_update_tool(Some(VerifiedUpdate {
+            version: "1.2.3".to_string(),
+            version_probe: VersionProbe {
+                executable: "ripgrep".to_string(),
+                args: vec!["--version".to_string()],
+            },
+            command: "apt-get install -y ripgrep".to_string(),
+            verified_at: "2026-07-30".to_string(),
+            evidence: "https://example.com/ripgrep-1.2.3".to_string(),
+        }))],
+    };
+
+    assert!(validate_catalog(&catalog).is_err());
+}
+
+#[test]
+fn catalog_validation_rejects_verified_update_with_unsafe_probe_args() {
+    let catalog = CatalogRegistry {
+        packs: vec![],
+        tools: vec![verified_update_tool(Some(VerifiedUpdate {
+            version: "1.2.3".to_string(),
+            version_probe: VersionProbe {
+                executable: "ripgrep".to_string(),
+                args: vec!["--version;rm".to_string()],
+            },
+            command: "apt-get install -y ripgrep=1.2.3".to_string(),
+            verified_at: "2026-07-30".to_string(),
+            evidence: "https://example.com/ripgrep-1.2.3".to_string(),
+        }))],
+    };
+
+    assert!(validate_catalog(&catalog).is_err());
+}
+
+fn verified_update_tool(verified_update: Option<VerifiedUpdate>) -> Tool {
+    Tool {
+        id: "verified-ripgrep".to_string(),
+        name: "Verified Ripgrep".to_string(),
+        description: Some("Version-pinned ripgrep".to_string()),
+        key_hints: vec![],
+        install_timeout_sec: None,
+        category: ToolCategory::Utility,
+        tags: vec![],
+        audience: Audience::Developer,
+        capabilities: vec![],
+        exposure: Exposure::Starter,
+        run: RunSpec {
+            cmd: "ripgrep".to_string(),
+            keep_open: false,
+        },
+        launch_argument: None,
+        run_options: vec![],
+        installers: vec![
+            Installer {
+                platform: Platform::Linux,
+                method: InstallMethod::Apt,
+                package_hints: vec!["ripgrep".to_string()],
+                system_packages: vec![],
+                executable: Some("ripgrep".to_string()),
+                install_cmd: None,
+                requires_confirm: false,
+                verified_update: verified_update.clone(),
+            },
+            Installer {
+                platform: Platform::Macos,
+                method: InstallMethod::Brew,
+                package_hints: vec!["ripgrep".to_string()],
+                system_packages: vec![],
+                executable: Some("ripgrep".to_string()),
+                install_cmd: None,
+                requires_confirm: false,
+                verified_update,
+            },
+        ],
+        checks: vec![Check {
+            which: Some("ripgrep".to_string()),
+            version: None,
+            custom: None,
+        }],
+        notes: None,
+    }
 }

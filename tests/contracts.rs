@@ -72,6 +72,7 @@ fn runtime_risk_is_derived_only_from_capabilities() {
             executable: None,
             install_cmd: Some("curl x | bash".to_string()),
             requires_confirm: true,
+            verified_update: None,
         }],
         checks: vec![],
         notes: None,

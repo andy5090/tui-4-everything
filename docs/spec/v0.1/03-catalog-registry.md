@@ -43,7 +43,17 @@ Installer:
 - package_hints: string[]
 - install_cmd: string (method가 script면 명시)
 - requires_confirm: bool (script는 기본 true)
+- verified_update: optional
+  - version: T4E가 플랫폼별로 검증한 정규화된 정확한 버전
+  - version_probe: { executable, args[] } (셸을 거치지 않고 실행)
+  - command: 해당 정확한 버전이 포함된 고정 명령
+  - verified_at: YYYY-MM-DD
+  - evidence: 릴리스/검증 근거
 - fallback_*: optional (예: fallback_script, fallback_npm)
+
+`verified_update`가 없는 설치 채널은 업데이트 미지원으로 표시한다. `latest`
+URL이나 일반 패키지 매니저 최신 채널은 T4E 검증 업데이트로 간주하지 않는다.
+실행 후 `version_probe` 결과가 `version`과 정확히 일치해야 성공이다.
 
 ## 3.4 Resolver 규칙(v0.1 MUST)
 목표: Linux 패키지명 차이를 자동 흡수.

@@ -1,8 +1,10 @@
 use std::collections::{HashMap, HashSet};
 
 use anyhow::{Result, bail};
+use chrono::Utc;
 
 use crate::catalog::models::{Capability, CatalogRegistry, InstallMethod, Platform, ToolCategory};
+use crate::installer::checks::normalize_version;
 use crate::mux::workspace::WorkspaceRegistry;
 
 pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
@@ -126,6 +128,52 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
             {
                 bail!("tool {} has install_cmd on a non-script installer", tool.id);
             }
+            if let Some(verified_update) = &installer.verified_update {
+                if matches!(installer.method, InstallMethod::Builtin) {
+                    bail!(
+                        "tool {} cannot define a verified update for a builtin installer",
+                        tool.id
+                    );
+                }
+                if normalize_version(&verified_update.version)
+                    .as_deref()
+                    .is_none_or(|normalized| normalized != verified_update.version.trim())
+                {
+                    bail!("tool {} has an invalid verified update version", tool.id);
+                }
+                if verified_update.version_probe.executable.trim().is_empty()
+                    || !is_safe_argument(&verified_update.version_probe.executable)
+                    || verified_update
+                        .version_probe
+                        .args
+                        .iter()
+                        .any(|arg| !is_safe_argument(arg))
+                {
+                    bail!("tool {} has an unsafe verified version probe", tool.id);
+                }
+                let script_command_matches = !matches!(installer.method, InstallMethod::Script)
+                    || installer.install_cmd.as_deref() == Some(verified_update.command.as_str());
+                let resolves_latest = verified_update.command.contains("/latest")
+                    || verified_update.command.contains("releases/latest");
+                if verified_update.command.trim().is_empty()
+                    || (!matches!(installer.method, InstallMethod::Script)
+                        && contains_forbidden_shell_syntax(&verified_update.command))
+                    || !script_command_matches
+                    || resolves_latest
+                    || !verified_update.command.contains(&verified_update.version)
+                {
+                    bail!("tool {} has an invalid verified update command", tool.id);
+                }
+                let verified_at =
+                    chrono::NaiveDate::parse_from_str(&verified_update.verified_at, "%Y-%m-%d")
+                        .map_err(|_| anyhow::anyhow!("invalid verified update date"))?;
+                if verified_at > Utc::now().date_naive() {
+                    bail!("tool {} has a future verified update date", tool.id);
+                }
+                if verified_update.evidence.trim().is_empty() {
+                    bail!("tool {} has missing verified update evidence", tool.id);
+                }
+            }
         }
     }
 
@@ -146,6 +194,12 @@ fn is_safe_argument(value: &str) -> bool {
         && !value.chars().any(|ch| {
             ch.is_whitespace() || matches!(ch, ';' | '|' | '&' | '`' | '$' | '<' | '>' | '\'' | '"')
         })
+}
+
+fn contains_forbidden_shell_syntax(value: &str) -> bool {
+    value
+        .chars()
+        .any(|ch| matches!(ch, ';' | '|' | '&' | '`' | '$' | '<' | '>' | '\n' | '\r'))
 }
 
 pub fn validate_workspaces(catalog: &CatalogRegistry, registry: &WorkspaceRegistry) -> Result<()> {

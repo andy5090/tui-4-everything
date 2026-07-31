@@ -94,6 +94,24 @@ pub struct Installer {
     pub install_cmd: Option<String>,
     #[serde(default)]
     pub requires_confirm: bool,
+    #[serde(default)]
+    pub verified_update: Option<VerifiedUpdate>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VerifiedUpdate {
+    pub version: String,
+    pub version_probe: VersionProbe,
+    pub command: String,
+    pub verified_at: String,
+    pub evidence: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct VersionProbe {
+    pub executable: String,
+    #[serde(default)]
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
