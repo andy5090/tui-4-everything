@@ -6,8 +6,14 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-01
+
 ### Added
 
+- Termleaf as a default Editors application, with platform-aware installation
+  metadata.
+- Per-application update discovery and installation limited to versions verified
+  by T4E for the active platform.
 - HOME AI support for Zhipu AI, Kimi, and custom OpenAI-compatible Chat
   Completions providers, with editable model/base URL profiles, environment or
   session-only API keys, and secret-safe transport.
@@ -19,6 +25,8 @@ and date are assigned.
 - Portable Linux `x86_64` and `aarch64` musl release archives, plus a
   checksum-verifying installer with version, prefix, upgrade, and uninstall
   support.
+- Linux `i686` release artifacts and QEMU validation, alongside macOS ARM64
+  build and test coverage in the release workflow.
 
 ### Fixed
 
