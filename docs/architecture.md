@@ -2,10 +2,12 @@
 
 ## Trust Boundary
 
-Codex interprets intent and proposes one bounded action. The t4e state machine
+An authenticated Codex, Claude, or Gemini provider interprets intent and
+proposes one bounded action. The t4e state machine
 validates IDs against the Registry, presents typed confirmation for side
-effects, and then invokes the existing install or workspace runtime. Codex
-app-server requests for command or patch approval are denied by the client.
+effects, and then invokes the existing install, verified-update, or app runtime.
+Providers never receive direct shell or tmux authority. Codex app-server
+requests for command or patch approval are denied by the client.
 
 ## Runtime Components
 
@@ -14,10 +16,12 @@ app-server requests for command or patch approval are denied by the client.
   the hidden `builtin` subcommand; catalog entries use the `builtin` install
   method, count as installed, and never touch a package manager.
 - `installer`: task materialization, pre/post checks, execution, retry,
-  cancellation, diagnostics, and durable logs.
+  cancellation, exact verified-version checks, diagnostics, and durable logs.
 - `mux`: structured tmux invocation, managed-session discovery, interactive
   attach, live snapshots, and reproducibility hashing.
 - `codex`: JSONL app-server client and long-lived event service.
+- `ai`: provider readiness, Codex adaptation, and tool-disabled one-shot Claude
+  and Gemini adapters used by the HOME assistant rail.
 - `mcp`: MCP 2025-06-18 stdio discovery and planning tools.
 - `adapters`: mpv JSON IPC plus process-verified yazi/newsboat controls.
 

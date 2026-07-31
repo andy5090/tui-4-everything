@@ -27,21 +27,20 @@ T4E // TERMINAL APPLICATION ENVIRONMENT
 ONE TERMINAL. EVERY TOOL. AI AT THE CONTROLS.
 
 T4E is a curated terminal application manager and AI-controlled terminal
-environment. The current AI backend uses the signed-in `codex` CLI account
-through `codex app-server`; provider-neutral support for Claude runtimes,
-Anthropic API, and OpenAI-compatible APIs is on the roadmap.
+environment. HOME AI uses an existing signed-in Codex, Claude, or Gemini CLI;
+T4E never stores provider credentials and disables AI when none is ready.
 
 ## Requirements
 
 - Rust stable toolchain
 - Linux or macOS
 - tmux 3.x as the current hidden app process backend
-- Codex CLI for the current AI backend
+- An authenticated Codex, Claude, or Gemini CLI for optional HOME AI
 - The relevant package manager (`apt`, Snap, Homebrew, Cargo, or pipx) for installs
 
 ## Install a release
 
-GitHub Releases provide portable musl Linux archives for `x86_64` and `aarch64`,
+GitHub Releases provide portable musl Linux archives for `x86_64`, `i686`, and `aarch64`,
 plus the existing macOS archive. Download the archive matching your CPU from the
 release page, then verify its adjacent `.sha256` file before extracting it. For
 the latest supported Linux release, use the one-command installer:
@@ -50,7 +49,7 @@ the latest supported Linux release, use the one-command installer:
 curl -fsSL https://raw.githubusercontent.com/andy5090/tui-4-everything/main/install.sh | bash
 ```
 
-It detects `x86_64` or `aarch64`, verifies the release SHA-256 before it
+It detects `x86_64`, 32-bit x86 (`i386` through `i686`), or `aarch64`, verifies the release SHA-256 before it
 installs, and places `t4e` in `$HOME/.local/bin`. To install a specific version,
 append `-s -- --version VERSION`. For a manual, independently checkable
 installation on x86_64 Linux (replace `VERSION` with the release version):
@@ -66,14 +65,15 @@ install -m 755 t4e-VERSION-linux-x86_64-musl/t4e "$HOME/.local/bin/t4e"
 
 On macOS, use the matching `t4e-VERSION-macos-arm64.tar.gz` archive and verify
 with `shasum -a 256 -c <archive>.sha256`. On Linux ARM64, replace the archive
-label with `linux-aarch64-musl`. The archive also contains the editable Registry
+label with `linux-aarch64-musl`; on 32-bit x86 use `linux-i686-musl`. The archive also contains the editable Registry
 copies and release documentation.
 
 Ensure `$HOME/.local/bin` is on `PATH` (for example, add
 `export PATH="$HOME/.local/bin:$PATH"` to your shell profile), reopen the
 shell, and run `t4e`. T4E requires `tmux` 3.x to launch managed applications
-and a signed-in `codex` CLI for its current AI features; install them before
-using those capabilities. Rust is only required when building from source.
+and an authenticated Codex, Claude, or Gemini CLI for HOME AI. Without one,
+application browsing and management continue normally while AI input stays
+disabled. Rust is only required when building from source.
 
 To upgrade, rerun the installer (or repeat the checksum and install steps) with
 the newer release. To uninstall the installer-managed binary, run
@@ -86,13 +86,15 @@ installed through T4E, which can be removed individually from the catalog with
 
 Push a version tag in the form `vVERSION`. The `Real release gates` workflow
 runs Gates 1 through 5 first, then builds the existing macOS ARM64 binary and
-cross-compiles the portable `x86_64-unknown-linux-musl` and
-`aarch64-unknown-linux-musl` binaries on Ubuntu with Zig. The ARM64 validation
-runs through QEMU rather than assuming a native ARM runner. Only after all
+cross-compiles the portable `x86_64-unknown-linux-musl`,
+`i686-unknown-linux-musl`, and `aarch64-unknown-linux-musl` binaries on Ubuntu
+with Zig. The ARM64 and i686 validations run through QEMU rather than assuming
+native runners. Only after all
 package jobs succeed does the workflow publish the GitHub Release, its archives,
 and their SHA-256 files. The Linux asset names are deterministic:
 `t4e-VERSION-linux-x86_64-musl.tar.gz` and
-`t4e-VERSION-linux-aarch64-musl.tar.gz`.
+`t4e-VERSION-linux-aarch64-musl.tar.gz`, plus
+`t4e-VERSION-linux-i686-musl.tar.gz`.
 
 ## Applications
 
@@ -230,14 +232,21 @@ Important actions are intentionally explicit:
 - Package-manager and T4E-managed installations can be removed with `U`;
   removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
-- AI: `Enter` composes a request and `x` interrupts it. AI can navigate HOME to
-  catalog and installation plans but cannot launch legacy workspace templates.
-  The AI tab remains during migration; the target UI integrates provider-neutral
-  search, conversation, and app control directly into HOME.
+- AI lives in HOME's assistant rail rather than a separate tab. `a` focuses the
+  composer, `[`/`]` switches among ready Codex, Claude, and Gemini providers,
+  `x` interrupts supported turns, and `A` reviews a bounded proposal. Providers
+  may propose catalog search, install planning, a pinned T4E-verified update, or
+  an app launch; T4E performs none of them before explicit approval.
+- Individual app updates are available only when the current platform installer
+  declares an exact version, structured version probe, pinned command,
+  verification date, and evidence. A different installed version is shown as
+  `UPDATE`; `u` queues the exact verified version. Package-manager `latest`
+  channels are intentionally not presented as verified updates.
 
 Script installers, DANGER apps, and AI-proposed side effects require an exact typed
-confirmation. Codex runs in a read-only sandbox with app-server approvals set
-to `never`; T4E remains authoritative for installation and process lifecycle.
+confirmation. Codex app-server approvals are denied, Claude runs with tools
+disabled, and Gemini uses plan mode; T4E remains authoritative for installation,
+verified updates, and process lifecycle.
 
 On Linux, `x` or `X` handles the package-manager command without requiring the
 user to type it. For apt, dnf, pacman, Snap, missing `pipx`, and declared Cargo
