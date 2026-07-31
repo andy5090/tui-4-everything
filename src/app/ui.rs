@@ -10,6 +10,7 @@ use ratatui::{Frame, Terminal};
 use crate::catalog::models::RiskLevel;
 use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
+use crate::storage::{ProviderAuthMode, default_api_provider_profiles};
 
 use super::events::Screen;
 use super::state::{
@@ -654,7 +655,7 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let composer = if app.ai_input_mode {
         format!("> {}_", app.ai_input)
     } else if app.ai_ready() {
-        "a / Enter: ask AI · /: skill · A: approve proposal".to_string()
+        "a / Enter: ask AI · /: skill · A: review proposal".to_string()
     } else {
         "AI input disabled until a provider is ready".to_string()
     };
@@ -1388,9 +1389,13 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             }
         ),
         format!(
-            "AI provider              {} ({} ready)",
+            "AI connection            {} · {}",
             app.ai_provider.label(),
-            app.ai_ready_providers.len()
+            provider_auth_mode(app).label()
+        ),
+        format!(
+            "AI action approval       {}",
+            app.settings.ai_approval_mode.label()
         ),
         "Reset saved preferences    Enter".to_string(),
     ];
@@ -1443,15 +1448,27 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             "Left/Right or Space toggle",
         ),
         3 => (
-            "AI provider",
+            "AI connection",
             format!(
-                "{} · {} ready",
+                "{} · {} · {}",
                 app.ai_provider.label(),
-                app.ai_ready_providers.len()
+                provider_auth_mode(app).label(),
+                if app.ai_ready() {
+                    "ready"
+                } else {
+                    "not configured"
+                }
             ),
-            "Selects which ready subscription or API provider HOME AI uses.",
-            "The selection is saved. Enter configures Zhipu AI, Kimi, and custom OpenAI-compatible API profiles; API keys remain session-only unless supplied through the configured environment variable.",
-            "Left/Right select · Enter configure APIs",
+            "Select one of Codex, Claude, Gemini, Zhipu AI, Kimi, or Custom for HOME AI.",
+            "Enter opens one setup flow for subscription or API-key mode. Session keys are never saved; environment-variable names and profile metadata are saved.",
+            "Left/Right provider · Enter configure and use",
+        ),
+        4 => (
+            "AI action approval",
+            app.settings.ai_approval_mode.label().to_string(),
+            "Ask shows Yes/No for every action. Safe only auto-runs local catalog searches. All bounded auto-runs every validated catalog action.",
+            "All bounded includes install plans, verified updates, and app launches. Script/DANGER installers and sensitive device access keep their separate safety prompts.",
+            "Left/Right select approval level",
         ),
         _ => (
             "Reset saved preferences",
@@ -1481,41 +1498,73 @@ fn setting_detail(app: &AppState) -> Text<'static> {
     ])
 }
 
+fn provider_auth_mode(app: &AppState) -> ProviderAuthMode {
+    app.settings
+        .api_providers
+        .get(app.ai_provider.profile_id())
+        .map(|profile| profile.auth_mode)
+        .or_else(|| {
+            default_api_provider_profiles()
+                .get(app.ai_provider.profile_id())
+                .map(|profile| profile.auth_mode)
+        })
+        .unwrap_or(ProviderAuthMode::ApiKey)
+}
+
 fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let Some(setup) = &app.api_provider_setup else {
         return;
     };
-    let popup = centered_rect(92, 20, area);
+    let compact = area.height < 22 || area.width < 76;
+    let popup = centered_rect(92, if compact { 14 } else { 20 }, area);
     frame.render_widget(Clear, popup);
     let key_mask = if setup.api_key.is_empty() {
         "(use environment variable)".to_string()
     } else {
         "•".repeat(setup.api_key.chars().count().min(48))
     };
-    let values = [
-        setup.provider.label().to_string(),
-        setup.label.clone(),
-        setup.base_url.clone(),
-        setup.model.clone(),
-        setup.api_key_env.clone(),
-        key_mask,
-    ];
-    let labels = [
-        "Provider",
-        "Display name",
-        "Base URL",
-        "Model",
-        "Key environment",
-        "Session API key",
-    ];
+    let (labels, values): (Vec<&str>, Vec<String>) = match setup.auth_mode {
+        ProviderAuthMode::Subscription => (
+            vec!["Connection", "Save and use"],
+            vec![
+                setup.auth_mode.label().to_string(),
+                "Press Enter".to_string(),
+            ],
+        ),
+        ProviderAuthMode::ApiKey => (
+            vec![
+                "Connection",
+                "Display name",
+                "Base URL",
+                "Model",
+                "Key environment",
+                "Session API key",
+                "Save and use",
+            ],
+            vec![
+                setup.auth_mode.label().to_string(),
+                setup.label.clone(),
+                setup.base_url.clone(),
+                setup.model.clone(),
+                setup.api_key_env.clone(),
+                key_mask,
+                "Press Enter".to_string(),
+            ],
+        ),
+    };
     let mut lines = vec![
         Line::styled(
-            "OpenAI-compatible API provider",
+            "Unified AI connection",
             Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
         ),
-        Line::from(""),
+        Line::from(format!("Provider: {}", setup.provider.label())),
     ];
-    for (index, (label, value)) in labels.iter().zip(values).enumerate() {
+    let visible_rows = labels
+        .iter()
+        .zip(values.iter())
+        .enumerate()
+        .filter(|(index, _)| !compact || *index == setup.field);
+    for (index, (label, value)) in visible_rows {
         lines.push(Line::from(vec![
             Span::styled(
                 if setup.field == index { "> " } else { "  " },
@@ -1523,7 +1572,7 @@ fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) 
             ),
             Span::styled(format!("{label:<17}"), Style::default().fg(MUTED)),
             Span::styled(
-                value,
+                value.clone(),
                 if setup.field == index {
                     Style::default().fg(SELECTED).add_modifier(Modifier::BOLD)
                 } else {
@@ -1532,16 +1581,27 @@ fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) 
             ),
         ]));
     }
-    lines.extend([
-        Line::from(""),
-        Line::from("The API key is kept in memory for this T4E session and never saved or logged."),
-        Line::from("For future sessions, set the named environment variable before starting T4E."),
-        Line::from(""),
-        Line::styled(
-            "←/→ provider   Tab/↑/↓ field   Enter next/save   Esc cancel",
-            Style::default().fg(MUTED),
-        ),
-    ]);
+    lines.push(Line::from(""));
+    if !compact {
+        lines.push(Line::from(match setup.auth_mode {
+            ProviderAuthMode::Subscription => {
+                "Uses the provider CLI's detected signed-in subscription."
+            }
+            ProviderAuthMode::ApiKey => {
+                "The session API key stays in memory; profile metadata is saved."
+            }
+        }));
+    } else {
+        lines.push(Line::from(format!(
+            "Field {}/{}",
+            setup.field + 1,
+            labels.len()
+        )));
+    }
+    lines.push(Line::styled(
+        "←/→ mode   Tab/↑/↓ field   Enter next/save   Esc cancel",
+        Style::default().fg(MUTED),
+    ));
     frame.render_widget(
         Paragraph::new(lines)
             .block(panel("AI provider setup"))
@@ -1619,7 +1679,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
                 "App details list every declared capability.",
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
-            Line::from("Scripts always need approval; installs get postflight checks"),
+            Line::from("Scripts need approval | AI: A review, Y/Enter yes, N/Esc no"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
             Line::from("F1 Help | Ctrl+F HOME search | Tab panels | Shift+Tab tabs"),
             Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
@@ -1670,6 +1730,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("F1                  open Help from dashboard screens"),
             Line::from("Ctrl+F              search apps from HOME Views or Apps"),
             Line::from("/                   start an Assistant skill or command"),
+            Line::from("A                   review AI action; Y/Enter yes, N/Esc no"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
             Line::from("Activity Home / End jump to newest / oldest entry"),
             Line::from("Alt+Left / Right    switch running apps"),
@@ -1942,7 +2003,7 @@ fn render_ai_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let Some(confirmation) = &app.ai_confirmation else {
         return;
     };
-    let popup = centered_rect(76, 14, area);
+    let popup = centered_rect(72, 12, area);
     frame.render_widget(Clear, popup);
     let content = Text::from(vec![
         Line::styled(
@@ -1953,13 +2014,12 @@ fn render_ai_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Line::from(format!("action: {}", confirmation.action.kind)),
         Line::from(format!("target: {}", confirmation.action.target)),
         Line::from(""),
-        Line::from(format!("Type: {}", confirmation.expected)),
-        Line::styled(
-            format!("> {}_", confirmation.input),
-            Style::default().fg(SELECTED),
-        ),
+        Line::from("Allow T4E to perform this catalog-bounded action?"),
         Line::from(""),
-        Line::styled("Enter confirm   Esc cancel", Style::default().fg(MUTED)),
+        Line::styled(
+            "Y / Enter  Yes     N / Esc  No",
+            Style::default().fg(SELECTED).add_modifier(Modifier::BOLD),
+        ),
     ]);
     frame.render_widget(
         Paragraph::new(content)

@@ -27,9 +27,10 @@ T4E // TERMINAL APPLICATION ENVIRONMENT
 ONE TERMINAL. EVERY TOOL. AI AT THE CONTROLS.
 
 T4E is a curated terminal application manager and AI-controlled terminal
-environment. HOME AI uses an existing signed-in Codex, Claude, or Gemini CLI,
-or an API-key-backed Zhipu AI, Kimi, or custom OpenAI-compatible endpoint. T4E
-never persists API keys and disables AI when no provider is ready.
+environment. HOME AI uses either an existing signed-in Codex, Claude, or Gemini
+CLI subscription or an API-key connection for OpenAI, Anthropic, Gemini,
+Zhipu AI, Kimi, or a custom OpenAI-compatible endpoint. T4E never persists API
+keys and disables AI when no provider is ready.
 
 ## Requirements
 
@@ -234,12 +235,20 @@ Important actions are intentionally explicit:
   removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
 - AI lives in HOME's assistant rail rather than a separate tab. `a` focuses the
-  composer, while Settings selects among ready CLI and API providers,
+  composer, while Settings selects and configures every subscription or API
+  connection in one flow,
   `x` interrupts supported turns, and `A` reviews a bounded proposal. Providers
   may propose catalog search, install planning, a pinned T4E-verified update, or
-  an app launch; T4E performs none of them before explicit approval.
-- Settings can configure Zhipu AI (`ZHIPU_API_KEY`), Kimi
-  (`MOONSHOT_API_KEY`), and custom OpenAI-compatible Chat Completions endpoints.
+  an app launch. Approval uses `Y`/`Enter` for Yes and `N`/`Esc` for No.
+  Settings offers `Ask`, `Safe only` (local catalog searches), and `All bounded`
+  approval levels. Even `All bounded` remains limited to validated catalog
+  actions; script/DANGER installs and sensitive device access retain their own
+  safety prompts.
+- Settings can configure OpenAI (`OPENAI_API_KEY`), Anthropic
+  (`ANTHROPIC_API_KEY`), Gemini (`GEMINI_API_KEY`), Zhipu AI
+  (`ZHIPU_API_KEY`), Kimi (`MOONSHOT_API_KEY`), and custom OpenAI-compatible
+  endpoints. Codex, Claude, and Gemini can switch between detected subscription
+  and native API-key modes in the same setup dialog.
   The display name, base URL, model, and environment-variable name are saved;
   a key entered in the dialog exists only for the current T4E process. For a
   future session, export the named variable before starting T4E. Zhipu Coding
@@ -251,8 +260,8 @@ Important actions are intentionally explicit:
   `UPDATE`; `u` queues the exact verified version. Package-manager `latest`
   channels are intentionally not presented as verified updates.
 
-Script installers, DANGER apps, and AI-proposed side effects require an exact typed
-confirmation. Codex app-server approvals are denied, Claude runs with tools
+Script installers and DANGER apps retain exact typed confirmation. AI-proposed
+side effects use an explicit Yes/No confirmation. Codex app-server approvals are denied, Claude runs with tools
 disabled, Gemini uses plan mode, and API providers receive only the bounded
 intent prompt; T4E remains authoritative for installation, verified updates,
 and process lifecycle.

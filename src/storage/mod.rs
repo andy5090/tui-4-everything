@@ -53,6 +53,8 @@ pub struct UserSettings {
     pub max_install_attempts: u32,
     pub confirm_all_installs: bool,
     #[serde(default)]
+    pub ai_approval_mode: AiApprovalMode,
+    #[serde(default)]
     pub preferred_ai_provider: String,
     #[serde(default = "default_api_provider_profiles")]
     pub api_providers: BTreeMap<String, ApiProviderProfile>,
@@ -64,17 +66,86 @@ fn enabled_by_default() -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiProviderProfile {
+    #[serde(default)]
+    pub auth_mode: ProviderAuthMode,
     pub label: String,
     pub base_url: String,
     pub model: String,
     pub api_key_env: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAuthMode {
+    Subscription,
+    #[default]
+    ApiKey,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AiApprovalMode {
+    #[default]
+    Ask,
+    SafeOnly,
+    AllBounded,
+}
+
+impl AiApprovalMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Ask => "Ask",
+            Self::SafeOnly => "Safe only",
+            Self::AllBounded => "All bounded",
+        }
+    }
+}
+
+impl ProviderAuthMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Subscription => "Subscription",
+            Self::ApiKey => "API key",
+        }
+    }
+}
+
 pub fn default_api_provider_profiles() -> BTreeMap<String, ApiProviderProfile> {
     BTreeMap::from([
         (
+            "codex".to_string(),
+            ApiProviderProfile {
+                auth_mode: ProviderAuthMode::Subscription,
+                label: "OpenAI API".to_string(),
+                base_url: "https://api.openai.com/v1".to_string(),
+                model: "gpt-5.2".to_string(),
+                api_key_env: "OPENAI_API_KEY".to_string(),
+            },
+        ),
+        (
+            "claude".to_string(),
+            ApiProviderProfile {
+                auth_mode: ProviderAuthMode::Subscription,
+                label: "Anthropic API".to_string(),
+                base_url: "https://api.anthropic.com/v1".to_string(),
+                model: "claude-sonnet-4-6".to_string(),
+                api_key_env: "ANTHROPIC_API_KEY".to_string(),
+            },
+        ),
+        (
+            "gemini".to_string(),
+            ApiProviderProfile {
+                auth_mode: ProviderAuthMode::Subscription,
+                label: "Gemini API".to_string(),
+                base_url: "https://generativelanguage.googleapis.com/v1beta".to_string(),
+                model: "gemini-3.5-flash".to_string(),
+                api_key_env: "GEMINI_API_KEY".to_string(),
+            },
+        ),
+        (
             "custom".to_string(),
             ApiProviderProfile {
+                auth_mode: ProviderAuthMode::ApiKey,
                 label: "Custom".to_string(),
                 base_url: String::new(),
                 model: String::new(),
@@ -84,6 +155,7 @@ pub fn default_api_provider_profiles() -> BTreeMap<String, ApiProviderProfile> {
         (
             "kimi".to_string(),
             ApiProviderProfile {
+                auth_mode: ProviderAuthMode::ApiKey,
                 label: "Kimi".to_string(),
                 base_url: "https://api.moonshot.ai/v1".to_string(),
                 model: "kimi-k3".to_string(),
@@ -93,6 +165,7 @@ pub fn default_api_provider_profiles() -> BTreeMap<String, ApiProviderProfile> {
         (
             "zhipu".to_string(),
             ApiProviderProfile {
+                auth_mode: ProviderAuthMode::ApiKey,
                 label: "Zhipu AI".to_string(),
                 base_url: "https://open.bigmodel.cn/api/paas/v4".to_string(),
                 model: "glm-5.2".to_string(),
@@ -110,6 +183,7 @@ impl Default for UserSettings {
             install_timeout_sec: 600,
             max_install_attempts: 2,
             confirm_all_installs: false,
+            ai_approval_mode: AiApprovalMode::Ask,
             preferred_ai_provider: String::new(),
             api_providers: default_api_provider_profiles(),
         }

@@ -18,7 +18,7 @@ use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::execution::{InstallAttempt, InstallJob};
 use t4e::installer::queue::QueueState;
 use t4e::mux::runtime::ManagedApp;
-use t4e::storage::{PersistentState, UserSettings, save_state};
+use t4e::storage::{AiApprovalMode, PersistentState, UserSettings, save_state};
 
 fn app() -> AppState {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
@@ -1910,6 +1910,10 @@ fn settings_controls_update_execution_policy() {
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Char(' ')));
     assert!(app.settings.confirm_all_installs);
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Char(' ')));
+    assert_eq!(app.settings.ai_approval_mode, AiApprovalMode::SafeOnly);
 }
 
 #[test]
@@ -1920,7 +1924,8 @@ fn settings_explain_the_selected_policy_and_reset_scope() {
         "clicking, scrolling, and drag-to-copy",
         "Total automatic attempts",
         "Script and DANGER installs",
-        "ready subscription or API provider",
+        "one setup flow for subscription or API-key mode",
+        "AI action approval",
         "Favorites, recent apps, activity history",
     ]
     .into_iter()
@@ -1962,7 +1967,7 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
         .into(),
     );
     app.handle_key(key(KeyCode::Char('7')));
-    for _ in 0..4 {
+    for _ in 0..5 {
         app.handle_key(key(KeyCode::Down));
     }
     app.handle_key(key(KeyCode::Enter));
@@ -1980,6 +1985,21 @@ fn api_provider_setup_keeps_keys_out_of_persistent_settings() {
         app.handle_key(key(KeyCode::Down));
     }
     app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Right));
+    let backend = TestBackend::new(60, 16);
+    let mut terminal = Terminal::new(backend).expect("compact terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("compact unified provider setup renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(rendered.contains("Unified AI connection"));
+    assert!(!rendered.contains("OpenAI-compatible API provider"));
     let setup = app
         .api_provider_setup
         .as_mut()
@@ -1987,6 +2007,7 @@ fn api_provider_setup_keeps_keys_out_of_persistent_settings() {
     setup.field = 5;
     setup.api_key = "session-secret-key".to_string();
     assert!(!format!("{setup:?}").contains("session-secret-key"));
+    setup.field = 6;
     app.handle_key(key(KeyCode::Enter));
 
     let Some(AppEffect::ConfigureApiProvider {
@@ -1997,8 +2018,9 @@ fn api_provider_setup_keeps_keys_out_of_persistent_settings() {
     else {
         panic!("provider configuration effect expected");
     };
-    assert_eq!(provider, AiProvider::Zhipu);
-    assert_eq!(profile.api_key_env, "ZHIPU_API_KEY");
+    assert_eq!(provider, AiProvider::Codex);
+    assert_eq!(profile.api_key_env, "OPENAI_API_KEY");
+    assert_eq!(profile.auth_mode.label(), "API key");
     assert!(!format!("{api_key:?}").contains("session-secret-key"));
     assert_eq!(api_key.into_inner(), "session-secret-key");
     let persisted = serde_json::to_string(&app.settings).expect("settings serialize");
@@ -2146,13 +2168,60 @@ fn ai_catalog_search_is_bounded_to_local_navigation() {
     assert_eq!(app.screen, Screen::Home);
     assert!(app.pending_ai_action.is_some());
     app.handle_key(key(KeyCode::Char('A')));
-    for ch in "APPROVE catalog_search yazi".chars() {
-        app.handle_key(key(KeyCode::Char(ch)));
-    }
-    app.handle_key(key(KeyCode::Enter));
+    app.handle_key(key(KeyCode::Char('y')));
     assert_eq!(app.screen, Screen::Home);
     assert_eq!(app.search_query, "yazi");
     assert!(app.take_effect().is_none());
+}
+
+#[test]
+fn safe_ai_auto_approval_only_applies_to_catalog_search() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::SafeOnly;
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "catalog_search".to_string(),
+        target: "yazi".to_string(),
+    });
+    assert_eq!(app.search_query, "yazi");
+    assert!(app.pending_ai_action.is_none());
+    assert!(app.ai_status.contains("auto-approved"));
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_app".to_string(),
+        target: "yazi".to_string(),
+    });
+    assert!(app.pending_ai_action.is_some());
+    assert!(app.take_effect().is_none());
+
+    app.pending_ai_action = None;
+    app.apply_installed_tools(["yazi".to_string()].into_iter().collect());
+    app.settings.ai_approval_mode = AiApprovalMode::AllBounded;
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_app".to_string(),
+        target: "yazi".to_string(),
+    });
+    assert!(app.pending_ai_action.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request)) if request.tool_id == "yazi"
+    ));
+}
+
+#[test]
+fn ai_action_can_be_denied_without_typing_a_phrase() {
+    let mut app = app();
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_app".to_string(),
+        target: "yazi".to_string(),
+    });
+
+    app.handle_key(key(KeyCode::Char('A')));
+    app.handle_key(key(KeyCode::Char('n')));
+
+    assert!(app.ai_confirmation.is_none());
+    assert!(app.take_effect().is_none());
+    assert!(app.ai_status.contains("denied"));
 }
 
 #[test]
@@ -2176,9 +2245,6 @@ fn ai_launch_resolves_a_catalog_display_name_to_its_exact_id() {
     );
 
     app.handle_key(key(KeyCode::Char('A')));
-    for ch in "APPROVE launch_app yazi".chars() {
-        app.handle_key(key(KeyCode::Char(ch)));
-    }
     app.handle_key(key(KeyCode::Enter));
 
     assert!(matches!(

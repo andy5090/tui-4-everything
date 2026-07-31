@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use crate::codex::service::{
     CodexCommand, CodexEvent, CodexService, bounded_action_schema, planner_prompt,
 };
-use crate::storage::{ApiProviderProfile, default_api_provider_profiles};
+use crate::storage::{ApiProviderProfile, ProviderAuthMode, default_api_provider_profiles};
 
 const CURL_CONNECT_TIMEOUT_SEC: u64 = 10;
 const CURL_MAX_TIMEOUT_SEC: u64 = 45;
@@ -28,6 +28,15 @@ pub enum AiProvider {
 }
 
 impl AiProvider {
+    pub const ALL: [Self; 6] = [
+        Self::Codex,
+        Self::Claude,
+        Self::Gemini,
+        Self::Zhipu,
+        Self::Kimi,
+        Self::Custom,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             Self::Codex => "Codex",
@@ -39,13 +48,19 @@ impl AiProvider {
         }
     }
 
-    fn profile_id(self) -> Option<&'static str> {
+    pub fn profile_id(self) -> &'static str {
         match self {
-            Self::Zhipu => Some("zhipu"),
-            Self::Kimi => Some("kimi"),
-            Self::Custom => Some("custom"),
-            Self::Codex | Self::Claude | Self::Gemini => None,
+            Self::Codex => "codex",
+            Self::Claude => "claude",
+            Self::Gemini => "gemini",
+            Self::Zhipu => "zhipu",
+            Self::Kimi => "kimi",
+            Self::Custom => "custom",
         }
+    }
+
+    pub fn supports_subscription(self) -> bool {
+        matches!(self, Self::Codex | Self::Claude | Self::Gemini)
     }
 }
 
@@ -121,26 +136,24 @@ impl ApiProviderRuntimeState {
 
     fn refresh_readiness(&mut self) {
         let mut readiness = Vec::new();
-        if let Some(account) = claude_account() {
-            readiness.push(ProviderReadiness {
-                provider: AiProvider::Claude,
-                account,
-            });
-        }
-        if gemini_credentials_available() {
-            readiness.push(ProviderReadiness {
-                provider: AiProvider::Gemini,
-                account: "configured credentials".to_string(),
-            });
-        }
-        for provider in [AiProvider::Zhipu, AiProvider::Kimi, AiProvider::Custom] {
-            if let Ok(config) =
-                resolve_api_provider(provider, &self.profiles, &self.session_api_keys)
-            {
-                readiness.push(ProviderReadiness {
-                    provider,
-                    account: readiness_label(&config),
-                });
+        for provider in AiProvider::ALL {
+            let profile = profile_for(provider, &self.profiles);
+            match profile.auth_mode {
+                ProviderAuthMode::Subscription => {
+                    if let Some(account) = subscription_account(provider) {
+                        readiness.push(ProviderReadiness { provider, account });
+                    }
+                }
+                ProviderAuthMode::ApiKey => {
+                    if let Ok(config) =
+                        resolve_api_provider(provider, &self.profiles, &self.session_api_keys)
+                    {
+                        readiness.push(ProviderReadiness {
+                            provider,
+                            account: readiness_label(&config),
+                        });
+                    }
+                }
             }
         }
         self.readiness = readiness;
@@ -197,30 +210,28 @@ impl AiService {
         profile: ApiProviderProfile,
         api_key: String,
     ) -> Result<ProviderReadiness, String> {
-        if provider.profile_id().is_none() {
-            return Err(format!(
-                "{} is not configured with API profiles",
-                provider.label()
-            ));
-        }
         let mut runtime = self.api_runtime.lock().expect("api runtime lock");
-        let profile_id = provider.profile_id().expect("checked profile id");
-        runtime
-            .profiles
-            .insert(profile_id.to_string(), profile.clone());
+        let mut profiles = runtime.profiles.clone();
+        profiles.insert(provider.profile_id().to_string(), profile.clone());
+        let mut session_api_keys = runtime.session_api_keys.clone();
         let trimmed_key = api_key.trim().to_string();
         if trimmed_key.is_empty() {
-            runtime.session_api_keys.remove(&provider);
+            session_api_keys.remove(&provider);
         } else {
-            runtime.session_api_keys.insert(provider, trimmed_key);
+            session_api_keys.insert(provider, trimmed_key);
         }
-        let config = resolve_api_provider(provider, &runtime.profiles, &runtime.session_api_keys)?;
-        let readiness = ProviderReadiness {
-            provider,
-            account: readiness_label(&config),
+        let account = match profile.auth_mode {
+            ProviderAuthMode::Subscription => subscription_account(provider)
+                .ok_or_else(|| format!("{} subscription is not detected", provider.label()))?,
+            ProviderAuthMode::ApiKey => {
+                let config = resolve_api_provider(provider, &profiles, &session_api_keys)?;
+                readiness_label(&config)
+            }
         };
+        runtime.profiles = profiles;
+        runtime.session_api_keys = session_api_keys;
         runtime.refresh_readiness();
-        Ok(readiness)
+        Ok(ProviderReadiness { provider, account })
     }
 
     pub fn prompt(
@@ -229,92 +240,48 @@ impl AiService {
         text: String,
         environment_context: String,
     ) -> Result<(), String> {
-        match provider {
-            AiProvider::Codex => self
-                .codex
-                .send(CodexCommand::Prompt {
-                    text,
-                    environment_context,
-                })
-                .map_err(|_| "Codex service is not running".to_string()),
-            AiProvider::Claude | AiProvider::Gemini => {
-                let sender = self.external_sender.clone();
-                thread::spawn(move || {
-                    let _ = sender.send(AiEvent::TurnStarted {
-                        provider,
-                        id: "one-shot".to_string(),
+        let auth_mode = {
+            let runtime = self.api_runtime.lock().expect("api runtime lock");
+            profile_for(provider, &runtime.profiles).auth_mode
+        };
+        if auth_mode == ProviderAuthMode::Subscription {
+            return match provider {
+                AiProvider::Codex => self
+                    .codex
+                    .send(CodexCommand::Prompt {
+                        text,
+                        environment_context,
+                    })
+                    .map_err(|_| "Codex service is not running".to_string()),
+                AiProvider::Claude | AiProvider::Gemini => {
+                    self.spawn_one_shot(provider, move || {
+                        run_external_provider(provider, &text, &environment_context)
                     });
-                    match run_external_provider(provider, &text, &environment_context) {
-                        Ok((message, action)) => {
-                            let _ = sender.send(AiEvent::Message {
-                                provider,
-                                text: message,
-                            });
-                            if let Some((kind, target)) = action {
-                                let _ = sender.send(AiEvent::ActionProposed {
-                                    provider,
-                                    kind,
-                                    target,
-                                });
-                            }
-                            let _ = sender.send(AiEvent::TurnCompleted {
-                                provider,
-                                status: "completed".to_string(),
-                            });
-                        }
-                        Err(message) => {
-                            let _ = sender.send(AiEvent::Error { provider, message });
-                        }
-                    }
-                });
-                Ok(())
-            }
-            AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => {
-                let config = {
-                    let runtime = self.api_runtime.lock().expect("api runtime lock");
-                    resolve_api_provider(provider, &runtime.profiles, &runtime.session_api_keys)?
-                };
-                let sender = self.external_sender.clone();
-                thread::spawn(move || {
-                    let _ = sender.send(AiEvent::TurnStarted {
-                        provider,
-                        id: "one-shot".to_string(),
-                    });
-                    match run_openai_compatible_provider(
-                        provider,
-                        &config,
-                        &text,
-                        &environment_context,
-                    ) {
-                        Ok((message, action)) => {
-                            let _ = sender.send(AiEvent::Message {
-                                provider,
-                                text: message,
-                            });
-                            if let Some((kind, target)) = action {
-                                let _ = sender.send(AiEvent::ActionProposed {
-                                    provider,
-                                    kind,
-                                    target,
-                                });
-                            }
-                            let _ = sender.send(AiEvent::TurnCompleted {
-                                provider,
-                                status: "completed".to_string(),
-                            });
-                        }
-                        Err(message) => {
-                            let _ = sender.send(AiEvent::Error { provider, message });
-                        }
-                    }
-                });
-                Ok(())
-            }
+                    Ok(())
+                }
+                AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => Err(format!(
+                    "{} does not support subscription authentication",
+                    provider.label()
+                )),
+            };
         }
+
+        let config = {
+            let runtime = self.api_runtime.lock().expect("api runtime lock");
+            resolve_api_provider(provider, &runtime.profiles, &runtime.session_api_keys)?
+        };
+        self.spawn_one_shot(provider, move || {
+            run_api_provider(provider, &config, &text, &environment_context)
+        });
+        Ok(())
     }
 
     pub fn interrupt(&self, provider: AiProvider) -> Result<(), String> {
-        if provider == AiProvider::Codex {
+        let auth_mode = {
+            let runtime = self.api_runtime.lock().expect("api runtime lock");
+            profile_for(provider, &runtime.profiles).auth_mode
+        };
+        if provider == AiProvider::Codex && auth_mode == ProviderAuthMode::Subscription {
             self.codex
                 .send(CodexCommand::Interrupt)
                 .map_err(|_| "Codex service is not running".to_string())
@@ -332,7 +299,54 @@ impl AiService {
             Err(TryRecvError::Disconnected) => return Err(TryRecvError::Disconnected),
             Err(TryRecvError::Empty) => {}
         }
-        self.codex.try_recv().map(map_codex_event)
+        loop {
+            let event = self.codex.try_recv()?;
+            let use_subscription = self
+                .api_runtime
+                .lock()
+                .expect("api runtime lock")
+                .profiles
+                .get(AiProvider::Codex.profile_id())
+                .is_none_or(|profile| profile.auth_mode == ProviderAuthMode::Subscription);
+            if use_subscription {
+                return Ok(map_codex_event(event));
+            }
+        }
+    }
+
+    fn spawn_one_shot<F>(&self, provider: AiProvider, request: F)
+    where
+        F: FnOnce() -> Result<(String, Option<(String, String)>), String> + Send + 'static,
+    {
+        let sender = self.external_sender.clone();
+        thread::spawn(move || {
+            let _ = sender.send(AiEvent::TurnStarted {
+                provider,
+                id: "one-shot".to_string(),
+            });
+            match request() {
+                Ok((message, action)) => {
+                    let _ = sender.send(AiEvent::Message {
+                        provider,
+                        text: message,
+                    });
+                    if let Some((kind, target)) = action {
+                        let _ = sender.send(AiEvent::ActionProposed {
+                            provider,
+                            kind,
+                            target,
+                        });
+                    }
+                    let _ = sender.send(AiEvent::TurnCompleted {
+                        provider,
+                        status: "completed".to_string(),
+                    });
+                }
+                Err(message) => {
+                    let _ = sender.send(AiEvent::Error { provider, message });
+                }
+            }
+        });
     }
 }
 
@@ -364,6 +378,7 @@ fn map_codex_event(event: CodexEvent) -> AiEvent {
 
 #[derive(Clone)]
 struct ResolvedApiProvider {
+    provider: AiProvider,
     profile: ApiProviderProfile,
     api_key: String,
     key_source: String,
@@ -375,13 +390,10 @@ fn resolve_api_provider(
     profiles: &BTreeMap<String, ApiProviderProfile>,
     session_api_keys: &BTreeMap<AiProvider, String>,
 ) -> Result<ResolvedApiProvider, String> {
-    let Some(profile_id) = provider.profile_id() else {
-        return Err(format!("{} is not an API-key provider", provider.label()));
-    };
-    let profile = profiles
-        .get(profile_id)
-        .cloned()
-        .unwrap_or_else(|| default_api_profile(provider));
+    let profile = profile_for(provider, profiles);
+    if profile.auth_mode != ProviderAuthMode::ApiKey {
+        return Err(format!("{} is using subscription mode", provider.label()));
+    }
     validate_profile(provider, &profile)?;
     let session_key = session_api_keys
         .get(&provider)
@@ -412,7 +424,8 @@ fn resolve_api_provider(
         ));
     }
     Ok(ResolvedApiProvider {
-        endpoint_url: endpoint_for_base(provider, &profile.base_url)?,
+        provider,
+        endpoint_url: endpoint_for_profile(provider, &profile)?,
         profile,
         api_key,
         key_source,
@@ -420,15 +433,25 @@ fn resolve_api_provider(
 }
 
 fn default_api_profile(provider: AiProvider) -> ApiProviderProfile {
-    provider
-        .profile_id()
-        .and_then(|id| default_api_provider_profiles().remove(id))
+    default_api_provider_profiles()
+        .remove(provider.profile_id())
         .unwrap_or(ApiProviderProfile {
+            auth_mode: ProviderAuthMode::ApiKey,
             label: provider.label().to_string(),
             base_url: String::new(),
             model: String::new(),
             api_key_env: String::new(),
         })
+}
+
+fn profile_for(
+    provider: AiProvider,
+    profiles: &BTreeMap<String, ApiProviderProfile>,
+) -> ApiProviderProfile {
+    profiles
+        .get(provider.profile_id())
+        .cloned()
+        .unwrap_or_else(|| default_api_profile(provider))
 }
 
 fn readiness_label(config: &ResolvedApiProvider) -> String {
@@ -467,7 +490,7 @@ fn validate_profile(provider: AiProvider, profile: &ApiProviderProfile) -> Resul
             provider.label()
         ));
     }
-    endpoint_for_base(provider, &profile.base_url).map(|_| ())
+    endpoint_for_profile(provider, profile).map(|_| ())
 }
 
 fn valid_env_name(value: &str) -> bool {
@@ -478,7 +501,11 @@ fn valid_env_name(value: &str) -> bool {
         && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
 }
 
-fn endpoint_for_base(provider: AiProvider, base_url: &str) -> Result<String, String> {
+fn endpoint_for_profile(
+    provider: AiProvider,
+    profile: &ApiProviderProfile,
+) -> Result<String, String> {
+    let base_url = &profile.base_url;
     let trimmed = base_url.trim().trim_end_matches('/');
     if trimmed.is_empty() {
         return Err(format!("{} base URL cannot be empty", provider.label()));
@@ -536,7 +563,29 @@ fn endpoint_for_base(provider: AiProvider, base_url: &str) -> Result<String, Str
             ));
         }
     }
-    Ok(format!("{trimmed}/chat/completions"))
+    let endpoint = match provider {
+        AiProvider::Codex => format!("{trimmed}/responses"),
+        AiProvider::Claude => format!("{trimmed}/messages"),
+        AiProvider::Gemini => {
+            let model = profile
+                .model
+                .trim()
+                .strip_prefix("models/")
+                .unwrap_or(profile.model.trim());
+            if model.is_empty()
+                || !model
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+            {
+                return Err("Gemini model must be a valid model ID".to_string());
+            }
+            format!("{trimmed}/models/{model}:generateContent")
+        }
+        AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => {
+            format!("{trimmed}/chat/completions")
+        }
+    };
+    Ok(endpoint)
 }
 
 fn is_localhost_host(rest: &str) -> bool {
@@ -549,11 +598,39 @@ fn is_localhost_host(rest: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "::1")
 }
 
+fn subscription_account(provider: AiProvider) -> Option<String> {
+    match provider {
+        AiProvider::Codex => codex_account(),
+        AiProvider::Claude => claude_account(),
+        AiProvider::Gemini => gemini_subscription_account(),
+        AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => None,
+    }
+}
+
+fn codex_account() -> Option<String> {
+    let mut command = Command::new("codex");
+    command
+        .args(["login", "status"])
+        .env_remove("OPENAI_API_KEY");
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let status = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Some(if status.is_empty() {
+        "Codex subscription".to_string()
+    } else {
+        status
+    })
+}
+
 fn claude_account() -> Option<String> {
-    let output = Command::new("claude")
+    let mut command = Command::new("claude");
+    command
         .args(["auth", "status", "--json"])
-        .output()
-        .ok()?;
+        .env_remove("ANTHROPIC_API_KEY")
+        .env_remove("ANTHROPIC_AUTH_TOKEN");
+    let output = command.output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -573,18 +650,13 @@ fn claude_account() -> Option<String> {
         })
 }
 
-fn gemini_credentials_available() -> bool {
-    if std::env::var_os("GEMINI_API_KEY").is_some() || std::env::var_os("GOOGLE_API_KEY").is_some()
-    {
-        return true;
-    }
-    let Some(home) = std::env::var_os("HOME") else {
-        return false;
-    };
+fn gemini_subscription_account() -> Option<String> {
+    let home = std::env::var_os("HOME")?;
     let credential = PathBuf::from(home).join(".gemini/oauth_creds.json");
     credential
         .metadata()
         .is_ok_and(|metadata| metadata.is_file() && metadata.len() > 2)
+        .then(|| "Gemini subscription".to_string())
 }
 
 fn run_external_provider(
@@ -597,30 +669,42 @@ fn run_external_provider(
         planner_prompt(environment_context, user_request),
         bounded_action_schema()
     );
-    let output = match provider {
-        AiProvider::Claude => Command::new("claude")
-            .args(["-p", &prompt, "--output-format", "json", "--max-turns", "1"])
-            .arg("--json-schema")
-            .arg(bounded_action_schema().to_string())
-            .arg("--tools")
-            .arg("")
-            .arg("--disable-slash-commands")
-            .output(),
-        AiProvider::Gemini => Command::new("gemini")
-            .args([
+    let mut command = match provider {
+        AiProvider::Claude => {
+            let mut command = Command::new("claude");
+            command
+                .args(["-p", &prompt, "--output-format", "json", "--max-turns", "1"])
+                .arg("--json-schema")
+                .arg(bounded_action_schema().to_string())
+                .arg("--tools")
+                .arg("")
+                .arg("--disable-slash-commands")
+                .env_remove("ANTHROPIC_API_KEY")
+                .env_remove("ANTHROPIC_AUTH_TOKEN");
+            command
+        }
+        AiProvider::Gemini => {
+            let mut command = Command::new("gemini");
+            command.args([
                 "-p",
                 &prompt,
                 "--output-format",
                 "json",
                 "--approval-mode",
                 "plan",
-            ])
-            .output(),
+            ]);
+            command
+                .env_remove("GEMINI_API_KEY")
+                .env_remove("GOOGLE_API_KEY");
+            command
+        }
         AiProvider::Codex | AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => {
             unreachable!("handled by another adapter")
         }
-    }
-    .map_err(|error| format!("could not start {}: {error}", provider.label()))?;
+    };
+    let output = command
+        .output()
+        .map_err(|error| format!("could not start {}: {error}", provider.label()))?;
     if !output.status.success() {
         let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
         return Err(format!("{} request failed: {detail}", provider.label()));
@@ -635,7 +719,7 @@ struct CurlInvocation {
     debug_summary: String,
 }
 
-fn run_openai_compatible_provider(
+fn run_api_provider(
     provider: AiProvider,
     config: &ResolvedApiProvider,
     user_request: &str,
@@ -646,15 +730,7 @@ fn run_openai_compatible_provider(
         planner_prompt(environment_context, user_request),
         bounded_action_schema()
     );
-    let request_body = json!({
-        "model": config.profile.model,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
-    });
+    let request_body = request_body_for_provider(config, &prompt);
     let invocation = build_curl_invocation(config, &request_body)?;
     let mut command = Command::new("curl");
     command
@@ -685,8 +761,39 @@ fn run_openai_compatible_provider(
         );
         return Err(format!("{} request failed: {detail}", provider.label()));
     }
-    let message = parse_openai_chat_message(&output.stdout)?;
+    let message = parse_api_message(provider, &output.stdout)?;
     parse_external_response(message.as_bytes())
+}
+
+fn request_body_for_provider(config: &ResolvedApiProvider, prompt: &str) -> Value {
+    match config.provider {
+        AiProvider::Codex => json!({
+            "model": config.profile.model,
+            "input": prompt,
+            "store": false,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "t4e_action",
+                    "strict": true,
+                    "schema": bounded_action_schema(),
+                }
+            }
+        }),
+        AiProvider::Claude => json!({
+            "model": config.profile.model,
+            "max_tokens": 1024,
+            "messages": [{ "role": "user", "content": prompt }],
+        }),
+        AiProvider::Gemini => json!({
+            "contents": [{ "parts": [{ "text": prompt }] }],
+            "generationConfig": { "responseMimeType": "application/json" },
+        }),
+        AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => json!({
+            "model": config.profile.model,
+            "messages": [{ "role": "user", "content": prompt }],
+        }),
+    }
 }
 
 fn build_curl_invocation(
@@ -696,14 +803,19 @@ fn build_curl_invocation(
     let serialized_body = serde_json::to_string(body)
         .map_err(|error| format!("could not serialize request body: {error}"))?;
     let escaped_url = escape_curl_config_string(&config.endpoint_url);
-    let escaped_auth =
-        escape_curl_config_string(&format!("Authorization: Bearer {}", config.api_key));
     let escaped_content_type = escape_curl_config_string("Content-Type: application/json");
     let escaped_accept = escape_curl_config_string("Accept: application/json");
     let escaped_body = escape_curl_config_string(&serialized_body);
-    let config_text = format!(
-        "url = \"{escaped_url}\"\nrequest = \"POST\"\nheader = \"{escaped_content_type}\"\nheader = \"{escaped_accept}\"\nheader = \"{escaped_auth}\"\ndata = \"{escaped_body}\"\n"
+    let mut config_text = format!(
+        "url = \"{escaped_url}\"\nrequest = \"POST\"\nheader = \"{escaped_content_type}\"\nheader = \"{escaped_accept}\"\n"
     );
+    for header in api_auth_headers(config) {
+        config_text.push_str(&format!(
+            "header = \"{}\"\n",
+            escape_curl_config_string(&header)
+        ));
+    }
+    config_text.push_str(&format!("data = \"{escaped_body}\"\n"));
     Ok(CurlInvocation {
         args: vec![
             "--config".to_string(),
@@ -722,6 +834,19 @@ fn build_curl_invocation(
         ),
         config: config_text,
     })
+}
+
+fn api_auth_headers(config: &ResolvedApiProvider) -> Vec<String> {
+    match config.provider {
+        AiProvider::Claude => vec![
+            format!("x-api-key: {}", config.api_key),
+            "anthropic-version: 2023-06-01".to_string(),
+        ],
+        AiProvider::Gemini => vec![format!("x-goog-api-key: {}", config.api_key)],
+        AiProvider::Codex | AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => {
+            vec![format!("Authorization: Bearer {}", config.api_key)]
+        }
+    }
 }
 
 fn escape_curl_config_string(value: &str) -> String {
@@ -770,6 +895,71 @@ fn parse_openai_chat_message(raw: &[u8]) -> Result<String, String> {
         .and_then(|message| message.get("content"))
         .and_then(openai_content_to_text)
         .ok_or_else(|| "provider response did not contain choices[0].message.content".to_string())
+}
+
+fn parse_api_message(provider: AiProvider, raw: &[u8]) -> Result<String, String> {
+    match provider {
+        AiProvider::Codex => parse_openai_response_message(raw),
+        AiProvider::Claude => parse_anthropic_message(raw),
+        AiProvider::Gemini => parse_gemini_message(raw),
+        AiProvider::Zhipu | AiProvider::Kimi | AiProvider::Custom => parse_openai_chat_message(raw),
+    }
+}
+
+fn parse_openai_response_message(raw: &[u8]) -> Result<String, String> {
+    let envelope: Value = serde_json::from_slice(raw)
+        .map_err(|error| format!("provider returned invalid JSON: {error}"))?;
+    let mut text = String::new();
+    if let Some(items) = envelope.get("output").and_then(Value::as_array) {
+        for content in items
+            .iter()
+            .filter_map(|item| item.get("content").and_then(Value::as_array))
+            .flatten()
+        {
+            if content.get("type").and_then(Value::as_str) == Some("output_text")
+                && let Some(value) = content.get("text").and_then(Value::as_str)
+            {
+                text.push_str(value);
+            }
+        }
+    }
+    (!text.is_empty())
+        .then_some(text)
+        .ok_or_else(|| "OpenAI response did not contain output text".to_string())
+}
+
+fn parse_anthropic_message(raw: &[u8]) -> Result<String, String> {
+    let envelope: Value = serde_json::from_slice(raw)
+        .map_err(|error| format!("provider returned invalid JSON: {error}"))?;
+    let text = envelope
+        .get("content")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|part| part.get("type").and_then(Value::as_str) == Some("text"))
+        .filter_map(|part| part.get("text").and_then(Value::as_str))
+        .collect::<String>();
+    (!text.is_empty())
+        .then_some(text)
+        .ok_or_else(|| "Anthropic response did not contain text content".to_string())
+}
+
+fn parse_gemini_message(raw: &[u8]) -> Result<String, String> {
+    let envelope: Value = serde_json::from_slice(raw)
+        .map_err(|error| format!("provider returned invalid JSON: {error}"))?;
+    let text = envelope
+        .get("candidates")
+        .and_then(Value::as_array)
+        .and_then(|candidates| candidates.first())
+        .and_then(|candidate| candidate.pointer("/content/parts"))
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|part| part.get("text").and_then(Value::as_str))
+        .collect::<String>();
+    (!text.is_empty())
+        .then_some(text)
+        .ok_or_else(|| "Gemini response did not contain candidate text".to_string())
 }
 
 fn openai_content_to_text(content: &Value) -> Option<String> {
@@ -842,16 +1032,19 @@ fn parse_json_text(text: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AiProvider, CurlInvocation, bounded_error_detail, build_curl_invocation, endpoint_for_base,
-        openai_content_to_text, parse_external_response, parse_openai_chat_message, redact_secret,
-        validate_profile,
+        AiProvider, CurlInvocation, bounded_error_detail, build_curl_invocation,
+        endpoint_for_profile, openai_content_to_text, parse_anthropic_message,
+        parse_external_response, parse_gemini_message, parse_openai_chat_message,
+        parse_openai_response_message, redact_secret, validate_profile,
     };
-    use crate::storage::ApiProviderProfile;
+    use crate::storage::{ApiProviderProfile, ProviderAuthMode};
     use serde_json::json;
 
     fn resolved(provider: AiProvider) -> super::ResolvedApiProvider {
         super::ResolvedApiProvider {
+            provider,
             profile: ApiProviderProfile {
+                auth_mode: ProviderAuthMode::ApiKey,
                 label: provider.label().to_string(),
                 base_url: "https://example.com/v1".to_string(),
                 model: "demo-model".to_string(),
@@ -861,6 +1054,12 @@ mod tests {
             key_source: "session key".to_string(),
             endpoint_url: "https://example.com/v1/chat/completions".to_string(),
         }
+    }
+
+    fn endpoint(provider: AiProvider, base_url: &str) -> Result<String, String> {
+        let mut profile = resolved(provider).profile;
+        profile.base_url = base_url.to_string();
+        endpoint_for_profile(provider, &profile)
     }
 
     #[test]
@@ -898,34 +1097,81 @@ mod tests {
     }
 
     #[test]
+    fn parses_native_provider_response_shapes() {
+        let openai = br#"{"output":[{"content":[{"type":"output_text","text":"{\"message\":\"OpenAI\",\"action\":null}"}]}]}"#;
+        let anthropic =
+            br#"{"content":[{"type":"text","text":"{\"message\":\"Claude\",\"action\":null}"}]}"#;
+        let gemini = br#"{"candidates":[{"content":{"parts":[{"text":"{\"message\":\"Gemini\",\"action\":null}"}]}}]}"#;
+
+        assert!(
+            parse_openai_response_message(openai)
+                .unwrap()
+                .contains("OpenAI")
+        );
+        assert!(
+            parse_anthropic_message(anthropic)
+                .unwrap()
+                .contains("Claude")
+        );
+        assert!(parse_gemini_message(gemini).unwrap().contains("Gemini"));
+    }
+
+    #[test]
+    fn builds_provider_specific_api_endpoints_and_auth_headers() {
+        let mut openai = resolved(AiProvider::Codex);
+        openai.endpoint_url = endpoint_for_profile(AiProvider::Codex, &openai.profile).unwrap();
+        assert!(openai.endpoint_url.ends_with("/responses"));
+
+        let mut claude = resolved(AiProvider::Claude);
+        claude.endpoint_url = endpoint_for_profile(AiProvider::Claude, &claude.profile).unwrap();
+        let invocation = build_curl_invocation(&claude, &json!({"ok": true})).unwrap();
+        assert!(claude.endpoint_url.ends_with("/messages"));
+        assert!(invocation.config.contains("x-api-key: super-secret-key"));
+        assert!(invocation.config.contains("anthropic-version: 2023-06-01"));
+
+        let mut gemini = resolved(AiProvider::Gemini);
+        gemini.profile.model = "gemini-3.5-flash".to_string();
+        gemini.endpoint_url = endpoint_for_profile(AiProvider::Gemini, &gemini.profile).unwrap();
+        let invocation = build_curl_invocation(&gemini, &json!({"ok": true})).unwrap();
+        assert!(
+            gemini
+                .endpoint_url
+                .ends_with("/models/gemini-3.5-flash:generateContent")
+        );
+        assert!(
+            invocation
+                .config
+                .contains("x-goog-api-key: super-secret-key")
+        );
+    }
+
+    #[test]
     fn rejects_http_for_builtin_provider() {
-        let error = endpoint_for_base(AiProvider::Zhipu, "http://api.z.ai/v1").unwrap_err();
+        let error = endpoint(AiProvider::Zhipu, "http://api.z.ai/v1").unwrap_err();
         assert!(error.contains("requires HTTPS"));
     }
 
     #[test]
     fn allows_localhost_http_for_custom_provider() {
-        let endpoint = endpoint_for_base(AiProvider::Custom, "http://localhost:11434/v1").unwrap();
+        let endpoint = endpoint(AiProvider::Custom, "http://localhost:11434/v1").unwrap();
         assert_eq!(endpoint, "http://localhost:11434/v1/chat/completions");
     }
 
     #[test]
     fn rejects_non_localhost_http_for_custom_provider() {
-        let error =
-            endpoint_for_base(AiProvider::Custom, "http://192.168.1.3:11434/v1").unwrap_err();
+        let error = endpoint(AiProvider::Custom, "http://192.168.1.3:11434/v1").unwrap_err();
         assert!(error.contains("localhost"));
     }
 
     #[test]
     fn allows_ipv6_loopback_http_for_custom_provider() {
-        let endpoint = endpoint_for_base(AiProvider::Custom, "http://[::1]:11434/v1").unwrap();
+        let endpoint = endpoint(AiProvider::Custom, "http://[::1]:11434/v1").unwrap();
         assert_eq!(endpoint, "http://[::1]:11434/v1/chat/completions");
     }
 
     #[test]
     fn rejects_embedded_url_credentials() {
-        let error = endpoint_for_base(AiProvider::Custom, "https://user:secret@example.com/v1")
-            .unwrap_err();
+        let error = endpoint(AiProvider::Custom, "https://user:secret@example.com/v1").unwrap_err();
         assert!(error.contains("embedded credentials"));
     }
 

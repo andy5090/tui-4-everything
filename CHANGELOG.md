@@ -11,6 +11,11 @@ and date are assigned.
 - HOME AI support for Zhipu AI, Kimi, and custom OpenAI-compatible Chat
   Completions providers, with editable model/base URL profiles, environment or
   session-only API keys, and secret-safe transport.
+- One unified AI connection setup for Codex/OpenAI, Claude/Anthropic, Gemini,
+  Zhipu AI, Kimi, and custom endpoints. Codex, Claude, and Gemini support both
+  detected subscriptions and native API-key mode.
+- Yes/No AI action confirmation with `Ask`, `Safe only`, and `All bounded`
+  authorization levels, while retaining separate installer and device gates.
 - Portable Linux `x86_64` and `aarch64` musl release archives, plus a
   checksum-verifying installer with version, prefix, upgrade, and uninstall
   support.

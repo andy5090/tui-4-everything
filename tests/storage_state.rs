@@ -9,7 +9,7 @@ use t4e::catalog::models::InstallMethod;
 use t4e::installer::engine::InstallTask;
 use t4e::installer::execution::InstallJob;
 use t4e::storage::{
-    LaunchOptionPreference, PersistentState, RecentItem, UserSettings,
+    LaunchOptionPreference, PersistentState, ProviderAuthMode, RecentItem, UserSettings,
     default_api_provider_profiles, load_state, save_state,
 };
 
@@ -26,6 +26,21 @@ fn temp_file() -> PathBuf {
             COUNTER.fetch_add(1, Ordering::Relaxed)
         ))
         .join("state.json")
+}
+
+#[test]
+fn legacy_api_profiles_default_to_api_key_mode() {
+    let profile: t4e::storage::ApiProviderProfile = serde_json::from_str(
+        r#"{
+            "label":"Legacy",
+            "base_url":"https://example.com/v1",
+            "model":"legacy-model",
+            "api_key_env":"LEGACY_API_KEY"
+        }"#,
+    )
+    .expect("legacy profile loads");
+
+    assert_eq!(profile.auth_mode, ProviderAuthMode::ApiKey);
 }
 
 #[test]

@@ -18,8 +18,9 @@ use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
 use crate::mux::tmux::compile_workspace;
 use crate::mux::workspace::{Workspace, WorkspaceRegistry};
 use crate::storage::{
-    ApiProviderProfile, LaunchOptionPreference, PersistentState, RecentItem, UserSettings,
-    default_api_provider_profiles, load_state, log_dir_for_state, save_state,
+    AiApprovalMode, ApiProviderProfile, LaunchOptionPreference, PersistentState, ProviderAuthMode,
+    RecentItem, UserSettings, default_api_provider_profiles, load_state, log_dir_for_state,
+    save_state,
 };
 use crate::system_info::{SystemOverview, cached_system_overview};
 
@@ -241,13 +242,12 @@ pub struct AiAction {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AiActionConfirmation {
     pub action: AiAction,
-    pub expected: String,
-    pub input: String,
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct ApiProviderSetupState {
     pub provider: AiProvider,
+    pub auth_mode: ProviderAuthMode,
     pub field: usize,
     pub label: String,
     pub base_url: String,
@@ -261,6 +261,7 @@ impl std::fmt::Debug for ApiProviderSetupState {
         formatter
             .debug_struct("ApiProviderSetupState")
             .field("provider", &self.provider)
+            .field("auth_mode", &self.auth_mode)
             .field("field", &self.field)
             .field("label", &self.label)
             .field("base_url", &self.base_url)
@@ -1366,11 +1367,21 @@ impl AppState {
                         self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
                         return;
                     };
-                    self.pending_ai_action = Some(AiAction {
+                    let action = AiAction {
                         kind: kind.clone(),
                         target: target.clone(),
-                    });
-                    self.ai_status = format!("Proposed {kind} {target} · press A to approve");
+                    };
+                    let auto_approve = match self.settings.ai_approval_mode {
+                        AiApprovalMode::Ask => false,
+                        AiApprovalMode::SafeOnly => kind == "catalog_search",
+                        AiApprovalMode::AllBounded => true,
+                    };
+                    if auto_approve {
+                        self.execute_ai_action(action, "auto-approved");
+                    } else {
+                        self.pending_ai_action = Some(action);
+                        self.ai_status = format!("Proposed {kind} {target} · press A to review");
+                    }
                 } else {
                     self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
                 }
@@ -1487,66 +1498,62 @@ impl AppState {
             self.ai_status = "No AI action is awaiting approval".to_string();
             return;
         };
-        self.ai_confirmation = Some(AiActionConfirmation {
-            expected: format!("APPROVE {} {}", action.kind, action.target),
-            action,
-            input: String::new(),
-        });
-        self.ai_status = "Type the approval phrase exactly".to_string();
+        self.ai_confirmation = Some(AiActionConfirmation { action });
+        self.ai_status = "Approve this bounded AI action? Yes / No".to_string();
     }
 
     fn handle_ai_confirmation_key(&mut self, code: KeyCode) {
         match code {
-            KeyCode::Esc => {
-                self.ai_confirmation = None;
-                self.ai_status = "AI action approval cancelled".to_string();
-            }
-            KeyCode::Backspace => {
-                if let Some(confirmation) = &mut self.ai_confirmation {
-                    confirmation.input.pop();
+            KeyCode::Esc | KeyCode::Char('n' | 'N') => {
+                if let Some(confirmation) = self.ai_confirmation.take() {
+                    self.logs.push(timestamp_log(format!(
+                        "ai: denied {} {}",
+                        confirmation.action.kind, confirmation.action.target
+                    )));
                 }
+                self.ai_status = "AI action denied".to_string();
             }
-            KeyCode::Char(ch) => {
-                if let Some(confirmation) = &mut self.ai_confirmation {
-                    confirmation.input.push(ch);
-                }
-            }
-            KeyCode::Enter => {
+            KeyCode::Enter | KeyCode::Char('y' | 'Y') => {
                 let Some(confirmation) = self.ai_confirmation.take() else {
                     return;
                 };
-                if confirmation.input != confirmation.expected {
-                    self.ai_status = "AI action approval phrase did not match".to_string();
-                    return;
-                }
-                let target = confirmation.action.target;
-                match confirmation.action.kind.as_str() {
-                    "catalog_search" => {
-                        self.screen = Screen::Home;
-                        self.home_filter_index = HomeFilter::ALL
-                            .iter()
-                            .position(|filter| *filter == HomeFilter::AllApps)
-                            .unwrap_or_default();
-                        self.search_query = target.clone();
-                        self.home_app_index = 0;
-                        self.home_focus = HomeFocus::AppList;
-                        self.status = format!("AI searched HOME for {target}");
-                    }
-                    "install_plan" => {
-                        self.queue_tool_ids(vec![target.clone()]);
-                        self.screen = Screen::Install;
-                    }
-                    "verified_update" => self.queue_verified_update(&target),
-                    "launch_app" => self.request_tool_configuration(&target),
-                    _ => self.ai_status = "Unsupported AI action".to_string(),
-                }
-                self.logs.push(timestamp_log(format!(
-                    "ai: approved {} {target}",
-                    confirmation.action.kind
-                )));
+                self.execute_ai_action(confirmation.action, "approved");
             }
             _ => {}
         }
+    }
+
+    fn execute_ai_action(&mut self, action: AiAction, approval: &str) {
+        let target = action.target;
+        match action.kind.as_str() {
+            "catalog_search" => {
+                self.screen = Screen::Home;
+                self.home_filter_index = HomeFilter::ALL
+                    .iter()
+                    .position(|filter| *filter == HomeFilter::AllApps)
+                    .unwrap_or_default();
+                self.search_query = target.clone();
+                self.home_app_index = 0;
+                self.home_focus = HomeFocus::AppList;
+                self.status = format!("AI searched HOME for {target}");
+            }
+            "install_plan" => {
+                self.queue_tool_ids(vec![target.clone()]);
+                self.screen = Screen::Install;
+            }
+            "verified_update" => self.queue_verified_update(&target),
+            "launch_app" => self.request_tool_configuration(&target),
+            _ => {
+                self.ai_status = "Unsupported AI action".to_string();
+                return;
+            }
+        }
+        self.ai_status = format!("AI action {approval}: {} {target}", action.kind);
+        self.logs.push(timestamp_log(format!(
+            "ai: {approval} {} {target}",
+            action.kind
+        )));
+        self.trim_logs();
     }
 
     fn handle_screen_key(&mut self, code: KeyCode) {
@@ -1659,7 +1666,7 @@ impl AppState {
                 KeyCode::Left | KeyCode::Char('h') => self.adjust_setting(-1),
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => self.adjust_setting(1),
                 KeyCode::Enter if self.settings_index == 3 => self.begin_api_provider_setup(),
-                KeyCode::Enter if self.settings_index == 4 => self.reset_saved_preferences(),
+                KeyCode::Enter if self.settings_index == 5 => self.reset_saved_preferences(),
                 _ => {}
             },
             Screen::Help => {}
@@ -1889,7 +1896,7 @@ impl AppState {
                 self.workspace_index = index;
             }
             Screen::Agents if index < self.agent_tools().len() => self.agent_index = index,
-            Screen::Settings if index < 5 => self.settings_index = index,
+            Screen::Settings if index < 6 => self.settings_index = index,
             Screen::AppView
             | Screen::Logs
             | Screen::Home
@@ -1980,11 +1987,7 @@ impl AppState {
     }
 
     fn cycle_ai_provider(&mut self, delta: isize) {
-        let providers = self.ai_ready_providers.keys().copied().collect::<Vec<_>>();
-        if providers.is_empty() {
-            self.refresh_ai_identity();
-            return;
-        }
+        let providers = AiProvider::ALL;
         let current = providers
             .iter()
             .position(|provider| *provider == self.ai_provider)
@@ -1992,8 +1995,21 @@ impl AppState {
         self.ai_provider = providers[move_index(current, providers.len(), delta)];
         self.settings.preferred_ai_provider =
             ai_provider_preference_id(self.ai_provider).to_string();
-        self.refresh_ai_identity();
-        self.status = format!("HOME AI will use {}", self.ai_provider.label());
+        if let Some(account) = self.ai_ready_providers.get(&self.ai_provider) {
+            self.ai_account = account.clone();
+            self.ai_status = format!("{} ready", self.ai_provider.label());
+            self.status = format!("HOME AI will use {}", self.ai_provider.label());
+        } else {
+            self.ai_account = "not configured".to_string();
+            self.ai_status = format!(
+                "{} unavailable · press Enter in Settings to configure",
+                self.ai_provider.label()
+            );
+            self.status = format!(
+                "Configure {} before using HOME AI",
+                self.ai_provider.label()
+            );
+        }
     }
 
     fn begin_home_search(&mut self) {
@@ -2007,7 +2023,7 @@ impl AppState {
     }
 
     fn move_setting(&mut self, delta: isize) {
-        self.settings_index = move_index(self.settings_index, 5, delta);
+        self.settings_index = move_index(self.settings_index, 6, delta);
     }
 
     fn queue_selected_tool(&mut self) {
@@ -2823,7 +2839,7 @@ impl AppState {
     }
 
     fn adjust_setting(&mut self, delta: isize) {
-        if self.settings_index > 3 {
+        if self.settings_index > 4 {
             return;
         }
         match self.settings_index {
@@ -2842,21 +2858,34 @@ impl AppState {
                 self.settings.confirm_all_installs = !self.settings.confirm_all_installs;
             }
             3 => self.cycle_ai_provider(delta),
+            4 => {
+                const MODES: [AiApprovalMode; 3] = [
+                    AiApprovalMode::Ask,
+                    AiApprovalMode::SafeOnly,
+                    AiApprovalMode::AllBounded,
+                ];
+                let current = MODES
+                    .iter()
+                    .position(|mode| *mode == self.settings.ai_approval_mode)
+                    .unwrap_or_default();
+                self.settings.ai_approval_mode = MODES[move_index(current, MODES.len(), delta)];
+            }
             _ => {}
         }
         self.status = "Settings updated".to_string();
     }
 
     fn begin_api_provider_setup(&mut self) {
-        let provider = AiProvider::Zhipu;
+        let provider = self.ai_provider;
         let profile = self
             .settings
             .api_providers
-            .get(api_provider_id(provider))
+            .get(provider.profile_id())
             .cloned()
             .unwrap_or_else(|| default_api_profile(provider));
         self.api_provider_setup = Some(ApiProviderSetupState {
             provider,
+            auth_mode: profile.auth_mode,
             field: 0,
             label: profile.label,
             base_url: profile.base_url,
@@ -2864,7 +2893,7 @@ impl AppState {
             api_key_env: profile.api_key_env,
             api_key: String::new(),
         });
-        self.status = "Configure an API provider; keys are never saved".to_string();
+        self.status = format!("Configure {} connection", provider.label());
     }
 
     fn handle_api_provider_setup_key(&mut self, code: KeyCode) {
@@ -2877,7 +2906,7 @@ impl AppState {
             }
             KeyCode::Tab | KeyCode::Down => {
                 if let Some(setup) = &mut self.api_provider_setup {
-                    setup.field = (setup.field + 1).min(5);
+                    setup.field = (setup.field + 1).min(provider_setup_last_field(setup));
                 }
             }
             KeyCode::BackTab | KeyCode::Up => {
@@ -2885,21 +2914,13 @@ impl AppState {
                     setup.field = setup.field.saturating_sub(1);
                 }
             }
-            KeyCode::Left
+            KeyCode::Left | KeyCode::Right
                 if self
                     .api_provider_setup
                     .as_ref()
                     .is_some_and(|setup| setup.field == 0) =>
             {
-                self.cycle_api_provider_setup(-1);
-            }
-            KeyCode::Right
-                if self
-                    .api_provider_setup
-                    .as_ref()
-                    .is_some_and(|setup| setup.field == 0) =>
-            {
-                self.cycle_api_provider_setup(1);
+                self.toggle_api_provider_auth_mode();
             }
             KeyCode::Backspace => {
                 if let Some(setup) = &mut self.api_provider_setup
@@ -2912,11 +2933,11 @@ impl AppState {
                 let should_save = self
                     .api_provider_setup
                     .as_ref()
-                    .is_some_and(|setup| setup.field == 5);
+                    .is_some_and(|setup| setup.field == provider_setup_last_field(setup));
                 if should_save {
                     self.save_api_provider_setup();
                 } else if let Some(setup) = &mut self.api_provider_setup {
-                    setup.field = (setup.field + 1).min(5);
+                    setup.field = (setup.field + 1).min(provider_setup_last_field(setup));
                 }
             }
             KeyCode::Char(ch) => {
@@ -2930,32 +2951,19 @@ impl AppState {
         }
     }
 
-    fn cycle_api_provider_setup(&mut self, delta: isize) {
-        const PROVIDERS: [AiProvider; 3] =
-            [AiProvider::Zhipu, AiProvider::Kimi, AiProvider::Custom];
-        let Some(current) = self.api_provider_setup.as_ref().map(|setup| setup.provider) else {
+    fn toggle_api_provider_auth_mode(&mut self) {
+        let Some(setup) = &mut self.api_provider_setup else {
             return;
         };
-        let index = PROVIDERS
-            .iter()
-            .position(|provider| *provider == current)
-            .unwrap_or(0);
-        let provider = PROVIDERS[move_index(index, PROVIDERS.len(), delta)];
-        let profile = self
-            .settings
-            .api_providers
-            .get(api_provider_id(provider))
-            .cloned()
-            .unwrap_or_else(|| default_api_profile(provider));
-        self.api_provider_setup = Some(ApiProviderSetupState {
-            provider,
-            field: 0,
-            label: profile.label,
-            base_url: profile.base_url,
-            model: profile.model,
-            api_key_env: profile.api_key_env,
-            api_key: String::new(),
-        });
+        if !setup.provider.supports_subscription() {
+            setup.auth_mode = ProviderAuthMode::ApiKey;
+            return;
+        }
+        setup.auth_mode = match setup.auth_mode {
+            ProviderAuthMode::Subscription => ProviderAuthMode::ApiKey,
+            ProviderAuthMode::ApiKey => ProviderAuthMode::Subscription,
+        };
+        setup.field = 0;
     }
 
     fn save_api_provider_setup(&mut self) {
@@ -2963,6 +2971,7 @@ impl AppState {
             return;
         };
         let profile = ApiProviderProfile {
+            auth_mode: setup.auth_mode,
             label: setup.label.trim().to_string(),
             base_url: setup.base_url.trim().trim_end_matches('/').to_string(),
             model: setup.model.trim().to_string(),
@@ -2970,7 +2979,8 @@ impl AppState {
         };
         self.settings
             .api_providers
-            .insert(api_provider_id(setup.provider).to_string(), profile.clone());
+            .insert(setup.provider.profile_id().to_string(), profile.clone());
+        self.settings.preferred_ai_provider = ai_provider_preference_id(setup.provider).to_string();
         let api_key = std::mem::take(&mut setup.api_key);
         self.effects.push_back(AppEffect::ConfigureApiProvider {
             provider: setup.provider,
@@ -3073,15 +3083,6 @@ fn timestamp_log(message: impl AsRef<str>) -> String {
     )
 }
 
-fn api_provider_id(provider: AiProvider) -> &'static str {
-    match provider {
-        AiProvider::Zhipu => "zhipu",
-        AiProvider::Kimi => "kimi",
-        AiProvider::Custom => "custom",
-        AiProvider::Codex | AiProvider::Claude | AiProvider::Gemini => "",
-    }
-}
-
 fn ai_provider_preference_id(provider: AiProvider) -> &'static str {
     match provider {
         AiProvider::Codex => "codex",
@@ -3095,8 +3096,9 @@ fn ai_provider_preference_id(provider: AiProvider) -> &'static str {
 
 fn default_api_profile(provider: AiProvider) -> ApiProviderProfile {
     default_api_provider_profiles()
-        .remove(api_provider_id(provider))
+        .remove(provider.profile_id())
         .unwrap_or_else(|| ApiProviderProfile {
+            auth_mode: ProviderAuthMode::ApiKey,
             label: provider.label().to_string(),
             base_url: String::new(),
             model: String::new(),
@@ -3105,6 +3107,9 @@ fn default_api_profile(provider: AiProvider) -> ApiProviderProfile {
 }
 
 fn provider_setup_field_mut(setup: &mut ApiProviderSetupState) -> Option<&mut String> {
+    if setup.auth_mode != ProviderAuthMode::ApiKey {
+        return None;
+    }
     match setup.field {
         1 => Some(&mut setup.label),
         2 => Some(&mut setup.base_url),
@@ -3112,6 +3117,13 @@ fn provider_setup_field_mut(setup: &mut ApiProviderSetupState) -> Option<&mut St
         4 => Some(&mut setup.api_key_env),
         5 => Some(&mut setup.api_key),
         _ => None,
+    }
+}
+
+fn provider_setup_last_field(setup: &ApiProviderSetupState) -> usize {
+    match setup.auth_mode {
+        ProviderAuthMode::Subscription => 1,
+        ProviderAuthMode::ApiKey => 6,
     }
 }
 
