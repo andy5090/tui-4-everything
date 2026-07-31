@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use t4e::catalog::models::InstallMethod;
-use t4e::installer::checks::{CheckResult, InstallChecker};
+use t4e::catalog::models::{InstallMethod, VersionProbe};
+use t4e::installer::checks::{CheckResult, InstallChecker, VersionCheckResult};
 use t4e::installer::engine::InstallTask;
 use t4e::installer::execution::{
     CommandOutput, CommandRunner, ExecutionPolicy, InstallExecutor, InstallJob, OutputChunk,
@@ -21,6 +21,7 @@ struct MockRunner {
 
 struct MockChecker {
     results: Mutex<VecDeque<bool>>,
+    versions: Mutex<VecDeque<Option<&'static str>>>,
 }
 
 impl InstallChecker for MockChecker {
@@ -35,6 +36,26 @@ impl InstallChecker for MockChecker {
             command: command.to_string(),
             installed,
             resolved_path: installed.then(|| format!("/mock/bin/{command}")),
+        })
+    }
+
+    fn probe_version(&self, probe: &VersionProbe) -> anyhow::Result<VersionCheckResult> {
+        let reported_version = self
+            .versions
+            .lock()
+            .expect("mock version lock")
+            .pop_front()
+            .expect("mock version result");
+        let command = std::iter::once(probe.executable.as_str())
+            .chain(probe.args.iter().map(String::as_str))
+            .collect::<Vec<_>>()
+            .join(" ");
+        Ok(VersionCheckResult {
+            command,
+            installed: true,
+            resolved_path: Some(format!("/mock/bin/{}", probe.executable)),
+            reported_version: reported_version.map(str::to_string),
+            normalized_version: reported_version.map(str::to_string),
         })
     }
 }
@@ -79,6 +100,8 @@ fn task() -> InstallTask {
         install_timeout_sec: None,
         requires_privileges: false,
         requires_confirmation: false,
+        expected_version: None,
+        version_probe: None,
         queued_at: Utc::now(),
     }
 }
@@ -212,6 +235,7 @@ fn preflight_skips_install_when_executable_is_already_present() {
     };
     let checker = MockChecker {
         results: Mutex::new(VecDeque::from([true])),
+        versions: Mutex::new(VecDeque::new()),
     };
     let executor = InstallExecutor::with_checker(
         runner,
@@ -245,6 +269,7 @@ fn preflight_requires_every_declared_executable() {
     };
     let checker = MockChecker {
         results: Mutex::new(VecDeque::from([true, false, true, true])),
+        versions: Mutex::new(VecDeque::new()),
     };
     let executor = InstallExecutor::with_checker(
         runner,
@@ -282,6 +307,7 @@ fn successful_command_fails_when_postflight_executable_is_missing() {
     };
     let checker = MockChecker {
         results: Mutex::new(VecDeque::from([false, false])),
+        versions: Mutex::new(VecDeque::new()),
     };
     let executor = InstallExecutor::with_checker(
         runner,
@@ -310,5 +336,89 @@ fn successful_command_fails_when_postflight_executable_is_missing() {
             .stderr_summary
             .contains("postflight")
     );
+    let _ = fs::remove_dir_all(log_dir);
+}
+
+#[test]
+fn verified_update_bypasses_preflight_but_requires_exact_version_match() {
+    let log_dir = temp_dir("verified-update");
+    let runner = MockRunner {
+        outputs: Mutex::new(VecDeque::from([output(0, "updated\n", "")])),
+    };
+    let checker = MockChecker {
+        results: Mutex::new(VecDeque::from([true])),
+        versions: Mutex::new(VecDeque::from([Some("1.2.3")])),
+    };
+    let executor = InstallExecutor::with_checker(
+        runner,
+        checker,
+        ExecutionPolicy {
+            timeout: Duration::from_secs(1),
+            max_attempts: 1,
+            log_dir: log_dir.clone(),
+        },
+    );
+    let mut install_task = task();
+    install_task.check_command = Some("test-tool".to_string());
+    install_task.expected_version = Some("1.2.3".to_string());
+    install_task.version_probe = Some(VersionProbe {
+        executable: "test-tool".to_string(),
+        args: vec!["--version".to_string()],
+    });
+
+    let completed = executor.execute(
+        InstallJob::new(install_task, "apt"),
+        Arc::new(AtomicBool::new(false)),
+        |_| {},
+    );
+
+    assert_eq!(completed.item.state, QueueState::Success);
+    assert!(completed.preflight.is_none());
+    assert!(completed.postflight.expect("postflight result").installed);
+    assert!(completed.diagnostics.is_none());
+    let _ = fs::remove_dir_all(log_dir);
+}
+
+#[test]
+fn verified_update_fails_when_reported_version_differs() {
+    let log_dir = temp_dir("verified-version-mismatch");
+    let runner = MockRunner {
+        outputs: Mutex::new(VecDeque::from([output(0, "updated\n", "")])),
+    };
+    let checker = MockChecker {
+        results: Mutex::new(VecDeque::from([true])),
+        versions: Mutex::new(VecDeque::from([Some("2.0.0")])),
+    };
+    let executor = InstallExecutor::with_checker(
+        runner,
+        checker,
+        ExecutionPolicy {
+            timeout: Duration::from_secs(1),
+            max_attempts: 1,
+            log_dir: log_dir.clone(),
+        },
+    );
+    let mut install_task = task();
+    install_task.check_command = Some("test-tool".to_string());
+    install_task.expected_version = Some("1.2.3".to_string());
+    install_task.version_probe = Some(VersionProbe {
+        executable: "test-tool".to_string(),
+        args: vec!["--version".to_string()],
+    });
+
+    let completed = executor.execute(
+        InstallJob::new(install_task, "apt"),
+        Arc::new(AtomicBool::new(false)),
+        |_| {},
+    );
+
+    assert_eq!(completed.item.state, QueueState::Failed);
+    let diagnostics = completed.diagnostics.expect("diagnostics");
+    assert!(
+        diagnostics
+            .stderr_summary
+            .contains("expected version 1.2.3")
+    );
+    assert!(diagnostics.stderr_summary.contains("reported 2.0.0"));
     let _ = fs::remove_dir_all(log_dir);
 }

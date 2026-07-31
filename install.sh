@@ -21,7 +21,7 @@ Options:
   --uninstall        Remove t4e from the selected prefix.
   -h, --help         Show this help message.
 
-The installer supports x86_64 and aarch64 Linux releases only.
+The installer supports x86_64, i686, and aarch64 Linux releases.
 EOF
 }
 
@@ -97,8 +97,9 @@ fi
 
 case "$(uname -m)" in
   x86_64|amd64) ARCH="x86_64" ;;
+  i386|i486|i586|i686) ARCH="i686" ;;
   aarch64|arm64) ARCH="aarch64" ;;
-  *) die "unsupported CPU architecture: $(uname -m). Supported architectures: x86_64, aarch64." ;;
+  *) die "unsupported CPU architecture: $(uname -m). Supported architectures: x86_64, i686, aarch64." ;;
 esac
 
 command -v tar >/dev/null 2>&1 || die "tar is required to unpack T4E. Install tar and try again."
@@ -127,7 +128,9 @@ CHECKSUM_FILENAME="$(awk 'NR == 1 { print $2; exit }' "$CHECKSUM_PATH")"
 [[ "$EXPECTED_SHA" =~ ^[[:xdigit:]]{64}$ ]] || die "release checksum is malformed; refusing to install."
 [[ "$CHECKSUM_FILENAME" == "$ARCHIVE" || "$CHECKSUM_FILENAME" == "*$ARCHIVE" ]] || die "release checksum does not match '$ARCHIVE'; refusing to install."
 ACTUAL_SHA="$(sha256_file "$ARCHIVE_PATH")"
-[[ "${ACTUAL_SHA,,}" == "${EXPECTED_SHA,,}" ]] || die "checksum verification failed; the downloaded archive was not installed."
+ACTUAL_SHA_LOWER="$(printf '%s' "$ACTUAL_SHA" | tr '[:upper:]' '[:lower:]')"
+EXPECTED_SHA_LOWER="$(printf '%s' "$EXPECTED_SHA" | tr '[:upper:]' '[:lower:]')"
+[[ "$ACTUAL_SHA_LOWER" == "$EXPECTED_SHA_LOWER" ]] || die "checksum verification failed; the downloaded archive was not installed."
 
 # Refuse unexpected archive layouts before extraction. Release packages contain
 # one versioned directory and the executable beneath it.
@@ -166,10 +169,18 @@ if command -v tmux >/dev/null 2>&1; then
 else
   printf 'Warning: T4E requires tmux 3.x or newer. Install tmux before running T4E.\n' >&2
 fi
-if ! command -v codex >/dev/null 2>&1; then
-  printf 'Warning: T4E requires the Codex CLI signed in for AI features. Install it, then run: codex login\n' >&2
-elif ! codex login status >/dev/null 2>&1; then
-  printf 'Warning: Codex CLI is not signed in. Run: codex login\n' >&2
+ai_provider=""
+if command -v codex >/dev/null 2>&1 && codex login status >/dev/null 2>&1; then
+  ai_provider="Codex"
+elif command -v claude >/dev/null 2>&1 && claude auth status >/dev/null 2>&1; then
+  ai_provider="Claude"
+elif command -v gemini >/dev/null 2>&1 && {
+  [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ] || [ -s "${HOME:-}/.gemini/oauth_creds.json" ]
+}; then
+  ai_provider="Gemini"
+fi
+if [ -n "$ai_provider" ]; then
+  printf '%s AI provider credentials detected.\n' "$ai_provider"
 else
-  printf 'Codex CLI sign-in detected.\n'
+  printf 'Notice: HOME AI stays disabled until Codex, Claude, or Gemini is installed and signed in.\n' >&2
 fi

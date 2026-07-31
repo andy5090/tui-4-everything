@@ -63,7 +63,11 @@ mod unix {
         assert!(args.contains("--no-audio\n"));
         assert!(args.contains("--vo=caca\n"));
         assert!(args.contains("--vf=hflip\n"));
-        assert!(args.ends_with("av://v4l2:/dev/video2\n"));
+        if cfg!(target_os = "macos") {
+            assert!(args.ends_with("av://avfoundation:2:none\n"));
+        } else {
+            assert!(args.ends_with("av://v4l2:/dev/video2\n"));
+        }
         assert!(!args.contains("--device"));
 
         fs::remove_dir_all(root).expect("test directory removed");

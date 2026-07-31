@@ -7,7 +7,7 @@ use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -271,13 +271,43 @@ impl<R: CommandRunner, C: InstallChecker> InstallExecutor<R, C> {
         })
     }
 
+    fn verify_expected_version(&self, task: &InstallTask) -> Result<()> {
+        let expected_version = task
+            .expected_version
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("missing expected version"))?;
+        let probe = task
+            .version_probe
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("missing version probe"))?;
+        let result = self.checker.probe_version(probe)?;
+        if !result.installed {
+            bail!(
+                "version probe executable is not installed: {}",
+                probe.executable
+            );
+        }
+        match result.normalized_version.as_deref() {
+            Some(reported) if reported == expected_version => Ok(()),
+            Some(reported) => bail!(
+                "verified update expected version {} but reported {}",
+                expected_version,
+                reported
+            ),
+            None => bail!(
+                "verified update expected version {} but the probe output was not parseable",
+                expected_version
+            ),
+        }
+    }
+
     pub fn execute(
         &self,
         mut job: InstallJob,
         cancel: Arc<AtomicBool>,
         mut on_output: impl FnMut(OutputChunk),
     ) -> InstallJob {
-        if job.task.check_command.is_some() {
+        if job.task.check_command.is_some() && !job.task.is_verified_update() {
             match self.check_install(&job.task) {
                 Ok(result) => {
                     let installed = result.installed;
@@ -363,6 +393,23 @@ impl<R: CommandRunner, C: InstallChecker> InstallExecutor<R, C> {
                     true
                 };
                 if verified {
+                    if job.task.is_verified_update()
+                        && let Err(error) = self.verify_expected_version(&job.task)
+                    {
+                        let _ = job.item.transition(QueueState::Failed);
+                        job.diagnostics = Some(FailureDiagnostics::from_stderr(
+                            output.exit_code,
+                            &error.to_string(),
+                            log_path,
+                        ));
+                        if output.cancelled {
+                            return job;
+                        }
+                        if attempt < max_attempts && !cancel.load(Ordering::Relaxed) {
+                            let _ = job.item.transition(QueueState::Queued);
+                        }
+                        continue;
+                    }
                     let _ = job.item.transition(QueueState::Success);
                     job.diagnostics = None;
                     return job;

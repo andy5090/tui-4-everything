@@ -82,6 +82,7 @@ EOF
 
 make_fixture 1.2.3 x86_64
 make_fixture 1.2.3 aarch64
+make_fixture 1.2.3 i686
 make_fixture 9.9.9 x86_64
 make_mock_downloader curl
 make_mock_uname
@@ -111,11 +112,20 @@ rm "$TEST_DIR/bin/curl"
 make_mock_downloader wget
 checksum_tool="sha256sum"
 command -v "$checksum_tool" >/dev/null 2>&1 || checksum_tool="shasum"
-for tool in bash env cp chmod mkdir rm tar gzip "$checksum_tool" awk sed head mktemp mv; do
+for tool in bash env cp chmod mkdir rm tar gzip "$checksum_tool" awk sed head mktemp mv tr; do
   ln -sf "$(command -v "$tool")" "$TEST_DIR/bin/$tool"
 done
 PATH="$TEST_DIR/bin" T4E_TEST_FIXTURES="$TEST_DIR/fixtures" T4E_TEST_ARCH=aarch64 "$INSTALLER" --version v1.2.3 --prefix "$TEST_DIR/aarch-prefix" >/dev/null
 [[ "$("$TEST_DIR/aarch-prefix/t4e")" == "t4e-1.2.3" ]] || fail "aarch64 wget installation is incorrect"
+
+# 32-bit x86 kernels commonly report i386 through i686. Every alias must
+# resolve to the single i686 release artifact.
+for reported_arch in i386 i486 i586 i686; do
+  arch_prefix="$TEST_DIR/$reported_arch-prefix"
+  PATH="$TEST_DIR/bin" T4E_TEST_FIXTURES="$TEST_DIR/fixtures" T4E_TEST_ARCH="$reported_arch" \
+    "$INSTALLER" --version v1.2.3 --prefix "$arch_prefix" >/dev/null
+  [[ "$("$arch_prefix/t4e")" == "t4e-1.2.3" ]] || fail "$reported_arch installation is incorrect"
+done
 
 # A well-formed but incorrect checksum must not overwrite an existing executable.
 mkdir -p "$TEST_DIR/fail-prefix"

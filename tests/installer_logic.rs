@@ -1,8 +1,8 @@
 use t4e::catalog::models::{
     Audience, Capability, Check, Exposure, InstallMethod, Installer, Platform, RunSpec, Tool,
-    ToolCategory,
+    ToolCategory, VerifiedUpdate, VersionProbe,
 };
-use t4e::installer::engine::{InstallPolicy, build_install_task};
+use t4e::installer::engine::{InstallPolicy, build_install_task, build_verified_update_task};
 use t4e::installer::resolver::{Candidate, PackageSearch, rank_candidates, resolve_with_fallback};
 
 fn fake_tool(capabilities: Vec<Capability>) -> Tool {
@@ -66,6 +66,7 @@ fn script_installers_always_require_confirmation() {
         executable: None,
         install_cmd: Some("curl https://example.com/install.sh | bash".to_string()),
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -84,6 +85,7 @@ fn danger_tools_require_confirmation_even_for_pkg_manager() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -103,6 +105,7 @@ fn apt_command_uses_cached_sudo_noninteractively() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -111,6 +114,54 @@ fn apt_command_uses_cached_sudo_noninteractively() {
         task.command,
         "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y ripgrep"
     );
+}
+
+#[test]
+fn verified_update_task_uses_pinned_command_and_records_expected_version() {
+    let mut tool = fake_tool(vec![]);
+    tool.checks = vec![Check {
+        which: Some("ripgrep".to_string()),
+        version: None,
+        custom: None,
+    }];
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Apt,
+        package_hints: vec!["ripgrep".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+        verified_update: Some(VerifiedUpdate {
+            version: "1.2.3".to_string(),
+            version_probe: VersionProbe {
+                executable: "ripgrep".to_string(),
+                args: vec!["--version".to_string()],
+            },
+            command: "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep=1.2.3"
+                .to_string(),
+            verified_at: "2026-07-30".to_string(),
+            evidence: "https://example.com/ripgrep-1.2.3".to_string(),
+        }),
+    };
+
+    let task = build_verified_update_task(&tool, &installer, &InstallPolicy::default())
+        .expect("verified task builds");
+
+    assert_eq!(
+        task.command,
+        "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y ripgrep=1.2.3"
+    );
+    assert_eq!(task.check_command.as_deref(), Some("ripgrep"));
+    assert_eq!(task.expected_version.as_deref(), Some("1.2.3"));
+    assert_eq!(
+        task.version_probe,
+        Some(VersionProbe {
+            executable: "ripgrep".to_string(),
+            args: vec!["--version".to_string()],
+        })
+    );
+    assert!(task.is_verified_update());
 }
 
 #[test]
@@ -124,6 +175,7 @@ fn pipx_install_bootstraps_the_package_manager() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -162,6 +214,7 @@ fn yewtube_install_creates_managed_terminal_video_renderers() {
         executable: Some("t4e-yewtube".to_string()),
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -207,6 +260,7 @@ fn ascii_camera_install_reuses_mpv_without_opencv() {
         executable: Some("t4e-ascii-camera".to_string()),
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -235,6 +289,7 @@ fn cargo_install_uses_the_published_lockfile() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -269,6 +324,7 @@ fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -296,6 +352,7 @@ fn tplay_install_uses_an_isolated_current_yt_dlp() {
         executable: Some("t4e-tplay".to_string()),
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
     tool.installers = vec![installer.clone()];
 
@@ -342,6 +399,7 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
         executable: Some("t4e-youtube-tui-v2".to_string()),
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -387,6 +445,7 @@ fn newsboat_install_creates_a_first_feed_launcher() {
         executable: Some("t4e-newsboat".to_string()),
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
     tool.installers = vec![installer.clone()];
 
@@ -411,6 +470,7 @@ fn snap_command_uses_cached_sudo_noninteractively() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -430,6 +490,7 @@ fn classic_snap_command_uses_cached_sudo_noninteractively() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -449,6 +510,7 @@ fn lazyvim_uses_an_isolated_managed_configuration() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =
@@ -512,6 +574,7 @@ fn unsafe_package_hint_is_rejected() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     assert!(build_install_task(&tool, &installer, &InstallPolicy::default()).is_err());
@@ -528,6 +591,7 @@ fn non_script_installer_cannot_override_the_generated_command() {
         executable: None,
         install_cmd: Some("curl https://example.com | sh".to_string()),
         requires_confirm: false,
+        verified_update: None,
     };
 
     assert!(build_install_task(&tool, &installer, &InstallPolicy::default()).is_err());
@@ -551,6 +615,7 @@ fn fastfetch_uses_the_official_architecture_specific_deb() {
         executable: None,
         install_cmd: None,
         requires_confirm: false,
+        verified_update: None,
     };
 
     let task =

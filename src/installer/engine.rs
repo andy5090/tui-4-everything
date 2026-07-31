@@ -2,7 +2,8 @@ use anyhow::{Result, bail};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::catalog::models::{InstallMethod, Installer, RiskLevel, Tool};
+use crate::catalog::models::{InstallMethod, Installer, RiskLevel, Tool, VersionProbe};
+use crate::installer::checks::normalize_version;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct InstallTask {
@@ -18,6 +19,10 @@ pub struct InstallTask {
     #[serde(default)]
     pub requires_privileges: bool,
     pub requires_confirmation: bool,
+    #[serde(default)]
+    pub expected_version: Option<String>,
+    #[serde(default)]
+    pub version_probe: Option<VersionProbe>,
     pub queued_at: DateTime<Utc>,
 }
 
@@ -43,6 +48,10 @@ impl InstallTask {
             .map(String::as_str)
             .chain(self.additional_check_commands.iter().map(String::as_str))
     }
+
+    pub fn is_verified_update(&self) -> bool {
+        self.expected_version.is_some()
+    }
 }
 
 impl Default for InstallPolicy {
@@ -59,20 +68,53 @@ pub fn build_install_task(
     policy: &InstallPolicy,
 ) -> Result<InstallTask> {
     let command = materialize_command(installer)?;
+    build_task(tool, installer, policy, command, None, None)
+}
 
-    let requires_confirmation = match installer.method {
-        InstallMethod::Script => {
-            let _ = policy.enforce_script_confirmation;
-            true
-        }
-        _ => installer.requires_confirm || tool.risk_level() == RiskLevel::Danger,
-    };
+pub fn build_verified_update_task(
+    tool: &Tool,
+    installer: &Installer,
+    policy: &InstallPolicy,
+) -> Result<InstallTask> {
+    let verified_update = installer
+        .verified_update
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("installer for {} has no verified update", tool.id))?;
+    let expected_version = normalize_version(&verified_update.version)
+        .ok_or_else(|| anyhow::anyhow!("installer for {} has invalid verified version", tool.id))?;
+    build_task(
+        tool,
+        installer,
+        policy,
+        verified_update.command.clone(),
+        Some(expected_version),
+        Some(verified_update.version_probe.clone()),
+    )
+}
 
+fn build_task(
+    tool: &Tool,
+    installer: &Installer,
+    policy: &InstallPolicy,
+    command: String,
+    expected_version: Option<String>,
+    version_probe: Option<VersionProbe>,
+) -> Result<InstallTask> {
+    if expected_version.is_some() != version_probe.is_some() {
+        bail!("verified update metadata for {} is incomplete", tool.id);
+    }
+    let requires_confirmation = requires_confirmation(tool, installer, policy);
     if matches!(installer.method, InstallMethod::Script) && !requires_confirmation {
         bail!("script installer for {} must require confirmation", tool.id);
     }
 
     let mut check_commands = tool.install_check_commands(installer.platform.clone());
+    if expected_version.is_some() && check_commands.is_empty() {
+        bail!(
+            "verified update task for {} requires at least one executable check",
+            tool.id
+        );
+    }
     let check_command = (!check_commands.is_empty()).then(|| check_commands.remove(0));
     Ok(InstallTask {
         tool_id: tool.id.clone(),
@@ -83,8 +125,20 @@ pub fn build_install_task(
         install_timeout_sec: tool.install_timeout_sec,
         requires_privileges: !installer.system_packages.is_empty(),
         requires_confirmation,
+        expected_version,
+        version_probe,
         queued_at: Utc::now(),
     })
+}
+
+fn requires_confirmation(tool: &Tool, installer: &Installer, policy: &InstallPolicy) -> bool {
+    match installer.method {
+        InstallMethod::Script => {
+            let _ = policy.enforce_script_confirmation;
+            true
+        }
+        _ => installer.requires_confirm || tool.risk_level() == RiskLevel::Danger,
+    }
 }
 
 fn materialize_command(installer: &Installer) -> Result<String> {

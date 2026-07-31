@@ -85,6 +85,11 @@ jobs:
             binary: target/aarch64-unknown-linux-musl/release/t4e
             asset_label: linux-aarch64-musl
             use_zig: true
+          - runner: ubuntu-24.04
+            target: i686-unknown-linux-musl
+            binary: target/i686-unknown-linux-musl/release/t4e
+            asset_label: linux-i686-musl
+            use_zig: true
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -106,8 +111,8 @@ jobs:
           else
             cargo build --release --locked
           fi
-      - name: Install AArch64 emulator for cross-binary validation
-        if: matrix.target == 'aarch64-unknown-linux-musl'
+      - name: Install emulator for cross-binary validation
+        if: matrix.target == 'aarch64-unknown-linux-musl' || matrix.target == 'i686-unknown-linux-musl'
         run: |
           sudo apt-get update
           sudo apt-get install --yes qemu-user-static
@@ -117,6 +122,8 @@ jobs:
           cd "$temp_dir"
           if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
             qemu-aarch64-static "$GITHUB_WORKSPACE/${{ matrix.binary }}" validate
+          elif [[ "${{ matrix.target }}" == "i686-unknown-linux-musl" ]]; then
+            qemu-i386-static "$GITHUB_WORKSPACE/${{ matrix.binary }}" validate
           else
             "$GITHUB_WORKSPACE/${{ matrix.binary }}" validate
           fi

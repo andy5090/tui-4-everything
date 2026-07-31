@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
@@ -12,12 +13,17 @@ use t4e::storage::{
 };
 
 fn temp_file() -> PathBuf {
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
     std::env::temp_dir()
-        .join(format!("t4e-state-{}-{nonce}", std::process::id()))
+        .join(format!(
+            "t4e-state-{}-{nonce}-{}",
+            std::process::id(),
+            COUNTER.fetch_add(1, Ordering::Relaxed)
+        ))
         .join("state.json")
 }
 
@@ -33,6 +39,8 @@ fn persistent_state_round_trips_queue_and_logs() {
         install_timeout_sec: None,
         requires_privileges: false,
         requires_confirmation: false,
+        expected_version: None,
+        version_probe: None,
         queued_at: Utc::now(),
     };
     let expected = PersistentState {
