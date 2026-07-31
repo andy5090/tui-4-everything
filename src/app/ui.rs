@@ -12,7 +12,9 @@ use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
 
 use super::events::Screen;
-use super::state::{AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_LABELS};
+use super::state::{
+    AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_LABELS, ToolUpdateState,
+};
 
 const ACCENT: Color = Color::Cyan;
 const MUTED: Color = Color::DarkGray;
@@ -373,6 +375,16 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 )
+            } else if matches!(
+                app.tool_updates.get(&tool.id),
+                Some(ToolUpdateState::Drift { .. })
+            ) {
+                (
+                    "UPDATE",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
             } else if app.installed_tools.contains(&tool.id) {
                 ("INSTALLED", Style::default().fg(Color::Green))
             } else {
@@ -525,8 +537,25 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             (areas[0], Some(areas[1]))
         });
     let information_title = format!("Information · {}", app.system_overview.source);
-    let information = Paragraph::new(information).block(panel(&information_title));
-    frame.render_widget(information, information_summary_area);
+    let show_ai_split = information_summary_area.height >= 18;
+    let (information_render_area, ai_render_area) = if show_ai_split {
+        let areas = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(7), Constraint::Length(10)])
+            .split(information_summary_area);
+        (areas[0], Some(areas[1]))
+    } else if app.home_focus == HomeFocus::Assistant {
+        (Rect::default(), Some(information_summary_area))
+    } else {
+        (information_summary_area, None)
+    };
+    if !information_render_area.is_empty() {
+        let information = Paragraph::new(information).block(panel(&information_title));
+        frame.render_widget(information, information_render_area);
+    }
+    if let Some(ai_area) = ai_render_area {
+        render_home_ai(frame, app, ai_area);
+    }
     if let (Some((tool, job)), Some(log_area)) = (active_install, install_log_area) {
         let mut log_lines = vec![Line::styled(
             format!(
@@ -565,9 +594,83 @@ fn home_information_hints(app: &AppState) -> [&'static str; 2] {
         HomeFocus::Views => ["↑/↓ move view   → apps", "Enter open view   / search"],
         HomeFocus::AppList => [
             "← views   ↑/↓ move app",
-            "Enter run   I/U/R install/remove/reset",
+            "Enter run   I/U/R/u install/remove/reset/update",
+        ],
+        HomeFocus::Assistant => [
+            "← apps   [/] provider   a/Enter compose",
+            "A approve proposal   x interrupt",
         ],
     }
+}
+
+fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let focused = app.home_focus == HomeFocus::Assistant;
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(
+                format!("{} · ", app.ai_provider.label()),
+                Style::default().fg(if app.ai_ready() {
+                    Color::Green
+                } else {
+                    Color::Red
+                }),
+            ),
+            Span::raw(&app.ai_status),
+        ]),
+        Line::styled(
+            if app.ai_ready() {
+                format!("account: {} · [/] switch", app.ai_account)
+            } else {
+                "Connect Codex, Claude, or Gemini in Settings".to_string()
+            },
+            Style::default().fg(MUTED),
+        ),
+    ];
+    if let Some(action) = &app.pending_ai_action {
+        lines.push(Line::styled(
+            format!("Proposed: {} {}", action.kind, action.target),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    if let Some(message) = app.ai_messages.last() {
+        lines.push(Line::styled(
+            format!("{}:", message.role),
+            Style::default().fg(ACCENT),
+        ));
+        lines.extend(
+            message
+                .text
+                .lines()
+                .take(3)
+                .map(|line| Line::from(line.to_string())),
+        );
+    } else if !app.ai_streaming.is_empty() {
+        lines.extend(
+            app.ai_streaming
+                .lines()
+                .take(3)
+                .map(|line| Line::from(line.to_string())),
+        );
+    }
+    let composer = if app.ai_input_mode {
+        format!("> {}_", app.ai_input)
+    } else if app.ai_ready() {
+        "a / Enter: ask AI · A: approve proposal".to_string()
+    } else {
+        "AI input disabled until a provider is ready".to_string()
+    };
+    lines.push(Line::styled(
+        composer,
+        Style::default().fg(if focused { SELECTED } else { MUTED }),
+    ));
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(home_panel("Assistant", focused))
+            .wrap(Wrap { trim: true }),
+        area,
+    );
 }
 
 fn ansi_line(value: &str) -> Line<'static> {
@@ -801,6 +904,18 @@ fn catalog_install_status(app: &AppState, tool_id: &str) -> (String, Style) {
             QueueState::Failed => ("FAILED".to_string(), Style::default().fg(Color::Red)),
             QueueState::Idle => ("PENDING".to_string(), Style::default().fg(MUTED)),
         };
+    }
+    if let Some(ToolUpdateState::Drift {
+        installed,
+        verified,
+    }) = app.tool_updates.get(tool_id)
+    {
+        return (
+            format!("UPDATE {installed}→{verified}"),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        );
     }
     if app.installed_tools.contains(tool_id) {
         ("INSTALLED".to_string(), Style::default().fg(Color::Green))
@@ -1382,6 +1497,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             }
             HomeFocus::Views => "↑/↓ view  → apps  Enter open",
             HomeFocus::AppList => "← views  ↑/↓ app  Enter run",
+            HomeFocus::Assistant => "← apps  a/Enter compose  [/] provider  A approve",
         };
         if area.width < 90 {
             format!("{navigation}  Backspace back  ? help")

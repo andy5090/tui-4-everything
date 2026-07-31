@@ -4,13 +4,14 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 
+use crate::ai::service::{AiEvent, AiProvider, ProviderReadiness};
 use crate::catalog::models::{
     AppCategory, CatalogRegistry, InstallMethod, OutputFilter, Platform, RiskLevel, RunOption,
     Tool, ToolCategory,
 };
 use crate::codex::service::CodexEvent;
 use crate::installer::diagnostics::FailureDiagnostics;
-use crate::installer::engine::{InstallPolicy, build_install_task};
+use crate::installer::engine::{InstallPolicy, build_install_task, build_verified_update_task};
 use crate::installer::execution::{InstallJob, OutputChunk, OutputStream};
 use crate::installer::queue::QueueState;
 use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
@@ -24,7 +25,7 @@ use crate::system_info::{SystemOverview, cached_system_overview};
 
 use super::events::Screen;
 
-pub const NAVIGATION_TAB_LABELS: [&str; 5] = ["HOME", "AI", "Activity", "Settings", "Help"];
+pub const NAVIGATION_TAB_LABELS: [&str; 4] = ["HOME", "Activity", "Settings", "Help"];
 
 fn navigation_tab_label(index: usize) -> &'static str {
     NAVIGATION_TAB_LABELS.get(index).copied().unwrap_or("HOME")
@@ -78,6 +79,14 @@ impl HomeFilter {
 pub enum HomeFocus {
     Views,
     AppList,
+    Assistant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolUpdateState {
+    Current { installed: String, verified: String },
+    Drift { installed: String, verified: String },
+    Error(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -245,6 +254,7 @@ pub struct AppState {
     pub confirmation: Option<InstallConfirmation>,
     pub favorites: BTreeSet<String>,
     pub installed_tools: BTreeSet<String>,
+    pub tool_updates: BTreeMap<String, ToolUpdateState>,
     pub uninstalling_tools: BTreeSet<String>,
     pub uninstall_confirmation: Option<UninstallRequest>,
     pub recents: Vec<RecentItem>,
@@ -265,6 +275,8 @@ pub struct AppState {
     approved_camera_tools: BTreeSet<String>,
     return_after_app_close: bool,
     pub ai_account: String,
+    pub ai_provider: AiProvider,
+    pub ai_ready_providers: BTreeMap<AiProvider, String>,
     pub ai_status: String,
     pub ai_input: String,
     pub ai_input_mode: bool,
@@ -340,6 +352,7 @@ impl AppState {
             confirmation: None,
             favorites: saved.favorites.into_iter().collect(),
             installed_tools: BTreeSet::new(),
+            tool_updates: BTreeMap::new(),
             uninstalling_tools: BTreeSet::new(),
             uninstall_confirmation: None,
             recents: saved.recents,
@@ -359,8 +372,10 @@ impl AppState {
             installed_scan_complete: false,
             approved_camera_tools: BTreeSet::new(),
             return_after_app_close: false,
-            ai_account: "connecting".to_string(),
-            ai_status: "Starting local Codex app-server".to_string(),
+            ai_account: "not connected".to_string(),
+            ai_provider: AiProvider::Codex,
+            ai_ready_providers: BTreeMap::new(),
+            ai_status: "AI unavailable · connect a provider in Settings".to_string(),
             ai_input: String::new(),
             ai_input_mode: false,
             ai_messages: Vec::new(),
@@ -451,6 +466,8 @@ impl AppState {
         match key.code {
             KeyCode::Char('?') => self.screen = Screen::Help,
             KeyCode::Backspace | KeyCode::Esc => self.return_to_main(),
+            KeyCode::Tab if self.screen == Screen::Home => self.move_home_focus(1),
+            KeyCode::BackTab if self.screen == Screen::Home => self.move_home_focus(-1),
             KeyCode::Tab => self.move_navigation_tab(1),
             KeyCode::BackTab => self.move_navigation_tab(-1),
             KeyCode::Char('q') if self.screen == Screen::Home => self.should_quit = true,
@@ -458,8 +475,11 @@ impl AppState {
             KeyCode::Char('1') => self.screen = Screen::Home,
             KeyCode::Char('2') => self.open_all_catalog(),
             KeyCode::Char('3') => self.screen = Screen::Install,
-            KeyCode::Char('4') | KeyCode::Char('5') => self.screen = Screen::Agents,
-            KeyCode::Char('6') => self.screen = Screen::Logs,
+            KeyCode::Char('4') => {
+                self.screen = Screen::Home;
+                self.focus_ai();
+            }
+            KeyCode::Char('5') | KeyCode::Char('6') => self.screen = Screen::Logs,
             KeyCode::Char('7') => self.screen = Screen::Settings,
             KeyCode::Char('8') => self.screen = Screen::Help,
             _ => self.handle_screen_key(key.code),
@@ -537,10 +557,10 @@ impl AppState {
         match self.screen {
             Screen::Home | Screen::Catalog | Screen::Install => 0,
             Screen::Workspace => 0,
-            Screen::Agents => 1,
-            Screen::Logs => 2,
-            Screen::Settings => 3,
-            Screen::Help => 4,
+            Screen::Agents => 0,
+            Screen::Logs => 1,
+            Screen::Settings => 2,
+            Screen::Help => 3,
             Screen::AppView => 0,
         }
     }
@@ -557,10 +577,9 @@ impl AppState {
     fn open_navigation_tab(&mut self, index: usize) {
         self.screen = match index {
             0 => Screen::Home,
-            1 => Screen::Agents,
-            2 => Screen::Logs,
-            3 => Screen::Settings,
-            4 => Screen::Help,
+            1 => Screen::Logs,
+            2 => Screen::Settings,
+            3 => Screen::Help,
             _ => return,
         };
         self.status = format!("Opened {}", navigation_tab_label(index));
@@ -773,8 +792,22 @@ impl AppState {
             .tools
             .iter()
             .map(|tool| {
+                let state = match self.tool_updates.get(&tool.id) {
+                    Some(ToolUpdateState::Current { verified, .. }) => {
+                        format!("installed, T4E-verified {verified}")
+                    }
+                    Some(ToolUpdateState::Drift {
+                        installed,
+                        verified,
+                    }) => {
+                        format!("installed {installed}, verified target {verified}")
+                    }
+                    Some(ToolUpdateState::Error(_)) => "installed, version unknown".to_string(),
+                    None if self.installed_tools.contains(&tool.id) => "installed".to_string(),
+                    None => "not installed".to_string(),
+                };
                 format!(
-                    "{}={} (run: {})",
+                    "{}={} ({state}; run: {})",
                     tool.id,
                     tool.name,
                     tool.run_command_for_current_platform()
@@ -825,6 +858,7 @@ impl AppState {
 
     pub fn apply_execution(&mut self, mut completed: InstallJob) {
         let tool_id = completed.item.tool_id.clone();
+        let verified_version = completed.task.expected_version.clone();
         if self.should_quit
             && let Some(attempt) = completed.attempts.last()
             && attempt.cancelled
@@ -869,6 +903,15 @@ impl AppState {
         }
         if state == QueueState::Success {
             self.installed_tools.insert(tool_id.clone());
+            if let Some(verified) = verified_version {
+                self.tool_updates.insert(
+                    tool_id.clone(),
+                    ToolUpdateState::Current {
+                        installed: verified.clone(),
+                        verified,
+                    },
+                );
+            }
             self.push_recent(tool_id.clone(), "tool");
             if self.pending_tool_install.as_deref() == Some(tool_id.as_str()) {
                 self.pending_tool_install = None;
@@ -955,6 +998,26 @@ impl AppState {
     pub fn apply_installed_tools(&mut self, tool_ids: BTreeSet<String>) {
         self.installed_tools = tool_ids;
         self.installed_scan_complete = true;
+    }
+
+    pub fn apply_update_probe(
+        &mut self,
+        tool_id: &str,
+        installed: Result<String, String>,
+        verified: String,
+    ) {
+        let state = match installed {
+            Ok(installed) if installed == verified => ToolUpdateState::Current {
+                installed,
+                verified,
+            },
+            Ok(installed) => ToolUpdateState::Drift {
+                installed,
+                verified,
+            },
+            Err(error) => ToolUpdateState::Error(error),
+        };
+        self.tool_updates.insert(tool_id.to_string(), state);
     }
 
     pub fn mark_uninstall_started(&mut self, tool_id: &str) {
@@ -1132,73 +1195,131 @@ impl AppState {
     }
 
     pub fn apply_codex_event(&mut self, event: CodexEvent) {
-        match event {
+        let provider = AiProvider::Codex;
+        let event = match event {
             CodexEvent::Ready { account } => {
-                self.ai_account = account;
-                self.ai_status = "Ready".to_string();
+                AiEvent::ProviderReady(ProviderReadiness { provider, account })
             }
-            CodexEvent::ThreadStarted(id) => {
-                self.ai_status = format!("Thread {}", short_id(&id));
+            CodexEvent::ThreadStarted(id) => AiEvent::ThreadStarted { provider, id },
+            CodexEvent::TurnStarted(id) => AiEvent::TurnStarted { provider, id },
+            CodexEvent::Delta(text) => AiEvent::Delta { provider, text },
+            CodexEvent::Message(text) => AiEvent::Message { provider, text },
+            CodexEvent::ActionProposed { kind, target } => AiEvent::ActionProposed {
+                provider,
+                kind,
+                target,
+            },
+            CodexEvent::Usage(usage) => AiEvent::Usage { provider, usage },
+            CodexEvent::TurnCompleted(status) => AiEvent::TurnCompleted { provider, status },
+            CodexEvent::ApprovalDenied(method) => AiEvent::Diagnostic {
+                provider,
+                message: format!("denied app-server request {method}"),
+            },
+            CodexEvent::Diagnostic(message) => AiEvent::Diagnostic { provider, message },
+            CodexEvent::Error(message) => AiEvent::Error { provider, message },
+        };
+        self.apply_ai_event(event);
+    }
+
+    pub fn apply_ai_event(&mut self, event: AiEvent) {
+        match event {
+            AiEvent::ProviderReady(readiness) => {
+                self.ai_ready_providers
+                    .insert(readiness.provider, readiness.account.clone());
+                if self.ai_ready_providers.len() == 1
+                    || !self.ai_ready_providers.contains_key(&self.ai_provider)
+                {
+                    self.ai_provider = readiness.provider;
+                }
+                self.refresh_ai_identity();
             }
-            CodexEvent::TurnStarted(id) => {
+            AiEvent::ProviderUnavailable { provider, reason } => {
+                self.ai_ready_providers.remove(&provider);
+                self.ai_status = format!("{} unavailable: {reason}", provider.label());
+                self.refresh_ai_identity();
+            }
+            AiEvent::ThreadStarted { provider, id } if provider == self.ai_provider => {
+                self.ai_status = format!("{} thread {}", provider.label(), short_id(&id));
+            }
+            AiEvent::TurnStarted { provider, id } if provider == self.ai_provider => {
                 self.ai_streaming.clear();
-                self.ai_status = format!("Working {}", short_id(&id));
+                self.ai_status = format!("{} working {}", provider.label(), short_id(&id));
             }
-            CodexEvent::Delta(delta) => self.ai_streaming.push_str(&delta),
-            CodexEvent::Message(text) => {
+            AiEvent::Delta { provider, text } if provider == self.ai_provider => {
+                self.ai_streaming.push_str(&text);
+            }
+            AiEvent::Message { provider, text } => {
                 self.ai_streaming.clear();
                 self.ai_messages.push(AiMessage {
-                    role: "Codex".to_string(),
+                    role: provider.label().to_string(),
                     text,
                 });
                 if self.ai_messages.len() > 50 {
                     self.ai_messages.remove(0);
                 }
             }
-            CodexEvent::ActionProposed { kind, target } => match kind.as_str() {
-                "catalog_search" => {
-                    self.search_query = target.clone();
-                    self.catalog_index = 0;
-                    self.screen = Screen::Catalog;
-                    self.status = format!("AI searched the catalog for {target}");
-                }
-                "install_plan" if self.catalog.tools.iter().any(|tool| tool.id == target) => {
-                    self.search_query = target.clone();
-                    self.catalog_index = 0;
-                    self.screen = Screen::Catalog;
-                    self.status = format!("Review the install plan for {target}");
-                }
-                _ => {
+            AiEvent::ActionProposed {
+                provider,
+                kind,
+                target,
+            } => {
+                let target_exists = self.catalog.tools.iter().any(|tool| tool.id == target);
+                let supported = matches!(
+                    kind.as_str(),
+                    "catalog_search" | "install_plan" | "verified_update" | "launch_app"
+                );
+                if provider == self.ai_provider && target_exists && supported {
+                    self.pending_ai_action = Some(AiAction {
+                        kind: kind.clone(),
+                        target: target.clone(),
+                    });
+                    self.ai_status = format!("Proposed {kind} {target} · press A to approve");
+                } else {
                     self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
                 }
-            },
-            CodexEvent::Usage(usage) => self.ai_usage = usage,
-            CodexEvent::TurnCompleted(status) => {
-                self.ai_status = self.pending_ai_action.as_ref().map_or_else(
-                    || format!("Turn {status}"),
-                    |action| {
-                        format!(
-                            "Approval required for {} {}; press A to review",
-                            action.kind, action.target
-                        )
-                    },
-                );
             }
-            CodexEvent::ApprovalDenied(method) => {
-                self.ai_status = format!("Denied app-server request {method}");
+            AiEvent::Usage { provider, usage } if provider == self.ai_provider => {
+                self.ai_usage = usage;
+            }
+            AiEvent::TurnCompleted { provider, status } if provider == self.ai_provider => {
+                if self.pending_ai_action.is_none() {
+                    self.ai_status = format!("{} turn {status}", provider.label());
+                }
+            }
+            AiEvent::Diagnostic { provider, message } => {
                 self.logs
-                    .push(timestamp_log(format!("codex: denied {method}")));
+                    .push(timestamp_log(format!("{}: {message}", provider.label())));
             }
-            CodexEvent::Diagnostic(diagnostic) => {
+            AiEvent::Error { provider, message } => {
+                self.ai_status = format!("{} error: {message}", provider.label());
                 self.logs
-                    .push(timestamp_log(format!("codex diagnostic: {diagnostic}")));
+                    .push(timestamp_log(format!("{}: {message}", provider.label())));
             }
-            CodexEvent::Error(error) => {
-                self.ai_status = format!("Error: {error}");
-                self.logs.push(timestamp_log(format!("codex: {error}")));
-            }
+            _ => {}
         }
         self.trim_logs();
+    }
+
+    pub fn add_ai_provider(&mut self, readiness: ProviderReadiness) {
+        self.apply_ai_event(AiEvent::ProviderReady(readiness));
+    }
+
+    pub fn ai_ready(&self) -> bool {
+        self.ai_ready_providers.contains_key(&self.ai_provider)
+    }
+
+    fn refresh_ai_identity(&mut self) {
+        if let Some(account) = self.ai_ready_providers.get(&self.ai_provider) {
+            self.ai_account = account.clone();
+            self.ai_status = format!("{} ready", self.ai_provider.label());
+        } else if let Some((&provider, account)) = self.ai_ready_providers.iter().next() {
+            self.ai_provider = provider;
+            self.ai_account = account.clone();
+            self.ai_status = format!("{} ready", provider.label());
+        } else {
+            self.ai_account = "not connected".to_string();
+            self.ai_status = "AI unavailable · connect a provider in Settings".to_string();
+        }
     }
 
     fn handle_search_key(&mut self, code: KeyCode) {
@@ -1236,7 +1357,7 @@ impl AppState {
             }
             KeyCode::Enter => {
                 let prompt = self.ai_input.trim().to_string();
-                if !prompt.is_empty() {
+                if !prompt.is_empty() && self.ai_ready() {
                     self.ai_messages.push(AiMessage {
                         role: "You".to_string(),
                         text: prompt.clone(),
@@ -1288,21 +1409,31 @@ impl AppState {
                     self.ai_status = "AI action approval phrase did not match".to_string();
                     return;
                 }
-                if confirmation.action.kind == "workspace_launch"
-                    && let Some(index) = self
-                        .workspaces
-                        .workspaces
-                        .iter()
-                        .position(|workspace| workspace.id == confirmation.action.target)
-                {
-                    self.workspace_index = index;
-                    self.screen = Screen::Workspace;
-                    self.request_workspace_launch();
-                    self.logs.push(timestamp_log(format!(
-                        "codex: approved workspace_launch {}",
-                        confirmation.action.target
-                    )));
+                let target = confirmation.action.target;
+                match confirmation.action.kind.as_str() {
+                    "catalog_search" => {
+                        self.screen = Screen::Home;
+                        self.home_filter_index = HomeFilter::ALL
+                            .iter()
+                            .position(|filter| *filter == HomeFilter::AllApps)
+                            .unwrap_or_default();
+                        self.search_query = target.clone();
+                        self.home_app_index = 0;
+                        self.home_focus = HomeFocus::AppList;
+                        self.status = format!("AI searched HOME for {target}");
+                    }
+                    "install_plan" => {
+                        self.queue_tool_ids(vec![target.clone()]);
+                        self.screen = Screen::Install;
+                    }
+                    "verified_update" => self.queue_verified_update(&target),
+                    "launch_app" => self.request_tool_configuration(&target),
+                    _ => self.ai_status = "Unsupported AI action".to_string(),
                 }
+                self.logs.push(timestamp_log(format!(
+                    "ai: approved {} {target}",
+                    confirmation.action.kind
+                )));
             }
             _ => {}
         }
@@ -1313,9 +1444,17 @@ impl AppState {
             Screen::Home => match code {
                 KeyCode::Down | KeyCode::Char('j') => self.move_home_selection(1),
                 KeyCode::Up | KeyCode::Char('k') => self.move_home_selection(-1),
-                KeyCode::Left | KeyCode::Char('h') => self.home_focus = HomeFocus::Views,
+                KeyCode::Left | KeyCode::Char('h') => {
+                    self.home_focus = if self.home_focus == HomeFocus::Assistant {
+                        HomeFocus::AppList
+                    } else {
+                        HomeFocus::Views
+                    };
+                }
                 KeyCode::Right | KeyCode::Char('l') => {
-                    if !self.home_tools().is_empty() {
+                    if self.home_focus == HomeFocus::AppList {
+                        self.home_focus = HomeFocus::Assistant;
+                    } else if !self.home_tools().is_empty() {
                         self.home_focus = HomeFocus::AppList;
                     }
                 }
@@ -1327,6 +1466,7 @@ impl AppState {
                         self.status = format!("Browsing {}", self.selected_home_filter().label());
                     }
                 }
+                KeyCode::Enter if self.home_focus == HomeFocus::Assistant => self.focus_ai(),
                 KeyCode::Enter => self.request_selected_tool_launch(),
                 KeyCode::Char('/') => {
                     self.begin_home_search();
@@ -1334,10 +1474,17 @@ impl AppState {
                 KeyCode::Char('I') => self.queue_selected_tool(),
                 KeyCode::Char('U') => self.request_selected_uninstall(),
                 KeyCode::Char('R') => self.request_selected_reinstall(),
+                KeyCode::Char('u') => self.request_selected_verified_update(),
                 KeyCode::Char('f') => self.toggle_favorite(),
                 KeyCode::Char('c') => self.open_all_catalog(),
                 KeyCode::Char('i') => self.screen = Screen::Install,
-                KeyCode::Char('a') => self.screen = Screen::Agents,
+                KeyCode::Char('a') => self.focus_ai(),
+                KeyCode::Char('[') => self.cycle_ai_provider(-1),
+                KeyCode::Char(']') => self.cycle_ai_provider(1),
+                KeyCode::Char('x') if self.home_focus == HomeFocus::Assistant => {
+                    self.effects.push_back(AppEffect::CodexInterrupt)
+                }
+                KeyCode::Char('A') => self.begin_ai_action_confirmation(),
                 KeyCode::Char('s') => self.screen = Screen::Settings,
                 _ => {}
             },
@@ -1349,6 +1496,7 @@ impl AppState {
                 KeyCode::Char('I') => self.queue_selected_tool(),
                 KeyCode::Char('U') => self.request_selected_uninstall(),
                 KeyCode::Char('R') => self.request_selected_reinstall(),
+                KeyCode::Char('u') => self.request_selected_verified_update(),
                 KeyCode::Char('f') => self.toggle_favorite(),
                 _ => {}
             },
@@ -1374,17 +1522,10 @@ impl AppState {
                 _ => {}
             },
             Screen::AppView => {}
-            Screen::Agents => match code {
-                KeyCode::Down | KeyCode::Char('j') => self.move_agent(1),
-                KeyCode::Up | KeyCode::Char('k') => self.move_agent(-1),
-                KeyCode::Enter | KeyCode::Char('i') => {
-                    self.ai_input_mode = true;
-                    self.ai_status = "Compose request".to_string();
-                }
-                KeyCode::Char('x') => self.effects.push_back(AppEffect::CodexInterrupt),
-                KeyCode::Char('A') => self.begin_ai_action_confirmation(),
-                _ => {}
-            },
+            Screen::Agents => {
+                self.screen = Screen::Home;
+                self.focus_ai();
+            }
             Screen::Logs => match code {
                 KeyCode::Down | KeyCode::Char('j') => self.move_activity(1),
                 KeyCode::Up | KeyCode::Char('k') => self.move_activity(-1),
@@ -1696,7 +1837,48 @@ impl AppState {
                 self.home_app_index =
                     move_index(self.home_app_index, self.home_tools().len(), delta);
             }
+            HomeFocus::Assistant => {}
         }
+    }
+
+    fn move_home_focus(&mut self, delta: isize) {
+        let current = match self.home_focus {
+            HomeFocus::Views => 0,
+            HomeFocus::AppList => 1,
+            HomeFocus::Assistant => 2,
+        };
+        self.home_focus = match move_index(current, 3, delta) {
+            0 => HomeFocus::Views,
+            1 => HomeFocus::AppList,
+            _ => HomeFocus::Assistant,
+        };
+    }
+
+    fn focus_ai(&mut self) {
+        self.screen = Screen::Home;
+        self.home_focus = HomeFocus::Assistant;
+        if self.ai_ready() {
+            self.ai_input_mode = true;
+            self.ai_status = format!("Compose with {}", self.ai_provider.label());
+        } else {
+            self.ai_input_mode = false;
+            self.ai_status =
+                "AI unavailable · connect Codex, Claude, or Gemini in Settings".to_string();
+        }
+    }
+
+    fn cycle_ai_provider(&mut self, delta: isize) {
+        let providers = self.ai_ready_providers.keys().copied().collect::<Vec<_>>();
+        if providers.is_empty() {
+            self.refresh_ai_identity();
+            return;
+        }
+        let current = providers
+            .iter()
+            .position(|provider| *provider == self.ai_provider)
+            .unwrap_or_default();
+        self.ai_provider = providers[move_index(current, providers.len(), delta)];
+        self.refresh_ai_identity();
     }
 
     fn begin_home_search(&mut self) {
@@ -1719,6 +1901,57 @@ impl AppState {
             return;
         };
         self.queue_tool_ids(vec![tool.id.clone()]);
+    }
+
+    fn request_selected_verified_update(&mut self) {
+        let Some(tool_id) = self.selected_action_tool().map(|tool| tool.id.clone()) else {
+            self.status = "No app selected".to_string();
+            return;
+        };
+        self.queue_verified_update(&tool_id);
+    }
+
+    fn queue_verified_update(&mut self, tool_id: &str) {
+        let platform = if cfg!(target_os = "macos") {
+            Platform::Macos
+        } else {
+            Platform::Linux
+        };
+        let Some(tool) = self.catalog.tools.iter().find(|tool| tool.id == tool_id) else {
+            self.status = format!("Unknown app {tool_id}");
+            return;
+        };
+        let Some(installer) = tool
+            .installers
+            .iter()
+            .find(|installer| installer.platform == platform)
+        else {
+            self.status = format!("No installer for {tool_id} on this platform");
+            return;
+        };
+        let Ok(task) = build_verified_update_task(tool, installer, &InstallPolicy::default())
+        else {
+            self.status = format!("No T4E-verified update for {tool_id}");
+            return;
+        };
+        if self
+            .queue
+            .iter()
+            .any(|job| job.item.tool_id == tool_id && job.item.state == QueueState::Installing)
+        {
+            self.status = format!("{tool_id} is already installing");
+            return;
+        }
+        self.queue.retain(|job| job.item.tool_id != tool_id);
+        let channel = format!(
+            "verified {}",
+            task.expected_version.as_deref().unwrap_or("version")
+        );
+        self.queue.push(InstallJob::new(task, channel));
+        self.install_index = self.queue.len().saturating_sub(1);
+        self.screen = Screen::Install;
+        self.status = format!("Queued T4E-verified update for {tool_id}");
+        self.request_execute_selected();
     }
 
     fn request_selected_uninstall(&mut self) {
@@ -2226,7 +2459,12 @@ impl AppState {
             self.status = format!("{} is not queued", job.item.tool_id);
             return;
         }
-        let Some(current_task) = self.build_current_task(&job.item.tool_id) else {
+        let current_task = if job.task.is_verified_update() {
+            build_current_verified_task(&self.catalog, &job.item.tool_id)
+        } else {
+            self.build_current_task(&job.item.tool_id)
+        };
+        let Some(current_task) = current_task else {
             self.status = format!(
                 "Cannot verify the saved install plan for {}",
                 job.item.tool_id
@@ -2244,9 +2482,13 @@ impl AppState {
         if job.task.requires_confirmation || self.settings.confirm_all_installs {
             let tool_id = job.item.tool_id.clone();
             let typed = job.task.requires_confirmation;
+            let expected = job.task.expected_version.as_ref().map_or_else(
+                || format!("INSTALL {tool_id}"),
+                |version| format!("UPDATE {tool_id} {version}"),
+            );
             self.confirmation = Some(InstallConfirmation {
                 command: job.task.command.clone(),
-                expected: format!("INSTALL {tool_id}"),
+                expected,
                 input: String::new(),
                 typed,
                 tool_id,
@@ -2599,6 +2841,23 @@ fn build_current_task(
     build_install_task(tool, installer, &InstallPolicy::default()).ok()
 }
 
+fn build_current_verified_task(
+    catalog: &CatalogRegistry,
+    tool_id: &str,
+) -> Option<crate::installer::engine::InstallTask> {
+    let platform = if cfg!(target_os = "macos") {
+        Platform::Macos
+    } else {
+        Platform::Linux
+    };
+    let tool = catalog.tools.iter().find(|tool| tool.id == tool_id)?;
+    let installer = tool
+        .installers
+        .iter()
+        .find(|installer| installer.platform == platform)?;
+    build_verified_update_task(tool, installer, &InstallPolicy::default()).ok()
+}
+
 fn install_plan_changed(
     saved: &crate::installer::engine::InstallTask,
     current: &crate::installer::engine::InstallTask,
@@ -2610,6 +2869,8 @@ fn install_plan_changed(
         || saved.install_timeout_sec != current.install_timeout_sec
         || saved.requires_privileges != current.requires_privileges
         || saved.requires_confirmation != current.requires_confirmation
+        || saved.expected_version != current.expected_version
+        || saved.version_probe != current.version_probe
 }
 
 fn uninstall_request_for_tool(tool: &Tool, reinstall: bool) -> Option<UninstallRequest> {

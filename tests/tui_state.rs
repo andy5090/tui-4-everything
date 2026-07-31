@@ -6,6 +6,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent,
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::style::Color;
+use t4e::ai::service::{AiEvent, AiProvider, ProviderReadiness};
 use t4e::app::events::Screen;
 use t4e::app::state::{AppEffect, AppState, HomeFilter, HomeFocus};
 use t4e::app::ui::render;
@@ -58,7 +59,7 @@ fn tab_switches_header_sections_outside_running_apps() {
     assert_eq!(app.catalog_index, 1);
 
     app.handle_key(key(KeyCode::Tab));
-    assert_eq!(app.screen, Screen::Agents);
+    assert_eq!(app.screen, Screen::Logs);
     assert_eq!(app.catalog_index, 1);
 
     app.handle_key(key(KeyCode::BackTab));
@@ -485,12 +486,15 @@ fn required_launch_argument_is_prompted_and_shell_quoted() {
     }
     app.handle_key(key(KeyCode::Enter));
 
-    assert!(matches!(
-        app.take_effect(),
-        Some(AppEffect::LaunchTool(request))
-            if request.tool_id == "tplay"
-                && request.command == "t4e-tplay 'https://example.com/watch?q=a'\"'\"'b;echo unsafe'"
-    ));
+    let Some(AppEffect::LaunchTool(request)) = app.take_effect() else {
+        panic!("launch request expected");
+    };
+    assert_eq!(request.tool_id, "tplay");
+    assert!(
+        request
+            .command
+            .ends_with("'https://example.com/watch?q=a'\"'\"'b;echo unsafe'")
+    );
 }
 
 #[test]
@@ -510,11 +514,28 @@ fn tplay_uninstall_removes_managed_runtime_and_cargo_binary() {
     let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
         panic!("uninstall request expected");
     };
-    assert_eq!(request.method, InstallMethod::Tplay);
-    assert!(request.command.contains("t4e-tplay"));
-    assert!(request.command.contains("/t4e/tplay"));
-    assert!(request.command.contains("cargo uninstall tplay"));
-    assert_eq!(request.check_command, "t4e-tplay");
+    assert_eq!(
+        request.method,
+        if cfg!(target_os = "macos") {
+            InstallMethod::Cargo
+        } else {
+            InstallMethod::Tplay
+        }
+    );
+    if !cfg!(target_os = "macos") {
+        assert!(request.command.contains("t4e-tplay"));
+        assert!(request.command.contains("/t4e/tplay"));
+    }
+    assert!(request.command.contains("cargo uninstall"));
+    assert!(request.command.contains("tplay"));
+    assert_eq!(
+        request.check_command,
+        if cfg!(target_os = "macos") {
+            "tplay"
+        } else {
+            "t4e-tplay"
+        }
+    );
 }
 
 #[test]
@@ -559,12 +580,16 @@ fn reset_reinstall_recovers_a_partial_termusic_install_and_stale_queue_item() {
         .as_ref()
         .expect("reinstall confirmation opens");
     assert!(confirmation.reinstall);
-    assert!(
-        confirmation
-            .command
-            .contains("cargo uninstall \"$package\"")
-    );
-    assert!(confirmation.command.contains("termusic termusic-server"));
+    if cfg!(target_os = "macos") {
+        assert!(confirmation.command.contains("brew uninstall termusic"));
+    } else {
+        assert!(
+            confirmation
+                .command
+                .contains("cargo uninstall \"$package\"")
+        );
+        assert!(confirmation.command.contains("termusic termusic-server"));
+    }
 
     app.handle_key(key(KeyCode::Enter));
     let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
@@ -589,12 +614,22 @@ fn reset_reinstall_recovers_a_partial_termusic_install_and_stale_queue_item() {
 
 #[test]
 fn reset_reinstall_tolerates_missing_packages_across_install_channels() {
-    for (tool_id, installed_probe) in [
-        ("lynx", "dpkg-query"),
-        ("asciiquarium", "snap list"),
-        ("yewtube", "pipx list --short"),
-        ("youtube-tui", "cargo uninstall"),
-    ] {
+    let cases = if cfg!(target_os = "macos") {
+        [
+            ("lynx", "brew list"),
+            ("asciiquarium", "brew list"),
+            ("yewtube", "brew list"),
+            ("youtube-tui", "cargo uninstall"),
+        ]
+    } else {
+        [
+            ("lynx", "dpkg-query"),
+            ("asciiquarium", "snap list"),
+            ("yewtube", "pipx list --short"),
+            ("youtube-tui", "cargo uninstall"),
+        ]
+    };
+    for (tool_id, installed_probe) in cases {
         let mut app = app();
         app.handle_key(key(KeyCode::Char('2')));
         app.handle_key(key(KeyCode::Char('/')));
@@ -636,10 +671,14 @@ fn installed_app_can_emit_a_confirmed_package_manager_uninstall() {
         panic!("uninstall request expected");
     };
     assert_eq!(request.tool_id, "ripgrep");
-    assert_eq!(
-        request.command,
-        "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y ripgrep"
-    );
+    if cfg!(target_os = "macos") {
+        assert_eq!(request.command, "brew uninstall ripgrep");
+    } else {
+        assert_eq!(
+            request.command,
+            "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y ripgrep"
+        );
+    }
     assert_eq!(request.check_command, "rg");
     app.mark_uninstall_started("ripgrep");
     app.apply_uninstall_result("ripgrep", true, "", false);
@@ -676,7 +715,8 @@ fn lazyvim_uninstall_only_removes_the_t4e_profile() {
 fn legacy_workspace_templates_are_not_a_primary_menu_destination() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('4')));
-    assert_eq!(app.screen, Screen::Agents);
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::Assistant);
     assert!(app.take_effect().is_none());
 }
 
@@ -1068,7 +1108,7 @@ fn mouse_clicks_header_navigation_tabs() {
         },
         24,
     );
-    assert_eq!(app.screen, Screen::Agents);
+    assert_eq!(app.screen, Screen::Logs);
 
     app.handle_mouse(
         MouseEvent {
@@ -1084,7 +1124,7 @@ fn mouse_clicks_header_navigation_tabs() {
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: 36,
+            column: 32,
             row: 1,
             modifiers: KeyModifiers::NONE,
         },
@@ -1258,7 +1298,7 @@ fn narrow_layout_keeps_every_screen_target_and_back_key_visible() {
 
     assert!(rendered.contains("T4E"));
     assert!(rendered.contains("HOME"));
-    assert!(rendered.contains("AI"));
+    assert!(!rendered.contains(" AI "));
     assert!(rendered.contains("Activity"));
     assert!(rendered.contains("Settings"));
     assert!(rendered.contains("Help"));
@@ -1493,7 +1533,8 @@ fn help_tab_explains_capabilities_and_derived_risk() {
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(app.screen, Screen::Home);
     app.handle_key(key(KeyCode::BackTab));
-    assert_eq!(app.screen, Screen::Help);
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::Assistant);
 }
 
 #[test]
@@ -1859,8 +1900,10 @@ fn queue_run_schedules_multiple_app_jobs_sequentially() {
 #[test]
 fn ai_home_composes_prompts_and_applies_stream_events() {
     let mut app = app();
-    app.handle_key(key(KeyCode::Char('5')));
-    app.handle_key(key(KeyCode::Enter));
+    app.apply_codex_event(CodexEvent::Ready {
+        account: "chatgpt".to_string(),
+    });
+    app.handle_key(key(KeyCode::Char('4')));
     for ch in "show workspaces".chars() {
         app.handle_key(key(KeyCode::Char(ch)));
     }
@@ -1870,9 +1913,6 @@ fn ai_home_composes_prompts_and_applies_stream_events() {
         panic!("Codex prompt expected");
     };
     assert_eq!(prompt, "show workspaces");
-    app.apply_codex_event(CodexEvent::Ready {
-        account: "chatgpt".to_string(),
-    });
     app.apply_codex_event(CodexEvent::TurnStarted("turn_123".to_string()));
     app.apply_codex_event(CodexEvent::Delta("Available ".to_string()));
     app.apply_codex_event(CodexEvent::Delta("workspaces".to_string()));
@@ -1912,8 +1952,12 @@ fn ai_context_describes_the_catalog_and_queue_without_legacy_workspaces() {
 
     let context = app.ai_environment_context();
 
-    assert!(context.contains("platform: linux"));
-    assert!(context.contains("yazi=Yazi (run: yazi)"));
+    assert!(context.contains(if cfg!(target_os = "macos") {
+        "platform: macos"
+    } else {
+        "platform: linux"
+    }));
+    assert!(context.contains("yazi=Yazi (not installed; run: yazi)"));
     assert!(context.contains("yazi:Queued"));
     assert!(!context.contains("video-desk=Video Desk"));
     assert!(!context.contains("workspaces:"));
@@ -1939,7 +1983,7 @@ fn codex_stderr_diagnostic_does_not_replace_working_status() {
 #[test]
 fn ai_rejects_legacy_workspace_actions_hidden_from_the_main_product() {
     let mut app = app();
-    app.handle_key(key(KeyCode::Char('5')));
+    app.handle_key(key(KeyCode::Char('4')));
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "workspace_launch".to_string(),
         target: "video-desk".to_string(),
@@ -1947,7 +1991,7 @@ fn ai_rejects_legacy_workspace_actions_hidden_from_the_main_product() {
     assert!(app.pending_ai_action.is_none());
     assert!(app.take_effect().is_none());
     assert!(app.ai_status.contains("Rejected unsupported AI action"));
-    assert_eq!(app.screen, Screen::Agents);
+    assert_eq!(app.screen, Screen::Home);
 }
 
 #[test]
@@ -1955,11 +1999,52 @@ fn ai_catalog_search_is_bounded_to_local_navigation() {
     let mut app = app();
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "catalog_search".to_string(),
-        target: "music".to_string(),
+        target: "yazi".to_string(),
     });
+    assert_eq!(app.screen, Screen::Home);
+    assert!(app.pending_ai_action.is_some());
+    app.handle_key(key(KeyCode::Char('A')));
+    for ch in "APPROVE catalog_search yazi".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.search_query, "yazi");
+    assert!(app.take_effect().is_none());
+}
 
-    assert_eq!(app.screen, Screen::Catalog);
-    assert_eq!(app.search_query, "music");
+#[test]
+fn home_ai_is_disabled_without_a_ready_provider_and_enables_after_login() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('a')));
+    assert_eq!(app.screen, Screen::Home);
+    assert_eq!(app.home_focus, HomeFocus::Assistant);
+    assert!(!app.ai_input_mode);
+    assert!(app.ai_status.contains("unavailable"));
+
+    app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
+        provider: AiProvider::Claude,
+        account: "max subscription".to_string(),
+    }));
+    app.handle_key(key(KeyCode::Char('a')));
+    assert!(app.ai_input_mode);
+    assert_eq!(app.ai_provider, AiProvider::Claude);
+}
+
+#[test]
+fn termleaf_update_queues_only_the_t4e_verified_version() {
+    let mut app = app();
+    open_catalog_search(&mut app, "termleaf");
+    app.installed_tools.insert("termleaf".to_string());
+    app.apply_update_probe("termleaf", Ok("0.2.0".to_string()), "0.3.0".to_string());
+
+    app.handle_key(key(KeyCode::Char('u')));
+
+    let job = app.queue.last().expect("verified update queued");
+    assert_eq!(job.task.expected_version.as_deref(), Some("0.3.0"));
+    assert!(job.task.command.contains("v0.3.0"));
+    assert!(!job.task.command.contains("/latest"));
+    assert!(app.confirmation.is_some());
     assert!(app.take_effect().is_none());
 }
 
@@ -2090,8 +2175,20 @@ fn stale_saved_install_plan_is_refreshed_from_the_current_registry() {
 
     let app = AppState::persistent(catalog, workspaces, path.clone()).expect("state loads");
     let refreshed = &app.queue[0];
-    assert_eq!(refreshed.task.method, InstallMethod::Snap);
-    assert_eq!(refreshed.item.channel, "snap");
+    let expected_method = if cfg!(target_os = "macos") {
+        InstallMethod::Brew
+    } else {
+        InstallMethod::Snap
+    };
+    assert_eq!(refreshed.task.method, expected_method);
+    assert_eq!(
+        refreshed.item.channel,
+        if cfg!(target_os = "macos") {
+            "brew"
+        } else {
+            "snap"
+        }
+    );
     assert_eq!(refreshed.item.attempts, 0);
     assert!(refreshed.attempts.is_empty());
     assert!(refreshed.diagnostics.is_none());

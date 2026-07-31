@@ -17,8 +17,8 @@ use crossterm::terminal::{
 use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
+use crate::ai::service::AiService;
 use crate::catalog::models::{InstallMethod, OutputFilter};
-use crate::codex::service::{CodexCommand, CodexService};
 use crate::installer::checks::{InstallChecker, SystemInstallChecker};
 use crate::installer::execution::{
     CommandRunner, ExecutionPolicy, InstallExecutor, InstallJob, OutputChunk, SystemCommandRunner,
@@ -41,12 +41,15 @@ pub fn run(mut app: AppState) -> Result<()> {
     let mut active = HashMap::<String, ActiveInstall>::new();
     let mut app_sizes = HashMap::<String, (u16, u16)>::new();
     let tmux = TmuxRuntime::new(SystemTmuxRunner);
-    let codex = CodexService::spawn(
+    let ai = AiService::spawn(
         std::env::current_dir()
             .unwrap_or_default()
             .display()
             .to_string(),
     );
+    for readiness in ai.ready_providers().iter().cloned() {
+        app.add_ai_provider(readiness);
+    }
     let checker = SystemInstallChecker;
     let installed = app
         .catalog
@@ -65,6 +68,38 @@ pub fn run(mut app: AppState) -> Result<()> {
         })
         .collect::<BTreeSet<_>>();
     app.apply_installed_tools(installed);
+    let update_probes = app
+        .catalog
+        .tools
+        .iter()
+        .filter_map(|tool| {
+            let platform = if cfg!(target_os = "macos") {
+                crate::catalog::models::Platform::Macos
+            } else {
+                crate::catalog::models::Platform::Linux
+            };
+            let verified = tool
+                .installers
+                .iter()
+                .find(|installer| installer.platform == platform)?
+                .verified_update
+                .as_ref()?;
+            app.installed_tools.contains(&tool.id).then(|| {
+                let installed = checker
+                    .probe_version(&verified.version_probe)
+                    .map_err(|error| error.to_string())
+                    .and_then(|result| {
+                        result
+                            .normalized_version
+                            .ok_or_else(|| "version probe returned no version".to_string())
+                    });
+                (tool.id.clone(), installed, verified.version.clone())
+            })
+        })
+        .collect::<Vec<_>>();
+    for (tool_id, installed, verified) in update_probes {
+        app.apply_update_probe(&tool_id, installed, verified);
+    }
     match tmux.list_managed() {
         Ok(sessions) => {
             let has_app_session = sessions.iter().any(|session| session.name == "t4e-apps");
@@ -82,13 +117,13 @@ pub fn run(mut app: AppState) -> Result<()> {
 
     while !app.should_quit {
         drain_runtime_events(&mut app, &event_receiver, &mut active);
-        drain_codex_events(&mut app, &codex);
+        drain_ai_events(&mut app, &ai);
         process_effects(
             &mut app,
             &event_sender,
             &mut active,
             &tmux,
-            &codex,
+            &ai,
             &mut session,
         );
         sync_app_viewport(&mut app, &tmux, &mut app_sizes, &session);
@@ -117,7 +152,7 @@ pub fn run(mut app: AppState) -> Result<()> {
                 &event_sender,
                 &mut active,
                 &tmux,
-                &codex,
+                &ai,
                 &mut session,
             );
             persist_or_report(&mut app);
@@ -159,7 +194,7 @@ fn process_effects(
     event_sender: &mpsc::Sender<RuntimeEvent>,
     active: &mut HashMap<String, ActiveInstall>,
     tmux: &TmuxRuntime<SystemTmuxRunner>,
-    codex: &CodexService,
+    ai: &AiService,
     session: &mut TerminalSession,
 ) {
     while let Some(effect) = app.take_effect() {
@@ -438,23 +473,19 @@ fn process_effects(
             },
             AppEffect::CodexPrompt(prompt) => {
                 let environment_context = app.ai_environment_context();
-                if codex
-                    .send(CodexCommand::Prompt {
-                        text: prompt,
-                        environment_context,
-                    })
-                    .is_err()
-                {
-                    app.apply_codex_event(crate::codex::service::CodexEvent::Error(
-                        "Codex service is not running".to_string(),
-                    ));
+                if let Err(message) = ai.prompt(app.ai_provider, prompt, environment_context) {
+                    app.apply_ai_event(crate::ai::service::AiEvent::Error {
+                        provider: app.ai_provider,
+                        message,
+                    });
                 }
             }
             AppEffect::CodexInterrupt => {
-                if codex.send(CodexCommand::Interrupt).is_err() {
-                    app.apply_codex_event(crate::codex::service::CodexEvent::Error(
-                        "Codex service is not running".to_string(),
-                    ));
+                if let Err(message) = ai.interrupt(app.ai_provider) {
+                    app.apply_ai_event(crate::ai::service::AiEvent::Error {
+                        provider: app.ai_provider,
+                        message,
+                    });
                 }
             }
         }
@@ -668,9 +699,9 @@ fn acquire_install_privileges(tool_id: &str) -> Result<()> {
     Ok(())
 }
 
-fn drain_codex_events(app: &mut AppState, codex: &CodexService) {
-    while let Ok(event) = codex.try_recv() {
-        app.apply_codex_event(event);
+fn drain_ai_events(app: &mut AppState, ai: &AiService) {
+    while let Ok(event) = ai.try_recv() {
+        app.apply_ai_event(event);
     }
 }
 
