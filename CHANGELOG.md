@@ -15,6 +15,11 @@ and date are assigned.
   checksum-verifying installer with version, prefix, upgrade, and uninstall
   support.
 
+### Fixed
+
+- Let `Tab` and `Shift+Tab` leave HOME and move through Activity, Settings,
+  and Help, including while the HOME search input is focused.
+
 ## [0.2.0] - 2026-07-27
 
 ### Added

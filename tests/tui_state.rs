@@ -67,6 +67,25 @@ fn tab_switches_header_sections_outside_running_apps() {
 }
 
 #[test]
+fn tab_reaches_settings_from_home_even_when_search_is_focused() {
+    let mut app = app();
+    app.handle_key(key(KeyCode::Char('/')));
+    assert!(app.search_mode);
+
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(app.screen, Screen::Logs);
+    assert!(!app.search_mode);
+
+    app.handle_key(key(KeyCode::Tab));
+    assert_eq!(app.screen, Screen::Settings);
+
+    app.handle_key(key(KeyCode::BackTab));
+    assert_eq!(app.screen, Screen::Logs);
+    app.handle_key(key(KeyCode::BackTab));
+    assert_eq!(app.screen, Screen::Home);
+}
+
+#[test]
 fn catalog_search_filters_and_queues_a_tool_once() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -1362,6 +1381,56 @@ fn home_shows_compact_fastfetch_information_and_application_entry_points() {
 }
 
 #[test]
+fn home_places_assistant_below_the_app_list_and_keeps_information_separate() {
+    let mut app = app();
+    let app_title = app.selected_home_filter().label().to_string();
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("HOME renders");
+    let rows = terminal
+        .backend()
+        .buffer()
+        .content()
+        .chunks(120)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>();
+    let find_row = |needle: &str| {
+        rows.iter()
+            .position(|row| row.contains(needle))
+            .unwrap_or_else(|| panic!("{needle} title renders"))
+    };
+
+    let app_row = find_row(&app_title);
+    let assistant_row = find_row("Assistant");
+    let information_row = find_row("Information");
+    assert!(assistant_row > app_row);
+    assert!(information_row < assistant_row);
+}
+
+#[test]
+fn minimum_home_uses_the_compact_assistant_fallback() {
+    let mut app = app();
+    app.home_focus = HomeFocus::Assistant;
+    let backend = TestBackend::new(60, 16);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("minimum HOME renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(rendered.contains("Assistant"));
+    assert!(rendered.contains("Tab/S-Tab tabs"));
+}
+
+#[test]
 fn home_information_shows_live_logs_for_the_selected_installing_app() {
     let mut app = app();
     let tool = app.selected_home_tool().expect("HOME selects an app");
@@ -1533,8 +1602,8 @@ fn help_tab_explains_capabilities_and_derived_risk() {
     app.handle_key(key(KeyCode::Tab));
     assert_eq!(app.screen, Screen::Home);
     app.handle_key(key(KeyCode::BackTab));
-    assert_eq!(app.screen, Screen::Home);
-    assert_eq!(app.home_focus, HomeFocus::Assistant);
+    assert_eq!(app.screen, Screen::Help);
+    assert_eq!(app.home_focus, HomeFocus::Views);
 }
 
 #[test]

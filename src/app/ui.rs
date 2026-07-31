@@ -283,7 +283,19 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 }
 
 fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
-    let [library_area, apps_area, information_area] = home_layout(area);
+    let [library_area, apps_column_area, trailing_area] = home_layout(area);
+    let split_apps_for_ai = area.width >= 110 && apps_column_area.height >= 16;
+    let (apps_area, ai_area, information_area) = if split_apps_for_ai {
+        let app_sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(apps_column_area);
+        (app_sections[0], Some(app_sections[1]), Some(trailing_area))
+    } else if app.home_focus == HomeFocus::Assistant {
+        (apps_column_area, Some(trailing_area), None)
+    } else {
+        (apps_column_area, None, Some(trailing_area))
+    };
     let left_sections = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(3), Constraint::Min(8)])
@@ -431,6 +443,9 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         apps_area,
         &mut app_state,
     );
+    if let Some(ai_area) = ai_area {
+        render_home_ai(frame, app, ai_area);
+    }
 
     let mut information = if app.system_overview.logo.is_empty() {
         app.system_overview
@@ -531,32 +546,19 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             .map(|job| (tool, job))
     });
     let (information_summary_area, install_log_area) =
-        active_install.map_or((information_area, None), |_| {
-            let areas = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(8), Constraint::Length(7)])
-                .split(information_area);
-            (areas[0], Some(areas[1]))
+        information_area.map_or((Rect::default(), None), |information_area| {
+            active_install.map_or((information_area, None), |_| {
+                let areas = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Min(8), Constraint::Length(7)])
+                    .split(information_area);
+                (areas[0], Some(areas[1]))
+            })
         });
     let information_title = format!("Information · {}", app.system_overview.source);
-    let show_ai_split = information_summary_area.height >= 18;
-    let (information_render_area, ai_render_area) = if show_ai_split {
-        let areas = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Min(7), Constraint::Length(10)])
-            .split(information_summary_area);
-        (areas[0], Some(areas[1]))
-    } else if app.home_focus == HomeFocus::Assistant {
-        (Rect::default(), Some(information_summary_area))
-    } else {
-        (information_summary_area, None)
-    };
-    if !information_render_area.is_empty() {
+    if !information_summary_area.is_empty() {
         let information = Paragraph::new(information).block(panel(&information_title));
-        frame.render_widget(information, information_render_area);
-    }
-    if let Some(ai_area) = ai_render_area {
-        render_home_ai(frame, app, ai_area);
+        frame.render_widget(information, information_summary_area);
     }
     if let (Some((tool, job)), Some(log_area)) = (active_install, install_log_area) {
         let mut log_lines = vec![Line::styled(
@@ -1570,14 +1572,14 @@ fn risk_explanation(risk: RiskLevel) -> &'static str {
 fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let hint = if app.search_mode {
         format!(
-            "Search all apps: {}_   ↓/→ results   Enter apply   Esc cancel   Alt+Q quit",
+            "Search all apps: {}_   Tab tabs   ↓/→ results   Enter apply   Esc cancel   Alt+Q quit",
             app.search_query
         )
     } else if app.ai_input_mode {
-        "AI prompt input   Enter send   Esc cancel".to_string()
+        "AI prompt input   Tab tabs   Enter send   Esc cancel".to_string()
     } else if app.screen == Screen::Logs {
         format!(
-            "{} | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
+            "{} | Tab/Shift+Tab tabs | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
             app.status
         )
     } else if app.screen == Screen::Home {
@@ -1590,13 +1592,16 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             HomeFocus::Assistant => "← apps  a/Enter compose  [/] provider  A approve",
         };
         if area.width < 90 {
-            format!("{navigation}  Backspace back  ? help")
+            "Tab/S-Tab tabs  ←/→ focus  Backspace back  ? help".to_string()
         } else {
-            format!("{} | {navigation}  Backspace back  ? help", app.status)
+            format!(
+                "{} | Tab/Shift+Tab tabs | {navigation}  Backspace back  ? help",
+                app.status
+            )
         }
     } else {
         format!(
-            "{} | ↑/↓ or j/k move  Enter open/run  Backspace back  ? help",
+            "{} | Tab/Shift+Tab tabs | ↑/↓ or j/k move  Enter open/run  Backspace back  ? help",
             app.status
         )
     };
@@ -1669,7 +1674,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("arrows / j k       move selection"),
             Line::from("Enter               enter an app list or run the selected app"),
             Line::from("I / U / R           install / uninstall / reset and reinstall"),
-            Line::from("Tab / Shift+Tab     switch dashboard tabs"),
+            Line::from("Tab / Shift+Tab     switch HOME / Activity / Settings / Help tabs"),
             Line::from("/                   search apps in the current HOME view"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
             Line::from("Activity Home / End jump to newest / oldest entry"),

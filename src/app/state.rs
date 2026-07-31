@@ -515,6 +515,13 @@ impl AppState {
             return;
         }
 
+        if matches!(key.code, KeyCode::Tab | KeyCode::BackTab) {
+            self.search_mode = false;
+            self.ai_input_mode = false;
+            self.move_navigation_tab(if key.code == KeyCode::Tab { 1 } else { -1 });
+            return;
+        }
+
         if self.search_mode {
             self.handle_search_key(key.code);
             return;
@@ -528,10 +535,6 @@ impl AppState {
         match key.code {
             KeyCode::Char('?') => self.screen = Screen::Help,
             KeyCode::Backspace | KeyCode::Esc => self.return_to_main(),
-            KeyCode::Tab if self.screen == Screen::Home => self.move_home_focus(1),
-            KeyCode::BackTab if self.screen == Screen::Home => self.move_home_focus(-1),
-            KeyCode::Tab => self.move_navigation_tab(1),
-            KeyCode::BackTab => self.move_navigation_tab(-1),
             KeyCode::Char('q') if self.screen == Screen::Home => self.should_quit = true,
             KeyCode::Char('q') => self.screen = Screen::Home,
             KeyCode::Char('1') => self.screen = Screen::Home,
@@ -1903,19 +1906,6 @@ impl AppState {
             }
             HomeFocus::Assistant => {}
         }
-    }
-
-    fn move_home_focus(&mut self, delta: isize) {
-        let current = match self.home_focus {
-            HomeFocus::Views => 0,
-            HomeFocus::AppList => 1,
-            HomeFocus::Assistant => 2,
-        };
-        self.home_focus = match move_index(current, 3, delta) {
-            0 => HomeFocus::Views,
-            1 => HomeFocus::AppList,
-            _ => HomeFocus::Assistant,
-        };
     }
 
     fn focus_ai(&mut self) {
