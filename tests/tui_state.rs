@@ -783,6 +783,13 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
         Some(AppEffect::SendAppInput { pane_id, input: t4e::app::state::AppInput::Key(key) })
             if pane_id == "%1" && key == "Tab"
     ));
+    app.handle_key(key(KeyCode::F(1)));
+    assert_eq!(app.screen, Screen::AppView);
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::SendAppInput { pane_id, input: t4e::app::state::AppInput::Key(key) })
+            if pane_id == "%1" && key == "F1"
+    ));
     assert_eq!(app.app_view.as_ref().expect("app view").selected, 0);
     app.handle_key(key(KeyCode::BackTab));
     assert!(matches!(
@@ -1626,6 +1633,19 @@ fn help_tab_explains_capabilities_and_derived_risk() {
 }
 
 #[test]
+fn f1_opens_dashboard_help_and_closes_transient_input_modes() {
+    let mut app = app();
+    open_home_search(&mut app);
+    assert!(app.search_mode);
+
+    app.handle_key(key(KeyCode::F(1)));
+
+    assert_eq!(app.screen, Screen::Help);
+    assert!(!app.search_mode);
+    assert!(!app.ai_input_mode);
+}
+
+#[test]
 fn home_library_queues_only_the_selected_app() {
     let mut app = app();
 
@@ -1900,7 +1920,7 @@ fn settings_explain_the_selected_policy_and_reset_scope() {
         "clicking, scrolling, and drag-to-copy",
         "Total automatic attempts",
         "Script and DANGER installs",
-        "OpenAI-compatible Chat Completions",
+        "ready subscription or API provider",
         "Favorites, recent apps, activity history",
     ]
     .into_iter()
@@ -2136,6 +2156,38 @@ fn ai_catalog_search_is_bounded_to_local_navigation() {
 }
 
 #[test]
+fn ai_launch_resolves_a_catalog_display_name_to_its_exact_id() {
+    let mut app = app();
+    app.apply_installed_tools(["yazi".to_string()].into_iter().collect());
+    app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
+        provider: AiProvider::Claude,
+        account: "max subscription".to_string(),
+    }));
+    app.apply_ai_event(AiEvent::ActionProposed {
+        provider: AiProvider::Claude,
+        kind: "launch_app".to_string(),
+        target: "Yazi".to_string(),
+    });
+    assert_eq!(
+        app.pending_ai_action
+            .as_ref()
+            .map(|action| action.target.as_str()),
+        Some("yazi")
+    );
+
+    app.handle_key(key(KeyCode::Char('A')));
+    for ch in "APPROVE launch_app yazi".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request)) if request.tool_id == "yazi"
+    ));
+}
+
+#[test]
 fn home_ai_is_disabled_without_a_ready_provider_and_enables_after_login() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('a')));
@@ -2175,7 +2227,7 @@ fn slash_stays_in_the_assistant_instead_of_opening_home_search() {
 }
 
 #[test]
-fn multiple_detected_ai_providers_can_be_switched_from_home() {
+fn multiple_detected_ai_providers_are_selected_and_saved_in_settings() {
     let mut app = app();
     app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
         provider: AiProvider::Claude,
@@ -2187,11 +2239,13 @@ fn multiple_detected_ai_providers_can_be_switched_from_home() {
     }));
     assert_eq!(app.ai_provider, AiProvider::Claude);
 
-    app.handle_key(key(KeyCode::Char(']')));
+    app.handle_key(key(KeyCode::Char('7')));
+    app.settings_index = 3;
+    app.handle_key(key(KeyCode::Right));
     assert_eq!(app.ai_provider, AiProvider::Gemini);
-    app.handle_key(key(KeyCode::Char('[')));
-    assert_eq!(app.ai_provider, AiProvider::Claude);
+    assert_eq!(app.settings.preferred_ai_provider, "gemini");
 
+    app.handle_key(key(KeyCode::Char('1')));
     let backend = TestBackend::new(120, 30);
     let mut terminal = Terminal::new(backend).expect("test terminal");
     terminal
@@ -2204,8 +2258,9 @@ fn multiple_detected_ai_providers_can_be_switched_from_home() {
         .iter()
         .map(|cell| cell.symbol())
         .collect::<String>();
-    assert!(rendered.contains("2 ready"));
-    assert!(rendered.contains("[ prev · ] next"));
+    assert!(rendered.contains("2 providers ready"));
+    assert!(rendered.contains("change in Settings"));
+    assert!(!rendered.contains("prev"));
 }
 
 #[test]
@@ -2288,6 +2343,10 @@ fn danger_tool_requires_typed_confirmation() {
     app.handle_key(key(KeyCode::Char('x')));
     assert!(app.confirmation.as_ref().is_some_and(|value| value.typed));
     assert!(app.take_effect().is_none());
+
+    app.handle_key(key(KeyCode::F(1)));
+    assert_eq!(app.screen, Screen::Install);
+    assert!(app.confirmation.is_some());
 
     for ch in "INSTALL claude-code".chars() {
         app.handle_key(key(KeyCode::Char(ch)));

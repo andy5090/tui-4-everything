@@ -234,7 +234,7 @@ Important actions are intentionally explicit:
   removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
 - AI lives in HOME's assistant rail rather than a separate tab. `a` focuses the
-  composer, `[`/`]` switches among ready CLI and API providers,
+  composer, while Settings selects among ready CLI and API providers,
   `x` interrupts supported turns, and `A` reviews a bounded proposal. Providers
   may propose catalog search, install planning, a pinned T4E-verified update, or
   an app launch; T4E performs none of them before explicit approval.

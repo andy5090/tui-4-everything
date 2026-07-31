@@ -515,6 +515,14 @@ impl AppState {
             return;
         }
 
+        if key.code == KeyCode::F(1) {
+            self.search_mode = false;
+            self.ai_input_mode = false;
+            self.screen = Screen::Help;
+            self.status = "Opened Help".to_string();
+            return;
+        }
+
         if self.screen == Screen::Home
             && self.home_focus != HomeFocus::Assistant
             && key.modifiers.contains(KeyModifiers::CONTROL)
@@ -1306,9 +1314,12 @@ impl AppState {
     pub fn apply_ai_event(&mut self, event: AiEvent) {
         match event {
             AiEvent::ProviderReady(readiness) => {
+                let preferred = self.settings.preferred_ai_provider
+                    == ai_provider_preference_id(readiness.provider);
                 self.ai_ready_providers
                     .insert(readiness.provider, readiness.account.clone());
-                if self.ai_ready_providers.len() == 1
+                if preferred
+                    || self.ai_ready_providers.len() == 1
                     || !self.ai_ready_providers.contains_key(&self.ai_provider)
                 {
                     self.ai_provider = readiness.provider;
@@ -1345,12 +1356,16 @@ impl AppState {
                 kind,
                 target,
             } => {
-                let target_exists = self.catalog.tools.iter().any(|tool| tool.id == target);
+                let resolved_target = self.resolve_ai_tool_id(&target);
                 let supported = matches!(
                     kind.as_str(),
                     "catalog_search" | "install_plan" | "verified_update" | "launch_app"
                 );
-                if provider == self.ai_provider && target_exists && supported {
+                if provider == self.ai_provider && supported {
+                    let Some(target) = resolved_target else {
+                        self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
+                        return;
+                    };
                     self.pending_ai_action = Some(AiAction {
                         kind: kind.clone(),
                         target: target.clone(),
@@ -1388,6 +1403,19 @@ impl AppState {
 
     pub fn ai_ready(&self) -> bool {
         self.ai_ready_providers.contains_key(&self.ai_provider)
+    }
+
+    fn resolve_ai_tool_id(&self, target: &str) -> Option<String> {
+        let target = target.trim();
+        self.catalog
+            .tools
+            .iter()
+            .find(|tool| {
+                tool.id == target
+                    || tool.id.eq_ignore_ascii_case(target)
+                    || tool.name.eq_ignore_ascii_case(target)
+            })
+            .map(|tool| tool.id.clone())
     }
 
     fn refresh_ai_identity(&mut self) {
@@ -1564,8 +1592,6 @@ impl AppState {
                 KeyCode::Char('c') => self.open_all_catalog(),
                 KeyCode::Char('i') => self.screen = Screen::Install,
                 KeyCode::Char('a') => self.focus_ai(),
-                KeyCode::Char('[') => self.cycle_ai_provider(-1),
-                KeyCode::Char(']') => self.cycle_ai_provider(1),
                 KeyCode::Char('x') if self.home_focus == HomeFocus::Assistant => {
                     self.effects.push_back(AppEffect::CodexInterrupt)
                 }
@@ -1964,7 +1990,10 @@ impl AppState {
             .position(|provider| *provider == self.ai_provider)
             .unwrap_or_default();
         self.ai_provider = providers[move_index(current, providers.len(), delta)];
+        self.settings.preferred_ai_provider =
+            ai_provider_preference_id(self.ai_provider).to_string();
         self.refresh_ai_identity();
+        self.status = format!("HOME AI will use {}", self.ai_provider.label());
     }
 
     fn begin_home_search(&mut self) {
@@ -2794,7 +2823,7 @@ impl AppState {
     }
 
     fn adjust_setting(&mut self, delta: isize) {
-        if self.settings_index >= 3 {
+        if self.settings_index > 3 {
             return;
         }
         match self.settings_index {
@@ -2812,6 +2841,7 @@ impl AppState {
             2 => {
                 self.settings.confirm_all_installs = !self.settings.confirm_all_installs;
             }
+            3 => self.cycle_ai_provider(delta),
             _ => {}
         }
         self.status = "Settings updated".to_string();
@@ -3049,6 +3079,17 @@ fn api_provider_id(provider: AiProvider) -> &'static str {
         AiProvider::Kimi => "kimi",
         AiProvider::Custom => "custom",
         AiProvider::Codex | AiProvider::Claude | AiProvider::Gemini => "",
+    }
+}
+
+fn ai_provider_preference_id(provider: AiProvider) -> &'static str {
+    match provider {
+        AiProvider::Codex => "codex",
+        AiProvider::Claude => "claude",
+        AiProvider::Gemini => "gemini",
+        AiProvider::Zhipu => "zhipu",
+        AiProvider::Kimi => "kimi",
+        AiProvider::Custom => "custom",
     }
 }
 

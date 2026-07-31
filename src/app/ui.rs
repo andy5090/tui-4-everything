@@ -612,14 +612,10 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Line::styled(
             if app.ai_ready() {
                 format!(
-                    "account: {} · {} ready{}",
+                    "account: {} · {} provider{} ready · change in Settings",
                     app.ai_account,
                     provider_count,
-                    if provider_count > 1 {
-                        " · [ prev · ] next"
-                    } else {
-                        ""
-                    }
+                    if provider_count == 1 { "" } else { "s" }
                 )
             } else {
                 "Configure a CLI or API provider in Settings".to_string()
@@ -1392,16 +1388,9 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             }
         ),
         format!(
-            "AI API providers         {}/3 ready",
-            app.ai_ready_providers
-                .keys()
-                .filter(|provider| matches!(
-                    provider,
-                    crate::ai::service::AiProvider::Zhipu
-                        | crate::ai::service::AiProvider::Kimi
-                        | crate::ai::service::AiProvider::Custom
-                ))
-                .count()
+            "AI provider              {} ({} ready)",
+            app.ai_provider.label(),
+            app.ai_ready_providers.len()
         ),
         "Reset saved preferences    Enter".to_string(),
     ];
@@ -1454,11 +1443,15 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             "Left/Right or Space toggle",
         ),
         3 => (
-            "AI API providers",
-            format!("{} configured profiles", app.settings.api_providers.len()),
-            "OpenAI-compatible Chat Completions for Zhipu AI, Kimi, and custom endpoints.",
-            "Provider metadata is saved, but API keys are session-only unless supplied through the configured environment variable.",
-            "Enter configure",
+            "AI provider",
+            format!(
+                "{} · {} ready",
+                app.ai_provider.label(),
+                app.ai_ready_providers.len()
+            ),
+            "Selects which ready subscription or API provider HOME AI uses.",
+            "The selection is saved. Enter configures Zhipu AI, Kimi, and custom OpenAI-compatible API profiles; API keys remain session-only unless supplied through the configured environment variable.",
+            "Left/Right select · Enter configure APIs",
         ),
         _ => (
             "Reset saved preferences",
@@ -1586,7 +1579,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             }
             HomeFocus::Views => "↑/↓ view  → apps  Ctrl+F search",
             HomeFocus::AppList => "← views  ↑/↓ app  Enter run",
-            HomeFocus::Assistant => "← apps  a/Enter compose  / skill  [ or ] provider  A approve",
+            HomeFocus::Assistant => "← apps  a/Enter compose  / skill  A approve",
         };
         if area.width < 90 {
             "Tab panels  S-Tab tabs  ←/→ focus  Backspace back  ? help".to_string()
@@ -1628,7 +1621,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             ),
             Line::from("Scripts always need approval; installs get postflight checks"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
-            Line::from("Ctrl+F HOME search | Tab panels | Shift+Tab dashboard tabs"),
+            Line::from("F1 Help | Ctrl+F HOME search | Tab panels | Shift+Tab tabs"),
             Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
         ]
     } else {
@@ -1674,6 +1667,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("I / U / R           install / uninstall / reset and reinstall"),
             Line::from("Tab                 switch HOME panels"),
             Line::from("Shift+Tab           cycle HOME / Activity / Settings / Help tabs"),
+            Line::from("F1                  open Help from dashboard screens"),
             Line::from("Ctrl+F              search apps from HOME Views or Apps"),
             Line::from("/                   start an Assistant skill or command"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),

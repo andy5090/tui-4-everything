@@ -55,6 +55,7 @@ fn persistent_state_round_trips_queue_and_logs() {
         }],
         settings: UserSettings {
             install_timeout_sec: 900,
+            preferred_ai_provider: "gemini".to_string(),
             ..UserSettings::default()
         },
         launch_preferences: BTreeMap::from([(
@@ -87,6 +88,7 @@ fn legacy_state_uses_defaults_for_new_user_fields() {
     assert!(actual.favorites.is_empty());
     assert!(actual.recents.is_empty());
     assert_eq!(actual.settings, UserSettings::default());
+    assert!(actual.settings.preferred_ai_provider.is_empty());
     assert_eq!(
         actual.settings.api_providers,
         default_api_provider_profiles()
@@ -115,6 +117,7 @@ fn legacy_settings_enable_mouse_controls_when_the_field_is_missing() {
     let actual = load_state(&path).expect("legacy state loads");
 
     assert!(actual.settings.mouse_enabled);
+    assert!(actual.settings.preferred_ai_provider.is_empty());
     assert_eq!(
         actual.settings.api_providers,
         default_api_provider_profiles()

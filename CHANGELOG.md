@@ -19,8 +19,12 @@ and date are assigned.
 
 - Restore `Tab` as the HOME panel switcher and use `Shift+Tab` alone to cycle
   HOME, Activity, Settings, and Help, including from focused HOME inputs.
-- Show the number of detected AI providers and keep `[`/`]` switching available
-  whenever multiple subscription or API providers are ready.
+- Move active AI provider selection into Settings, persist the preference, and
+  keep HOME's provider display read-only.
+- Resolve AI-proposed app targets against exact catalog IDs or case-insensitive
+  catalog names before bounded launch approval.
+- Open dashboard Help directly with `F1` without intercepting keys inside a
+  running app or an active confirmation dialog.
 - Move HOME search to `Ctrl+F`; `/` now opens Assistant input with a slash so it
   can begin a skill or command and remains normal text while composing.
 

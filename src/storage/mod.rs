@@ -52,6 +52,8 @@ pub struct UserSettings {
     pub install_timeout_sec: u64,
     pub max_install_attempts: u32,
     pub confirm_all_installs: bool,
+    #[serde(default)]
+    pub preferred_ai_provider: String,
     #[serde(default = "default_api_provider_profiles")]
     pub api_providers: BTreeMap<String, ApiProviderProfile>,
 }
@@ -108,6 +110,7 @@ impl Default for UserSettings {
             install_timeout_sec: 600,
             max_install_attempts: 2,
             confirm_all_installs: false,
+            preferred_ai_provider: String::new(),
             api_providers: default_api_provider_profiles(),
         }
     }
