@@ -21,15 +21,28 @@ pub struct CodexAppServer {
 
 impl CodexAppServer {
     pub fn spawn() -> Result<Self> {
-        Self::spawn_command("codex", &["app-server", "--listen", "stdio://"])
+        Self::spawn_command_inner(
+            "codex",
+            &["app-server", "--listen", "stdio://"],
+            &["OPENAI_API_KEY"],
+        )
     }
 
     pub fn spawn_command(program: &str, args: &[&str]) -> Result<Self> {
-        let mut child = Command::new(program)
+        Self::spawn_command_inner(program, args, &[])
+    }
+
+    fn spawn_command_inner(program: &str, args: &[&str], removed_env: &[&str]) -> Result<Self> {
+        let mut command = Command::new(program);
+        command
             .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        for name in removed_env {
+            command.env_remove(name);
+        }
+        let mut child = command
             .spawn()
             .with_context(|| format!("failed to start {program}"))?;
         let stdin = child.stdin.take().context("app-server stdin unavailable")?;

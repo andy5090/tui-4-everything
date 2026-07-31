@@ -495,12 +495,10 @@ fn process_effects(
                 api_key,
             } => match ai.configure_api_provider(provider, profile, api_key.into_inner()) {
                 Ok(readiness) => app.add_ai_provider(readiness),
-                Err(reason) => {
-                    app.apply_ai_event(crate::ai::service::AiEvent::ProviderUnavailable {
-                        provider,
-                        reason,
-                    })
-                }
+                Err(reason) => app.apply_ai_event(crate::ai::service::AiEvent::Error {
+                    provider,
+                    message: format!("configuration failed: {reason}"),
+                }),
             },
         }
     }

@@ -228,7 +228,7 @@ fn start_prompt(
 
 pub fn planner_prompt(environment_context: &str, user_request: &str) -> String {
     format!(
-        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from the assistant rail on HOME. T4E catalogs terminal apps, installs only through its approval flow, applies only T4E-verified app versions, and launches individual apps from HOME. Treat the supplied T4E runtime context as authoritative.\n\nHelp the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. Every action is only a proposal; T4E asks the user to approve it and owns installation, verified updates, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: show an app in HOME\n- install_plan: prepare an app installation plan\n- verified_update: apply the exact T4E-verified version when the app supports it\n- launch_app: launch an installed catalog app through T4E\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
+        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from the assistant rail on HOME. T4E catalogs terminal apps, installs only through its approval flow, applies only T4E-verified app versions, and launches individual apps from HOME. Treat the supplied T4E runtime context as authoritative.\n\nHelp the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. Every action is only a proposal; T4E applies the user's configured approval policy and owns installation, verified updates, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: show an app in HOME\n- install_plan: prepare an app installation plan\n- verified_update: apply the exact T4E-verified version when the app supports it\n- launch_app: launch an installed catalog app through T4E\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
     )
 }
 
@@ -440,7 +440,7 @@ mod tests {
         assert!(prompt.contains("installs only through its approval flow"));
         assert!(prompt.contains("launches individual apps"));
         assert!(prompt.contains("launches individual apps from HOME"));
-        assert!(prompt.contains("Every action is only a proposal"));
+        assert!(prompt.contains("configured approval policy"));
         assert!(prompt.contains("verified_update"));
         assert!(prompt.contains("catalog apps: yazi=Yazi (run: yazi)"));
         assert!(prompt.ends_with("User request: What can you do here?"));
