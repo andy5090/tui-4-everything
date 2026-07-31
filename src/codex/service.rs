@@ -190,10 +190,11 @@ fn run_service(cwd: String, commands: Receiver<CodexCommand>, events: Sender<Cod
 fn connect_client(events: &Sender<CodexEvent>) -> anyhow::Result<CodexAppServer> {
     let mut client = CodexAppServer::spawn()?;
     client.initialize()?;
-    let account = client
-        .account_read()
-        .map(|value| account_label(&value))
-        .unwrap_or_else(|error| format!("unavailable: {error}"));
+    let account_value = client.account_read()?;
+    if account_value.get("account").is_none_or(Value::is_null) {
+        anyhow::bail!("Codex is not signed in; run `codex login`");
+    }
+    let account = account_label(&account_value);
     let _ = events.send(CodexEvent::Ready { account });
     Ok(client)
 }
@@ -227,7 +228,7 @@ fn start_prompt(
 
 pub fn planner_prompt(environment_context: &str, user_request: &str) -> String {
     format!(
-        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from T4E's AI screen. T4E catalogs terminal apps, plans and executes approved installations, and launches individual apps from HOME. Treat the supplied T4E runtime context as authoritative.\n\nYour job is to help the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. catalog_search and install_plan are read-only navigation proposals. T4E can launch and manage individual catalog apps from HOME; the current AI action surface can navigate to an app but cannot press Enter for the user. T4E, not you, owns installation, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: navigate T4E to a catalog app\n- install_plan: prepare an app installation plan in T4E\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
+        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from the assistant rail on HOME. T4E catalogs terminal apps, installs only through its approval flow, applies only T4E-verified app versions, and launches individual apps from HOME. Treat the supplied T4E runtime context as authoritative.\n\nHelp the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. Every action is only a proposal; T4E asks the user to approve it and owns installation, verified updates, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: show an app in HOME\n- install_plan: prepare an app installation plan\n- verified_update: apply the exact T4E-verified version when the app supports it\n- launch_app: launch an installed catalog app through T4E\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
     )
 }
 
@@ -360,7 +361,7 @@ pub fn bounded_action_schema() -> Value {
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["catalog_search", "install_plan"]
+                                "enum": ["catalog_search", "install_plan", "verified_update", "launch_app"]
                             },
                             "target": { "type": "string" }
                         },
@@ -436,10 +437,11 @@ mod tests {
 
         assert!(prompt.contains("AI control plane embedded inside T4E"));
         assert!(prompt.contains("not a generic coding assistant"));
-        assert!(prompt.contains("plans and executes approved installations"));
+        assert!(prompt.contains("installs only through its approval flow"));
         assert!(prompt.contains("launches individual apps"));
         assert!(prompt.contains("launches individual apps from HOME"));
-        assert!(prompt.contains("T4E can launch and manage individual catalog apps"));
+        assert!(prompt.contains("Every action is only a proposal"));
+        assert!(prompt.contains("verified_update"));
         assert!(prompt.contains("catalog apps: yazi=Yazi (run: yazi)"));
         assert!(prompt.ends_with("User request: What can you do here?"));
     }
