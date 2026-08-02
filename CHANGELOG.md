@@ -6,6 +6,13 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-03
+
+### Fixed
+
+- Extend repeated full-width ANSI application backgrounds across the complete
+  App View canvas, including rows beyond the captured content.
+
 ## [0.3.0] - 2026-08-01
 
 ### Added
