@@ -844,6 +844,25 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
         "ANSI red should be preserved in App View"
     );
 
+    app.app_view.as_mut().expect("app view").content = format!(
+        "\u{1b}[107m{}\u{1b}[0m\n\u{1b}[107m{}\u{1b}[0m",
+        " ".repeat(78),
+        " ".repeat(78)
+    );
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("app background renders");
+    let canvas_cell = terminal
+        .backend()
+        .buffer()
+        .cell((40, 12))
+        .expect("app canvas cell");
+    assert_eq!(
+        canvas_cell.bg,
+        Color::White,
+        "the app background should fill uncaptured canvas rows"
+    );
+
     app.handle_key(key(KeyCode::Esc));
     assert!(matches!(
         app.take_effect(),

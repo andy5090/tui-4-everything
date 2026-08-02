@@ -1133,9 +1133,17 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         .content
         .to_text()
         .unwrap_or_else(|_| Text::from(view.content.as_str()));
+    let canvas_style = app_canvas_background(&content, sections[1].width.saturating_sub(2))
+        .map_or_else(Style::default, |background| Style::default().bg(background));
     frame.render_widget(
         Paragraph::new(content)
-            .block(Block::default().title(title).borders(Borders::ALL))
+            .style(canvas_style)
+            .block(
+                Block::default()
+                    .title(title)
+                    .borders(Borders::ALL)
+                    .style(canvas_style),
+            )
             .wrap(Wrap { trim: false }),
         sections[1],
     );
@@ -1147,6 +1155,58 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         .style(Style::default().fg(Color::Gray)),
         sections[2],
     );
+}
+
+fn app_canvas_background(content: &Text<'_>, viewport_width: u16) -> Option<Color> {
+    if viewport_width == 0 {
+        return None;
+    }
+
+    let minimum_line_width = usize::from(viewport_width).div_ceil(2);
+    let mut candidates = Vec::new();
+    for line in &content.lines {
+        let line_width = line.width();
+        if line_width < minimum_line_width {
+            continue;
+        }
+
+        let mut colors = Vec::<(Color, usize)>::new();
+        for span in &line.spans {
+            let effective_style = content.style.patch(line.style).patch(span.style);
+            let Some(background) = effective_style.bg.filter(|color| *color != Color::Reset) else {
+                continue;
+            };
+            let width = span.width();
+            if let Some((_, count)) = colors.iter_mut().find(|(color, _)| *color == background) {
+                *count += width;
+            } else {
+                colors.push((background, width));
+            }
+        }
+        let Some((background, covered)) = colors.into_iter().max_by_key(|(_, count)| *count) else {
+            continue;
+        };
+        if covered.saturating_mul(4) >= line_width.saturating_mul(3) {
+            candidates.push(background);
+        }
+    }
+
+    if candidates.len() < 2 {
+        return None;
+    }
+    let mut counts = Vec::<(Color, usize)>::new();
+    for background in candidates.iter().copied() {
+        if let Some((_, count)) = counts.iter_mut().find(|(color, _)| *color == background) {
+            *count += 1;
+        } else {
+            counts.push((background, 1));
+        }
+    }
+    counts
+        .into_iter()
+        .max_by_key(|(_, count)| *count)
+        .filter(|(_, count)| count.saturating_mul(2) > candidates.len())
+        .map(|(background, _)| background)
 }
 
 fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
@@ -2084,11 +2144,12 @@ mod tests {
     use ratatui::buffer::Buffer;
     use ratatui::layout::Rect;
     use ratatui::style::{Color, Modifier, Style};
+    use ratatui::text::{Line, Text};
     use ratatui::widgets::{Block, Borders, Widget};
 
     use super::{
-        activity_line, compact_usage, home_layout, home_selection_style, home_selection_symbol,
-        selection_text,
+        activity_line, app_canvas_background, compact_usage, home_layout, home_selection_style,
+        home_selection_symbol, selection_text,
     };
 
     #[test]
@@ -2130,6 +2191,36 @@ mod tests {
             Style::default().add_modifier(Modifier::BOLD)
         );
         assert_ne!(home_selection_style(false).bg, Some(Color::White));
+    }
+
+    #[test]
+    fn app_canvas_uses_a_repeated_full_width_background() {
+        let content = Text::from(vec![
+            Line::styled(" ".repeat(40), Style::default().bg(Color::White)),
+            Line::styled(" ".repeat(40), Style::default().bg(Color::White)),
+        ]);
+
+        assert_eq!(app_canvas_background(&content, 40), Some(Color::White));
+    }
+
+    #[test]
+    fn app_canvas_ignores_short_or_isolated_background_accents() {
+        let content = Text::from(vec![
+            Line::styled(" ERROR ", Style::default().bg(Color::Red)),
+            Line::from("ordinary application output that fills the remaining line"),
+        ]);
+
+        assert_eq!(app_canvas_background(&content, 60), None);
+    }
+
+    #[test]
+    fn app_canvas_ignores_conflicting_full_width_backgrounds() {
+        let content = Text::from(vec![
+            Line::styled(" ".repeat(40), Style::default().bg(Color::Red)),
+            Line::styled(" ".repeat(40), Style::default().bg(Color::Blue)),
+        ]);
+
+        assert_eq!(app_canvas_background(&content, 40), None);
     }
 
     #[test]
