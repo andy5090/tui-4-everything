@@ -127,8 +127,12 @@ fn resolve_in_path(command: &str) -> Option<PathBuf> {
         let path = PathBuf::from(command);
         return is_executable(&path).then_some(path);
     }
-    let path = env::var_os("PATH")?;
-    env::split_paths(&path)
+    let path_directories = env::var_os("PATH")
+        .into_iter()
+        .flat_map(|path| env::split_paths(&path).collect::<Vec<_>>());
+    let managed_directory = env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/bin"));
+    path_directories
+        .chain(managed_directory)
         .map(|directory| directory.join(command))
         .find(|candidate| is_executable(candidate))
 }

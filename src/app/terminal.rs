@@ -57,11 +57,7 @@ pub fn run(mut app: AppState) -> Result<()> {
         .tools
         .iter()
         .filter_map(|tool| {
-            let platform = if cfg!(target_os = "macos") {
-                crate::catalog::models::Platform::Macos
-            } else {
-                crate::catalog::models::Platform::Linux
-            };
+            let platform = crate::catalog::models::Platform::current();
             tool.install_check_commands(platform)
                 .iter()
                 .all(|command| checker.check(command).is_ok_and(|result| result.installed))
@@ -74,17 +70,8 @@ pub fn run(mut app: AppState) -> Result<()> {
         .tools
         .iter()
         .filter_map(|tool| {
-            let platform = if cfg!(target_os = "macos") {
-                crate::catalog::models::Platform::Macos
-            } else {
-                crate::catalog::models::Platform::Linux
-            };
-            let verified = tool
-                .installers
-                .iter()
-                .find(|installer| installer.platform == platform)?
-                .verified_update
-                .as_ref()?;
+            let platform = crate::catalog::models::Platform::current();
+            let verified = tool.installer_for(platform)?.verified_update.as_ref()?;
             app.installed_tools.contains(&tool.id).then(|| {
                 let installed = checker
                     .probe_version(&verified.version_probe)

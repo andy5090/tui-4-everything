@@ -107,7 +107,9 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
             {
                 bail!("tool {} installer has invalid system packages", tool.id);
             }
-            if !installer.system_packages.is_empty() && installer.platform != Platform::Linux {
+            if !installer.system_packages.is_empty()
+                && !matches!(installer.platform, Platform::Linux | Platform::Termux)
+            {
                 bail!(
                     "tool {} has system packages on a non-Linux installer",
                     tool.id
@@ -274,7 +276,7 @@ pub fn validate_workspaces(catalog: &CatalogRegistry, registry: &WorkspaceRegist
                 .filter_map(|tool_id| catalog.tools.iter().find(|tool| &tool.id == tool_id))
                 .filter_map(|tool| tool.run.cmd.split_whitespace().next())
                 .collect::<HashSet<_>>();
-            if executable != "bash" && !recommended_executables.contains(executable) {
+            if executable != "sh" && !recommended_executables.contains(executable) {
                 bail!(
                     "workspace {} pane {} runs unapproved executable {}",
                     workspace.id,

@@ -59,6 +59,20 @@ fn compiler_tracks_pane_ids_with_tmux_print_mode() {
             .iter()
             .any(|cmd| cmd.contains("send-keys") && cmd.contains("yewtube"))
     );
+    assert!(
+        output
+            .commands
+            .iter()
+            .any(|cmd| { cmd.contains("new-session") && cmd.ends_with("\"sh\"") })
+    );
+    assert!(
+        output
+            .commands
+            .iter()
+            .filter(|cmd| cmd.contains("split-window"))
+            .all(|cmd| cmd.ends_with("\"sh\")"))
+    );
+    assert!(output.commands.iter().all(|cmd| !cmd.contains("\"bash\"")));
 }
 
 #[test]

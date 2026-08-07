@@ -118,7 +118,12 @@ fn launch_uses_structured_tmux_arguments() {
             .any(|args| args.first().is_some_and(|arg| arg == "new-window"))
     );
     assert!(!calls.iter().flatten().any(|arg| arg == "split-window"));
-    assert!(!calls.iter().flatten().any(|arg| arg == "sh" || arg == "-c"));
+    assert!(!calls.iter().flatten().any(|arg| arg == "-c"));
+    assert!(calls.iter().any(|args| {
+        args.first()
+            .is_some_and(|arg| arg == "new-session" || arg == "new-window")
+            && args.last().is_some_and(|arg| arg == "sh")
+    }));
 }
 
 #[test]
@@ -188,13 +193,36 @@ fn single_app_launch_creates_a_managed_background_session() {
             "-P",
             "-F",
             "#{pane_id}",
-            "bash",
+            "sh",
         ]
     }));
+    assert!(calls.iter().any(|args| {
+        args == &[
+            "respawn-pane",
+            "-k",
+            "-t",
+            "%7",
+            "exec sh -c 'PATH=\"$HOME/.local/bin:$PATH\"; export PATH; exec cmatrix -b'",
+        ]
+    }));
+}
+
+#[test]
+fn managed_app_wrapper_is_accepted_by_available_user_shells() {
+    let wrapper =
+        "exec sh -c 'PATH=\"$HOME/.local/bin:$PATH\"; export PATH; exec printf shell-neutral'";
+    let mut checked = 0;
+    for shell in ["sh", "bash", "zsh", "fish"] {
+        let Ok(output) = Command::new(shell).args(["-c", wrapper]).output() else {
+            continue;
+        };
+        checked += 1;
+        assert!(output.status.success(), "{shell} accepts the wrapper");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "shell-neutral");
+    }
     assert!(
-        calls
-            .iter()
-            .any(|args| { args == &["respawn-pane", "-k", "-t", "%7", "exec cmatrix -b"] })
+        checked > 0,
+        "at least one POSIX command environment is present"
     );
 }
 
@@ -233,7 +261,7 @@ fn filtered_one_shot_app_uses_a_live_output_holder() {
         .iter()
         .find(|args| args.first().is_some_and(|arg| arg == "respawn-pane"))
         .expect("launch call");
-    assert!(launch[4].contains("exec bash -c"));
+    assert!(launch[4].contains("exec sh -c"));
     assert!(launch[4].contains("fortune | lolcat; status=$?"));
     assert!(launch[4].contains("while :; do sleep 86400; done"));
 }

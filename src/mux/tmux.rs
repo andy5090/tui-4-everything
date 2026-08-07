@@ -22,7 +22,7 @@ pub fn compile_workspace(
 
     let mut commands = Vec::new();
     commands.push(format!(
-        "tmux new-session -d -s {} -n {} \"bash\"",
+        "tmux new-session -d -s {} -n {} \"sh\"",
         shell_quote(session_name),
         shell_quote(window_name)
     ));
@@ -91,7 +91,7 @@ fn compile_app_windows(
     for app in workspace.layout.panes.iter().skip(1) {
         validate_identifier("app window", &app.id)?;
         commands.push(format!(
-            "tmux new-window -d -t {} -n {} \"bash\"",
+            "tmux new-window -d -t {} -n {} \"sh\"",
             shell_quote(session_name),
             shell_quote(&app.id)
         ));
@@ -143,7 +143,7 @@ fn compile_pane(
 
     let pane_var = format!("PANE_{}", sanitize_var(&pane.id));
     commands.push(format!(
-        "{}=$(tmux split-window {} -l {}% -P -F \"#{{pane_id}}\" -t {})",
+        "{}=$(tmux split-window {} -l {}% -P -F \"#{{pane_id}}\" -t {} \"sh\")",
         pane_var, split_flags, size_percent, parent_target
     ));
     commands.push(format!(
