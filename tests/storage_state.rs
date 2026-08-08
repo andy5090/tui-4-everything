@@ -9,8 +9,8 @@ use t4e::catalog::models::InstallMethod;
 use t4e::installer::engine::InstallTask;
 use t4e::installer::execution::InstallJob;
 use t4e::storage::{
-    LaunchOptionPreference, PersistentState, ProviderAuthMode, RecentItem, UserSettings,
-    default_api_provider_profiles, load_state, save_state,
+    AiApprovalMode, LaunchOptionPreference, PersistentState, ProviderAuthMode, RecentItem,
+    UserSettings, default_api_provider_profiles, load_state, save_state,
 };
 
 fn temp_file() -> PathBuf {
@@ -41,6 +41,20 @@ fn legacy_api_profiles_default_to_api_key_mode() {
     .expect("legacy profile loads");
 
     assert_eq!(profile.auth_mode, ProviderAuthMode::ApiKey);
+}
+
+#[test]
+fn legacy_ai_approval_modes_migrate_to_permission_modes() {
+    let safe_only: AiApprovalMode = serde_json::from_str(r#""safe_only""#).expect("legacy auto");
+    let all_bounded: AiApprovalMode =
+        serde_json::from_str(r#""all_bounded""#).expect("legacy bypass");
+
+    assert_eq!(safe_only, AiApprovalMode::Auto);
+    assert_eq!(all_bounded, AiApprovalMode::Bypass);
+    assert_eq!(
+        UserSettings::default().ai_approval_mode,
+        AiApprovalMode::Auto
+    );
 }
 
 #[test]

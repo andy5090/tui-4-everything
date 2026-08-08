@@ -6,6 +6,13 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Changed
+
+- Replace the two-step AI proposal review with `Bypass`, `Auto`, and `Ask`
+  permission modes. Auto-approved install plans now start immediately, Ask
+  opens confirmation as soon as an action is proposed, and Bypass continues
+  validated AI action chains through installer and device approval gates.
+
 ## [0.3.1] - 2026-08-03
 
 ### Fixed

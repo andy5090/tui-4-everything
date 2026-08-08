@@ -104,6 +104,7 @@ pub enum AppEffect {
     Execute(Box<InstallJob>),
     Cancel(String),
     LaunchTool(ToolLaunchRequest),
+    LaunchPipeline(PipelineLaunchRequest),
     LaunchWorkspace(Box<WorkspaceLaunchRequest>),
     OpenAppView(String),
     SendAppInput {
@@ -165,6 +166,19 @@ pub struct ToolLaunchRequest {
     pub command: String,
     pub keep_open: bool,
     pub output_filter: Option<OutputFilter>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PipelineStage {
+    pub tool_id: String,
+    pub command: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PipelineLaunchRequest {
+    pub pipeline_id: String,
+    pub stages: Vec<PipelineStage>,
+    pub keep_open: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -338,9 +352,10 @@ pub struct AppState {
     pub ai_input_mode: bool,
     pub ai_messages: Vec<AiMessage>,
     pub ai_streaming: String,
+    pub ai_conversation_scroll: usize,
     pub ai_usage: String,
-    pub pending_ai_action: Option<AiAction>,
     pub ai_confirmation: Option<AiActionConfirmation>,
+    ai_launch_approval_mode: Option<AiApprovalMode>,
     pub api_provider_setup: Option<ApiProviderSetupState>,
     effects: VecDeque<AppEffect>,
     state_path: Option<PathBuf>,
@@ -437,9 +452,10 @@ impl AppState {
             ai_input_mode: false,
             ai_messages: Vec::new(),
             ai_streaming: String::new(),
+            ai_conversation_scroll: 0,
             ai_usage: "waiting for usage data".to_string(),
-            pending_ai_action: None,
             ai_confirmation: None,
+            ai_launch_approval_mode: None,
             api_provider_setup: None,
             effects: VecDeque::new(),
             state_path,
@@ -557,6 +573,20 @@ impl AppState {
             return;
         }
 
+        if self.screen == Screen::Home
+            && self.home_focus == HomeFocus::Assistant
+            && !key
+                .modifiers
+                .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+            && let KeyCode::Char(ch) = key.code
+        {
+            self.focus_ai();
+            if self.ai_input_mode {
+                self.ai_input.push(ch);
+            }
+            return;
+        }
+
         match key.code {
             KeyCode::Char('?') => self.screen = Screen::Help,
             KeyCode::Backspace | KeyCode::Esc => self.return_to_main(),
@@ -586,7 +616,11 @@ impl AppState {
             || self.launch_approval.is_some()
             || self.uninstall_confirmation.is_some()
             || self.search_mode
-            || self.ai_input_mode
+            || (self.ai_input_mode
+                && !matches!(
+                    mouse.kind,
+                    MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
+                ))
         {
             self.mouse_selection = None;
             return;
@@ -621,6 +655,16 @@ impl AppState {
         }
 
         match mouse.kind {
+            MouseEventKind::ScrollUp
+                if self.screen == Screen::Home && self.home_focus == HomeFocus::Assistant =>
+            {
+                self.scroll_ai_conversation_up(3)
+            }
+            MouseEventKind::ScrollDown
+                if self.screen == Screen::Home && self.home_focus == HomeFocus::Assistant =>
+            {
+                self.scroll_ai_conversation_down(3)
+            }
             MouseEventKind::ScrollUp => self.move_current_selection(-1),
             MouseEventKind::ScrollDown => self.move_current_selection(1),
             MouseEventKind::Down(MouseButton::Left) if self.screen == Screen::AppView => {
@@ -916,7 +960,10 @@ impl AppState {
                 .join(", ")
         };
 
-        format!("platform: {platform}\ninstall queue: {queue}\ncatalog apps: {apps}")
+        format!(
+            "platform: {platform}\nAI permission mode: {}\ninstall queue: {queue}\ncatalog apps: {apps}",
+            self.settings.ai_approval_mode.label()
+        )
     }
 
     pub fn risk_label(risk: RiskLevel) -> &'static str {
@@ -1019,6 +1066,7 @@ impl AppState {
             self.pending_tool_launch = None;
             self.pending_tool_install = None;
             self.pending_tool_configuration = None;
+            self.ai_launch_approval_mode = None;
         }
         self.trim_logs();
         if self.queue_running {
@@ -1031,6 +1079,7 @@ impl AppState {
             self.pending_tool_launch = None;
             self.pending_tool_install = None;
             self.pending_tool_configuration = None;
+            self.ai_launch_approval_mode = None;
         }
         self.queue_running = false;
         self.status = format!("Authorization cancelled for {tool_id}: {error}");
@@ -1344,6 +1393,7 @@ impl AppState {
             }
             AiEvent::Message { provider, text } => {
                 self.ai_streaming.clear();
+                self.ai_conversation_scroll = 0;
                 self.ai_messages.push(AiMessage {
                     role: provider.label().to_string(),
                     text,
@@ -1357,10 +1407,19 @@ impl AppState {
                 kind,
                 target,
             } => {
-                let resolved_target = self.resolve_ai_tool_id(&target);
+                let resolved_target = match kind.as_str() {
+                    "launch_pipeline" => self.resolve_ai_pipeline_target(&target),
+                    "launch_tplay_search" => self.resolve_ai_tplay_search_target(&target),
+                    _ => self.resolve_ai_tool_id(&target),
+                };
                 let supported = matches!(
                     kind.as_str(),
-                    "catalog_search" | "install_plan" | "verified_update" | "launch_app"
+                    "catalog_search"
+                        | "install_plan"
+                        | "verified_update"
+                        | "launch_app"
+                        | "launch_pipeline"
+                        | "launch_tplay_search"
                 );
                 if provider == self.ai_provider && supported {
                     let Some(target) = resolved_target else {
@@ -1371,16 +1430,17 @@ impl AppState {
                         kind: kind.clone(),
                         target: target.clone(),
                     };
-                    let auto_approve = match self.settings.ai_approval_mode {
-                        AiApprovalMode::Ask => false,
-                        AiApprovalMode::SafeOnly => kind == "catalog_search",
-                        AiApprovalMode::AllBounded => true,
-                    };
-                    if auto_approve {
-                        self.execute_ai_action(action, "auto-approved");
-                    } else {
-                        self.pending_ai_action = Some(action);
-                        self.ai_status = format!("Proposed {kind} {target} · press A to review");
+                    match self.settings.ai_approval_mode {
+                        AiApprovalMode::Ask => {
+                            self.ai_confirmation = Some(AiActionConfirmation { action });
+                            self.ai_status = "Approve this bounded AI action? Yes / No".to_string();
+                        }
+                        AiApprovalMode::Auto => {
+                            self.execute_ai_action(action, "auto-approved", AiApprovalMode::Auto);
+                        }
+                        AiApprovalMode::Bypass => {
+                            self.execute_ai_action(action, "bypassed", AiApprovalMode::Bypass);
+                        }
                     }
                 } else {
                     self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
@@ -1390,7 +1450,7 @@ impl AppState {
                 self.ai_usage = usage;
             }
             AiEvent::TurnCompleted { provider, status } if provider == self.ai_provider => {
-                if self.pending_ai_action.is_none() {
+                if self.ai_confirmation.is_none() {
                     self.ai_status = format!("{} turn {status}", provider.label());
                 }
             }
@@ -1427,6 +1487,27 @@ impl AppState {
                     || tool.name.eq_ignore_ascii_case(target)
             })
             .map(|tool| tool.id.clone())
+    }
+
+    fn resolve_ai_pipeline_target(&self, target: &str) -> Option<String> {
+        let stages = target
+            .split('|')
+            .map(|stage| self.resolve_ai_tool_id(stage))
+            .collect::<Option<Vec<_>>>()?;
+        if stages.len() < 2 {
+            return None;
+        }
+        Some(stages.join(" | "))
+    }
+
+    fn resolve_ai_tplay_search_target(&self, target: &str) -> Option<String> {
+        self.catalog
+            .tools
+            .iter()
+            .any(|tool| tool.id == "tplay")
+            .then_some(())?;
+        let query = target.split_whitespace().collect::<Vec<_>>().join(" ");
+        (!query.is_empty() && query.chars().count() <= 160).then_some(query)
     }
 
     fn refresh_ai_identity(&mut self) {
@@ -1488,18 +1569,13 @@ impl AppState {
                 self.ai_input.clear();
                 self.ai_input_mode = false;
             }
+            KeyCode::PageUp => self.scroll_ai_conversation_up(10),
+            KeyCode::PageDown => self.scroll_ai_conversation_down(10),
+            KeyCode::Home => self.ai_conversation_scroll = usize::MAX,
+            KeyCode::End => self.ai_conversation_scroll = 0,
             KeyCode::Char(ch) => self.ai_input.push(ch),
             _ => {}
         }
-    }
-
-    fn begin_ai_action_confirmation(&mut self) {
-        let Some(action) = self.pending_ai_action.take() else {
-            self.ai_status = "No AI action is awaiting approval".to_string();
-            return;
-        };
-        self.ai_confirmation = Some(AiActionConfirmation { action });
-        self.ai_status = "Approve this bounded AI action? Yes / No".to_string();
     }
 
     fn handle_ai_confirmation_key(&mut self, code: KeyCode) {
@@ -1517,13 +1593,13 @@ impl AppState {
                 let Some(confirmation) = self.ai_confirmation.take() else {
                     return;
                 };
-                self.execute_ai_action(confirmation.action, "approved");
+                self.execute_ai_action(confirmation.action, "approved", AiApprovalMode::Ask);
             }
             _ => {}
         }
     }
 
-    fn execute_ai_action(&mut self, action: AiAction, approval: &str) {
+    fn execute_ai_action(&mut self, action: AiAction, approval: &str, mode: AiApprovalMode) {
         let target = action.target;
         match action.kind.as_str() {
             "catalog_search" => {
@@ -1540,9 +1616,29 @@ impl AppState {
             "install_plan" => {
                 self.queue_tool_ids(vec![target.clone()]);
                 self.screen = Screen::Install;
+                self.request_execute_selected_with_policy(mode == AiApprovalMode::Bypass);
             }
-            "verified_update" => self.queue_verified_update(&target),
-            "launch_app" => self.request_tool_configuration(&target),
+            "verified_update" => {
+                self.queue_verified_update_with_policy(&target, mode == AiApprovalMode::Bypass)
+            }
+            "launch_app" => {
+                self.ai_launch_approval_mode = Some(mode);
+                self.request_tool_configuration(&target);
+            }
+            "launch_pipeline" => {
+                let Some(request) = self.build_pipeline_launch_request(&target) else {
+                    self.ai_status = "Unsupported AI action".to_string();
+                    return;
+                };
+                self.effects.push_back(AppEffect::LaunchPipeline(request));
+            }
+            "launch_tplay_search" => {
+                self.ai_launch_approval_mode = Some(mode);
+                if !self.request_tplay_search(&target) {
+                    self.ai_status = "Unsupported AI action".to_string();
+                    return;
+                }
+            }
             _ => {
                 self.ai_status = "Unsupported AI action".to_string();
                 return;
@@ -1556,9 +1652,76 @@ impl AppState {
         self.trim_logs();
     }
 
+    fn build_pipeline_launch_request(&self, target: &str) -> Option<PipelineLaunchRequest> {
+        let ids = target.split('|').map(str::trim).collect::<Vec<_>>();
+        if ids.len() < 2 {
+            return None;
+        }
+        let tools = ids
+            .iter()
+            .map(|id| self.catalog.tools.iter().find(|tool| tool.id == *id))
+            .collect::<Option<Vec<_>>>()?;
+        Some(PipelineLaunchRequest {
+            pipeline_id: tools
+                .iter()
+                .map(|tool| tool.id.as_str())
+                .collect::<Vec<_>>()
+                .join("-to-"),
+            stages: tools
+                .iter()
+                .map(|tool| PipelineStage {
+                    tool_id: tool.id.clone(),
+                    command: tool.run_command_for_current_platform(),
+                })
+                .collect(),
+            keep_open: tools.iter().any(|tool| tool.run.keep_open),
+        })
+    }
+
+    fn request_tplay_search(&mut self, query: &str) -> bool {
+        let Some(tool) = self.catalog.tools.iter().find(|tool| tool.id == "tplay") else {
+            self.ai_launch_approval_mode = None;
+            return false;
+        };
+        let tool_name = tool.name.clone();
+        let request = ToolLaunchRequest {
+            tool_id: tool.id.clone(),
+            command: format!(
+                "t4e tplay-search {}",
+                shell_quote(&encode_tplay_search_query(query))
+            ),
+            keep_open: tool.run.keep_open,
+            output_filter: None,
+        };
+        if self.installed_scan_complete && !self.installed_tools.contains("tplay") {
+            self.install_then_launch(request);
+        } else {
+            self.request_tool_launch(tool_name, request);
+        }
+        true
+    }
+
     fn handle_screen_key(&mut self, code: KeyCode) {
         match self.screen {
             Screen::Home => match code {
+                KeyCode::Down if self.home_focus == HomeFocus::Assistant => {
+                    self.scroll_ai_conversation_down(1)
+                }
+                KeyCode::Up if self.home_focus == HomeFocus::Assistant => {
+                    self.scroll_ai_conversation_up(1)
+                }
+                KeyCode::PageDown if self.home_focus == HomeFocus::Assistant => {
+                    self.scroll_ai_conversation_down(10)
+                }
+                KeyCode::PageUp if self.home_focus == HomeFocus::Assistant => {
+                    self.scroll_ai_conversation_up(10)
+                }
+                KeyCode::Home if self.home_focus == HomeFocus::Assistant => {
+                    self.ai_conversation_scroll = usize::MAX
+                }
+                KeyCode::End if self.home_focus == HomeFocus::Assistant => {
+                    self.ai_conversation_scroll = 0
+                }
                 KeyCode::Down | KeyCode::Char('j') => self.move_home_selection(1),
                 KeyCode::Up | KeyCode::Char('k') => self.move_home_selection(-1),
                 KeyCode::Left | KeyCode::Char('h') => {
@@ -1602,7 +1765,6 @@ impl AppState {
                 KeyCode::Char('x') if self.home_focus == HomeFocus::Assistant => {
                     self.effects.push_back(AppEffect::CodexInterrupt)
                 }
-                KeyCode::Char('A') => self.begin_ai_action_confirmation(),
                 KeyCode::Char('s') => self.screen = Screen::Settings,
                 _ => {}
             },
@@ -1976,6 +2138,7 @@ impl AppState {
     fn focus_ai(&mut self) {
         self.screen = Screen::Home;
         self.home_focus = HomeFocus::Assistant;
+        self.ai_conversation_scroll = 0;
         if self.ai_ready() {
             self.ai_input_mode = true;
             self.ai_status = format!("Compose with {}", self.ai_provider.label());
@@ -1984,6 +2147,14 @@ impl AppState {
             self.ai_status =
                 "AI unavailable · configure a CLI or API provider in Settings".to_string();
         }
+    }
+
+    fn scroll_ai_conversation_up(&mut self, lines: usize) {
+        self.ai_conversation_scroll = self.ai_conversation_scroll.saturating_add(lines);
+    }
+
+    fn scroll_ai_conversation_down(&mut self, lines: usize) {
+        self.ai_conversation_scroll = self.ai_conversation_scroll.saturating_sub(lines);
     }
 
     fn cycle_ai_provider(&mut self, delta: isize) {
@@ -2043,6 +2214,10 @@ impl AppState {
     }
 
     fn queue_verified_update(&mut self, tool_id: &str) {
+        self.queue_verified_update_with_policy(tool_id, false);
+    }
+
+    fn queue_verified_update_with_policy(&mut self, tool_id: &str, bypass_confirmation: bool) {
         let platform = if cfg!(target_os = "macos") {
             Platform::Macos
         } else {
@@ -2082,7 +2257,7 @@ impl AppState {
         self.install_index = self.queue.len().saturating_sub(1);
         self.screen = Screen::Install;
         self.status = format!("Queued T4E-verified update for {tool_id}");
-        self.request_execute_selected();
+        self.request_execute_selected_with_policy(bypass_confirmation);
     }
 
     fn request_selected_uninstall(&mut self) {
@@ -2145,6 +2320,7 @@ impl AppState {
             .iter()
             .find(|tool| tool.id == requested_tool_id)
         else {
+            self.ai_launch_approval_mode = None;
             self.status = "App is no longer available".to_string();
             return;
         };
@@ -2165,6 +2341,7 @@ impl AppState {
                 view.content.clear();
             }
             self.screen = Screen::AppView;
+            self.ai_launch_approval_mode = None;
             self.status = format!("Returned to {tool_name}");
             return;
         }
@@ -2196,6 +2373,9 @@ impl AppState {
             return;
         }
         self.open_launch_options(tool_id, tool_name, command, None, options);
+        if self.ai_launch_approval_mode.is_some() {
+            self.confirm_launch_options();
+        }
     }
 
     fn open_launch_options(
@@ -2245,6 +2425,7 @@ impl AppState {
         match code {
             KeyCode::Esc => {
                 self.launch_argument = None;
+                self.ai_launch_approval_mode = None;
                 self.status = "Launch cancelled".to_string();
             }
             KeyCode::Backspace => {
@@ -2273,6 +2454,7 @@ impl AppState {
                     .iter()
                     .find(|tool| tool.id == argument.tool_id)
                 else {
+                    self.ai_launch_approval_mode = None;
                     self.status = "Launch tool is no longer available".to_string();
                     return;
                 };
@@ -2283,14 +2465,15 @@ impl AppState {
                 let base_command = tool.run_command_for_current_platform().to_string();
                 let command = format!("{base_command} {}", shell_quote(value));
                 if options.is_empty() {
-                    self.effects
-                        .push_back(AppEffect::LaunchTool(ToolLaunchRequest {
+                    self.request_tool_launch(
+                        tool_name,
+                        ToolLaunchRequest {
                             tool_id,
                             command,
                             keep_open,
                             output_filter: None,
-                        }));
-                    self.status = format!("Opening {tool_name}");
+                        },
+                    );
                 } else {
                     self.open_launch_options(
                         tool_id,
@@ -2299,6 +2482,9 @@ impl AppState {
                         Some(shell_quote(value)),
                         options,
                     );
+                    if self.ai_launch_approval_mode.is_some() {
+                        self.confirm_launch_options();
+                    }
                 }
             }
             _ => {}
@@ -2313,6 +2499,7 @@ impl AppState {
         match code {
             KeyCode::Esc => {
                 self.launch_options = None;
+                self.ai_launch_approval_mode = None;
                 self.status = "Launch cancelled".to_string();
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -2424,7 +2611,8 @@ impl AppState {
     }
 
     fn request_tool_launch(&mut self, tool_name: String, request: ToolLaunchRequest) {
-        let needs_camera_approval = self
+        let bypass_approval = self.ai_launch_approval_mode == Some(AiApprovalMode::Bypass);
+        let has_camera_capability = self
             .catalog
             .tools
             .iter()
@@ -2432,12 +2620,22 @@ impl AppState {
             .is_some_and(|tool| {
                 tool.capabilities
                     .contains(&crate::catalog::models::Capability::CameraCapture)
-            })
-            && !self.approved_camera_tools.contains(&request.tool_id);
+            });
+        let needs_camera_approval = has_camera_capability
+            && !self.approved_camera_tools.contains(&request.tool_id)
+            && !bypass_approval;
         if needs_camera_approval {
             self.launch_approval = Some(LaunchApproval { tool_name, request });
+            self.ai_launch_approval_mode = None;
             self.status = "Camera access approval required".to_string();
         } else {
+            if bypass_approval && has_camera_capability {
+                self.logs.push(timestamp_log(format!(
+                    "ai: bypassed camera approval for {}",
+                    request.tool_id
+                )));
+            }
+            self.ai_launch_approval_mode = None;
             self.status = format!("Opening {tool_name}");
             self.effects.push_back(AppEffect::LaunchTool(request));
         }
@@ -2582,6 +2780,11 @@ impl AppState {
     }
 
     fn request_execute_selected(&mut self) {
+        let bypass_confirmation = self.ai_launch_approval_mode == Some(AiApprovalMode::Bypass);
+        self.request_execute_selected_with_policy(bypass_confirmation);
+    }
+
+    fn request_execute_selected_with_policy(&mut self, bypass_confirmation: bool) {
         let Some(job) = self.queue.get(self.install_index) else {
             self.status = "Install queue is empty".to_string();
             return;
@@ -2610,7 +2813,9 @@ impl AppState {
             return;
         }
 
-        if job.task.requires_confirmation || self.settings.confirm_all_installs {
+        let would_require_confirmation =
+            job.task.requires_confirmation || self.settings.confirm_all_installs;
+        if !bypass_confirmation && would_require_confirmation {
             let tool_id = job.item.tool_id.clone();
             let typed = job.task.requires_confirmation;
             let expected = job.task.expected_version.as_ref().map_or_else(
@@ -2630,6 +2835,12 @@ impl AppState {
                 "Press Enter to approve this installation".to_string()
             };
         } else {
+            if bypass_confirmation && would_require_confirmation {
+                self.logs.push(timestamp_log(format!(
+                    "ai: bypassed install approval for {}",
+                    job.item.tool_id
+                )));
+            }
             self.effects
                 .push_back(AppEffect::Execute(Box::new(job.clone())));
         }
@@ -2709,6 +2920,7 @@ impl AppState {
                 self.pending_tool_launch = None;
                 self.pending_tool_install = None;
                 self.pending_tool_configuration = None;
+                self.ai_launch_approval_mode = None;
                 self.status = "Installation confirmation cancelled".to_string();
             }
             KeyCode::Backspace => {
@@ -2733,6 +2945,7 @@ impl AppState {
                     }
                 } else {
                     self.queue_running = false;
+                    self.ai_launch_approval_mode = None;
                     self.status = "Confirmation phrase did not match".to_string();
                 }
             }
@@ -2860,9 +3073,9 @@ impl AppState {
             3 => self.cycle_ai_provider(delta),
             4 => {
                 const MODES: [AiApprovalMode; 3] = [
+                    AiApprovalMode::Bypass,
+                    AiApprovalMode::Auto,
                     AiApprovalMode::Ask,
-                    AiApprovalMode::SafeOnly,
-                    AiApprovalMode::AllBounded,
                 ];
                 let current = MODES
                     .iter()
@@ -3328,6 +3541,21 @@ fn app_input_from_key(key: KeyEvent) -> Option<AppInput> {
 
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn encode_tplay_search_query(query: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = String::with_capacity(query.len());
+    for byte in query.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+            encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+    }
+    encoded
 }
 
 fn extract_urls(content: &str) -> Vec<String> {

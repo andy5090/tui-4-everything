@@ -236,14 +236,14 @@ Important actions are intentionally explicit:
   All other keys go to the current app; users do not need tmux commands.
 - AI lives in HOME's assistant rail rather than a separate tab. `a` focuses the
   composer, while Settings selects and configures every subscription or API
-  connection in one flow,
-  `x` interrupts supported turns, and `A` reviews a bounded proposal. Providers
+  connection in one flow, and `x` interrupts supported turns. Providers
   may propose catalog search, install planning, a pinned T4E-verified update, or
-  an app launch. Approval uses `Y`/`Enter` for Yes and `N`/`Esc` for No.
-  Settings offers `Ask`, `Safe only` (local catalog searches), and `All bounded`
-  approval levels. Even `All bounded` remains limited to validated catalog
-  actions; script/DANGER installs and sensitive device access retain their own
-  safety prompts.
+  an app launch. Settings offers `Auto` by default, immediate `Ask` confirmation,
+  and `Bypass`. Auto starts validated action chains without a separate review
+  input while retaining high-risk installer and device prompts. Ask opens
+  Yes/No as soon as an action is proposed. Bypass skips approval input for the
+  complete validated chain, including installer and sensitive-device gates.
+  Required launch values not present in the request still need input.
 - Settings can configure OpenAI (`OPENAI_API_KEY`), Anthropic
   (`ANTHROPIC_API_KEY`), Gemini (`GEMINI_API_KEY`), Zhipu AI
   (`ZHIPU_API_KEY`), Kimi (`MOONSHOT_API_KEY`), and custom OpenAI-compatible
@@ -260,11 +260,12 @@ Important actions are intentionally explicit:
   `UPDATE`; `u` queues the exact verified version. Package-manager `latest`
   channels are intentionally not presented as verified updates.
 
-Script installers and DANGER apps retain exact typed confirmation. AI-proposed
-side effects use an explicit Yes/No confirmation. Codex app-server approvals are denied, Claude runs with tools
-disabled, Gemini uses plan mode, and API providers receive only the bounded
-intent prompt; T4E remains authoritative for installation, verified updates,
-and process lifecycle.
+Script installers and DANGER apps retain exact typed confirmation for manual
+and Auto actions; Bypass explicitly suppresses those prompts for AI-requested
+chains. Codex app-server approvals are denied, Claude runs with tools disabled,
+Gemini uses plan mode, and API providers receive only the bounded intent prompt;
+T4E remains authoritative for installation, verified updates, and process
+lifecycle.
 
 On Linux, `x` or `X` handles the package-manager command without requiring the
 user to type it. For apt, dnf, pacman, Snap, missing `pipx`, and declared Cargo

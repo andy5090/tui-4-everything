@@ -85,18 +85,20 @@ pub enum ProviderAuthMode {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AiApprovalMode {
+    #[serde(alias = "all_bounded")]
+    Bypass,
     #[default]
+    #[serde(alias = "safe_only")]
+    Auto,
     Ask,
-    SafeOnly,
-    AllBounded,
 }
 
 impl AiApprovalMode {
     pub fn label(self) -> &'static str {
         match self {
+            Self::Bypass => "Bypass",
+            Self::Auto => "Auto",
             Self::Ask => "Ask",
-            Self::SafeOnly => "Safe only",
-            Self::AllBounded => "All bounded",
         }
     }
 }
@@ -183,7 +185,7 @@ impl Default for UserSettings {
             install_timeout_sec: 600,
             max_install_attempts: 2,
             confirm_all_installs: false,
-            ai_approval_mode: AiApprovalMode::Ask,
+            ai_approval_mode: AiApprovalMode::Auto,
             preferred_ai_provider: String::new(),
             api_providers: default_api_provider_profiles(),
         }

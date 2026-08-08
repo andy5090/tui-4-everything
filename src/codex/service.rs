@@ -228,7 +228,7 @@ fn start_prompt(
 
 pub fn planner_prompt(environment_context: &str, user_request: &str) -> String {
     format!(
-        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from the assistant rail on HOME. T4E catalogs terminal apps, installs only through its approval flow, applies only T4E-verified app versions, and launches individual apps from HOME. Treat the supplied T4E runtime context as authoritative.\n\nHelp the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. Every action is only a proposal; T4E applies the user's configured approval policy and owns installation, verified updates, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: show an app in HOME\n- install_plan: prepare an app installation plan\n- verified_update: apply the exact T4E-verified version when the app supports it\n- launch_app: launch an installed catalog app through T4E\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
+        "You are the AI control plane embedded inside T4E (TUI for Everything), not a generic coding assistant. The user is talking to you from the assistant rail on HOME. T4E catalogs terminal apps, installs only through its approval flow, applies only T4E-verified app versions, launches individual apps from HOME, and launches validated app pipelines there. Treat the supplied T4E runtime context as authoritative.\n\nHelp the user operate this T4E environment. Refer to apps by their exact local IDs. Never run shell commands, edit files, or claim an action already happened. Return a concise user-facing message and at most one bounded action. Every action is only a proposal; T4E validates catalog IDs, applies the user's configured approval policy, and owns installation, verified updates, process lifecycle, hidden tmux sessions, permissions, and audit logs.\n\nAvailable bounded actions:\n- catalog_search: show an app in HOME\n- install_plan: prepare an app installation plan\n- verified_update: apply the exact T4E-verified version when the app supports it\n- launch_app: launch an installed catalog app through T4E\n- launch_pipeline: pipe two or more installed catalog apps in order; target must contain two or more exact app IDs separated by `|` (for example, `fortune | figlet | lolcat`), never shell commands or arguments\n- launch_tplay_search: search YouTube and launch the first result in tplay; target must be a concise visual-video search phrase. Use this when the user delegates video selection, without asking the user to choose a video or enter a URL\n\nCurrent T4E runtime context:\n{environment_context}\n\nUser request: {user_request}"
     )
 }
 
@@ -361,9 +361,12 @@ pub fn bounded_action_schema() -> Value {
                         "properties": {
                             "type": {
                                 "type": "string",
-                                "enum": ["catalog_search", "install_plan", "verified_update", "launch_app"]
+                                "enum": ["catalog_search", "install_plan", "verified_update", "launch_app", "launch_pipeline", "launch_tplay_search"]
                             },
-                            "target": { "type": "string" }
+                            "target": {
+                                "type": "string",
+                                "description": "For launch_pipeline: two or more catalog app IDs separated by |, such as fortune | figlet | lolcat. For launch_tplay_search: a concise YouTube search phrase. Otherwise one catalog app ID."
+                            }
                         },
                         "required": ["type", "target"],
                         "additionalProperties": false
@@ -389,8 +392,8 @@ fn account_label(value: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        MessageOutcome, extract_error_detail, fallback_model_for_error, parse_turn_completion,
-        planner_prompt,
+        MessageOutcome, bounded_action_schema, extract_error_detail, fallback_model_for_error,
+        parse_turn_completion, planner_prompt,
     };
     use serde_json::json;
 
@@ -442,7 +445,18 @@ mod tests {
         assert!(prompt.contains("launches individual apps from HOME"));
         assert!(prompt.contains("configured approval policy"));
         assert!(prompt.contains("verified_update"));
+        assert!(prompt.contains("launch_pipeline"));
+        assert!(prompt.contains("two or more"));
+        assert!(!prompt.contains("exactly two"));
+        assert!(prompt.contains("launch_tplay_search"));
+        assert!(prompt.contains("without asking the user to choose"));
         assert!(prompt.contains("catalog apps: yazi=Yazi (run: yazi)"));
         assert!(prompt.ends_with("User request: What can you do here?"));
+
+        let schema = bounded_action_schema().to_string();
+        assert!(schema.contains("launch_pipeline"));
+        assert!(schema.contains("launch_tplay_search"));
+        assert!(schema.contains("two or more"));
+        assert!(!schema.contains("exactly two"));
     }
 }

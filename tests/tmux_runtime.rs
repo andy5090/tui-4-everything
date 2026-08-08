@@ -239,6 +239,73 @@ fn filtered_one_shot_app_uses_a_live_output_holder() {
 }
 
 #[test]
+fn multi_app_pipeline_validates_stages_before_composing_the_pipe() {
+    let runner = MockRunner {
+        outputs: Mutex::new(VecDeque::from([
+            output(false, "", "missing"),
+            output(true, "%9\n", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+        ])),
+        calls: Arc::new(Mutex::new(Vec::new())),
+    };
+    let calls = Arc::clone(&runner.calls);
+    let runtime = TmuxRuntime::new(runner);
+
+    runtime
+        .launch_pipeline_at_size_with_mode(
+            "t4e-apps",
+            "app-launcher",
+            "fortune-to-figlet-to-lolcat",
+            &["fortune", "figlet", "lolcat"],
+            80,
+            24,
+            true,
+        )
+        .expect("pipeline launches");
+
+    let calls = calls.lock().expect("calls lock");
+    let launch = calls
+        .iter()
+        .find(|args| args.first().is_some_and(|arg| arg == "respawn-pane"))
+        .expect("launch call");
+    assert!(
+        launch[4].contains("fortune | figlet | lolcat; status=$?"),
+        "{}",
+        launch[4]
+    );
+}
+
+#[test]
+fn app_pipeline_rejects_shell_syntax_in_every_stage() {
+    for commands in [
+        ["fortune; rm -rf /", "figlet"],
+        ["fortune", "figlet > /tmp/output"],
+    ] {
+        let runner = MockRunner {
+            outputs: Mutex::new(VecDeque::new()),
+            calls: Arc::new(Mutex::new(Vec::new())),
+        };
+        let runtime = TmuxRuntime::new(runner);
+
+        assert!(
+            runtime
+                .launch_pipeline_at_size_with_mode(
+                    "t4e-apps",
+                    "app-launcher",
+                    "fortune-to-figlet",
+                    &commands,
+                    80,
+                    24,
+                    true,
+                )
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn relaunch_reuses_and_revives_a_legacy_dead_pane() {
     let runner = MockRunner {
         outputs: Mutex::new(VecDeque::from([
@@ -328,6 +395,7 @@ fn real_single_app_lifecycle_works_when_tmux_and_cmatrix_are_available() {
             break;
         }
         thread::sleep(Duration::from_millis(50));
+        let _ = runtime.send_app_key(&apps[0].pane_id, "C-c");
     }
     assert!(!runtime.session_exists(&session).expect("session probe"));
 }
@@ -394,7 +462,7 @@ fn real_one_shot_fun_apps_leave_visible_output_when_available() {
         assert!(!content.trim().is_empty(), "{app_id} output is visible");
         assert!(!content.contains("Pane is dead"));
         assert!(!plain_content.contains("[T4E] command exited"));
-        if filter.is_some() {
+        if filter.is_some() && std::env::var_os("NO_COLOR").is_none() {
             assert!(content.contains("\u{1b}["), "lolcat emits ANSI colors");
         }
         assert_eq!(String::from_utf8_lossy(&pane_state.stdout).trim(), "0");

@@ -129,6 +129,9 @@ fn selection_text(buffer: &Buffer, start: ScreenPoint, end: ScreenPoint) -> Opti
             current_row = Some(y);
         }
         if let Some(cell) = buffer.cell((x, y)) {
+            if is_wide_continuation(buffer, x, y) {
+                return;
+            }
             lines
                 .last_mut()
                 .expect("selection row exists")
@@ -159,6 +162,15 @@ fn selection_text(buffer: &Buffer, start: ScreenPoint, end: ScreenPoint) -> Opti
         return Some(compact.concat());
     }
     Some(lines.join("\n"))
+}
+
+fn is_wide_continuation(buffer: &Buffer, x: u16, y: u16) -> bool {
+    (buffer.area().x..x).rev().any(|lead_x| {
+        buffer.cell((lead_x, y)).is_some_and(|cell| {
+            let width = Span::raw(cell.symbol()).width() as u16;
+            width > 1 && lead_x.saturating_add(width) > x
+        })
+    })
 }
 
 fn panel_selection(
@@ -624,15 +636,7 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             Style::default().fg(MUTED),
         ),
     ];
-    if let Some(action) = &app.pending_ai_action {
-        lines.push(Line::styled(
-            format!("Proposed: {} {}", action.kind, action.target),
-            Style::default()
-                .fg(Color::Yellow)
-                .add_modifier(Modifier::BOLD),
-        ));
-    }
-    if let Some(message) = app.ai_messages.last() {
+    for message in &app.ai_messages {
         lines.push(Line::styled(
             format!("{}:", message.role),
             Style::default().fg(ACCENT),
@@ -641,21 +645,25 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             message
                 .text
                 .lines()
-                .take(3)
                 .map(|line| Line::from(line.to_string())),
         );
-    } else if !app.ai_streaming.is_empty() {
-        lines.extend(
-            app.ai_streaming
-                .lines()
-                .take(3)
-                .map(|line| Line::from(line.to_string())),
-        );
+        lines.push(Line::from(""));
+    }
+    if !app.ai_streaming.is_empty() {
+        lines.push(Line::styled(
+            format!("{}:", app.ai_provider.label()),
+            Style::default().fg(ACCENT),
+        ));
+        lines.extend(app.ai_streaming.lines().map(Line::from));
+        lines.push(Line::from(""));
     }
     let composer = if app.ai_input_mode {
         format!("> {}_", app.ai_input)
     } else if app.ai_ready() {
-        "a / Enter: ask AI · /: skill · A: review proposal".to_string()
+        format!(
+            "Type to ask AI · /: skill · permission: {}",
+            app.settings.ai_approval_mode.label()
+        )
     } else {
         "AI input disabled until a provider is ready".to_string()
     };
@@ -663,12 +671,15 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         composer,
         Style::default().fg(if focused { SELECTED } else { MUTED }),
     ));
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(home_panel("Assistant", focused))
-            .wrap(Wrap { trim: true }),
-        area,
-    );
+    let conversation = Paragraph::new(lines)
+        .block(home_panel("Assistant", focused))
+        .wrap(Wrap { trim: true });
+    let max_scroll = conversation
+        .line_count(area.width)
+        .saturating_sub(usize::from(area.height))
+        .min(usize::from(u16::MAX));
+    let scroll = max_scroll.saturating_sub(app.ai_conversation_scroll.min(max_scroll)) as u16;
+    frame.render_widget(conversation.scroll((scroll, 0)), area);
 }
 
 fn ansi_line(value: &str) -> Line<'static> {
@@ -1232,12 +1243,14 @@ fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         conversation.push(Line::styled("Codex:", Style::default().fg(ACCENT)));
         conversation.extend(app.ai_streaming.lines().map(Line::from));
     }
-    frame.render_widget(
-        Paragraph::new(conversation)
-            .block(panel("Conversation"))
-            .wrap(Wrap { trim: false }),
-        chunks[0],
-    );
+    let conversation = Paragraph::new(conversation)
+        .block(panel("Conversation"))
+        .wrap(Wrap { trim: false });
+    let conversation_scroll = conversation
+        .line_count(chunks[0].width)
+        .saturating_sub(usize::from(chunks[0].height))
+        .min(usize::from(u16::MAX)) as u16;
+    frame.render_widget(conversation.scroll((conversation_scroll, 0)), chunks[0]);
 
     let mut status = vec![
         Line::styled(
@@ -1454,7 +1467,7 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             provider_auth_mode(app).label()
         ),
         format!(
-            "AI action approval       {}",
+            "AI permission mode       {}",
             app.settings.ai_approval_mode.label()
         ),
         "Reset saved preferences    Enter".to_string(),
@@ -1524,11 +1537,11 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             "Left/Right provider · Enter configure and use",
         ),
         4 => (
-            "AI action approval",
+            "AI permission mode",
             app.settings.ai_approval_mode.label().to_string(),
-            "Ask shows Yes/No for every action. Safe only auto-runs local catalog searches. All bounded auto-runs every validated catalog action.",
-            "All bounded includes install plans, verified updates, and app launches. Script/DANGER installers and sensitive device access keep their separate safety prompts.",
-            "Left/Right select approval level",
+            "Auto immediately runs validated AI actions and asks only at separate high-risk gates. Ask opens Yes/No as soon as an action is proposed. Bypass runs the complete validated action chain without approval input.",
+            "Bypass includes install execution, verified updates, default launch options, and sensitive install/device approvals. Required values missing from the request still need input.",
+            "Left/Right select permission mode",
         ),
         _ => (
             "Reset saved preferences",
@@ -1686,7 +1699,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             app.search_query
         )
     } else if app.ai_input_mode {
-        "AI prompt input   Tab panel   Shift+Tab tabs   Enter send   Esc cancel".to_string()
+        "AI prompt input   PgUp/PgDn history   wheel scroll   Enter send   Esc cancel".to_string()
     } else if app.screen == Screen::Logs {
         format!(
             "{} | Shift+Tab tabs | Up/Down 1 row  PageUp/PageDown 10  Home/End  c clear",
@@ -1699,7 +1712,7 @@ fn render_footer(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             }
             HomeFocus::Views => "↑/↓ view  → apps  Ctrl+F search",
             HomeFocus::AppList => "← views  ↑/↓ app  Enter run",
-            HomeFocus::Assistant => "← apps  a/Enter compose  / skill  A approve",
+            HomeFocus::Assistant => "← apps  type to compose  ↑/↓ history  wheel scroll  / skill",
         };
         if area.width < 90 {
             "Tab panels  S-Tab tabs  ←/→ focus  Backspace back  ? help".to_string()
@@ -1739,7 +1752,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
                 "App details list every declared capability.",
                 Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
             ),
-            Line::from("Scripts need approval | AI: A review, Y/Enter yes, N/Esc no"),
+            Line::from("AI permission: Bypass / Auto / Ask in Settings"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
             Line::from("F1 Help | Ctrl+F HOME search | Tab panels | Shift+Tab tabs"),
             Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
@@ -1774,7 +1787,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
                 "Package-manager installs use a generated catalog plan and verify required executables afterward.",
             ),
             Line::styled(
-                "Script installers always show the command and require explicit approval, regardless of app risk.",
+                "Script installers require approval for manual and Auto actions; AI Bypass explicitly skips it.",
                 Style::default().fg(MUTED),
             ),
             Line::from(""),
@@ -1790,7 +1803,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("F1                  open Help from dashboard screens"),
             Line::from("Ctrl+F              search apps from HOME Views or Apps"),
             Line::from("/                   start an Assistant skill or command"),
-            Line::from("A                   review AI action; Y/Enter yes, N/Esc no"),
+            Line::from("AI permission       Settings: Bypass / Auto / Ask"),
             Line::from("Activity arrows     scroll one row; PageUp / PageDown scroll ten"),
             Line::from("Activity Home / End jump to newest / oldest entry"),
             Line::from("Alt+Left / Right    switch running apps"),
@@ -2258,5 +2271,20 @@ mod tests {
 
         assert_eq!(copied, "LEFT");
         assert!(!copied.contains("RIGHT"));
+    }
+
+    #[test]
+    fn panel_selection_does_not_insert_spaces_for_wide_korean_cells() {
+        let area = Rect::new(0, 0, 32, 4);
+        let mut buffer = Buffer::empty(area);
+        Block::default()
+            .borders(Borders::ALL)
+            .render(area, &mut buffer);
+        let message = "현재 T4E 파이프를 실행합니다";
+        buffer.set_string(1, 1, message, Style::default());
+
+        let copied = selection_text(&buffer, (1, 1), (30, 1)).expect("selection copies");
+
+        assert_eq!(copied, message);
     }
 }

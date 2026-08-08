@@ -127,6 +127,9 @@ enum Command {
         #[arg(long, default_value = "registry/workspaces.yaml")]
         workspaces: PathBuf,
     },
+    /// Resolve one YouTube search result and play it with tplay.
+    #[command(name = "tplay-search", hide = true)]
+    TplaySearch { encoded_query: String },
     CollectRealGateResults {
         #[arg(long, value_parser = ["brew", "apt"])]
         manager: String,
@@ -566,6 +569,9 @@ fn main() -> Result<()> {
                 &catalog_model,
                 &workspace_model,
             )?;
+        }
+        Some(Command::TplaySearch { encoded_query }) => {
+            t4e::tplay::run_search(&encoded_query)?;
         }
         Some(Command::CollectRealGateResults {
             manager,

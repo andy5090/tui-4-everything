@@ -216,7 +216,15 @@ fn registry_loads_and_validates() {
         installer.method == InstallMethod::Script
             && installer.requires_confirm
             && installer.install_cmd.as_deref().is_some_and(|command| {
-                command.contains("andy5090/termleaf") && command.contains("termleaf-installer.sh")
+                command.contains("andy5090/termleaf/releases/download/v0.3.5/")
+                    && command.contains("termleaf-installer.sh")
+                    && command.contains("TERMLEAF_VERSION=0.3.5")
+            })
+            && installer.verified_update.as_ref().is_some_and(|update| {
+                update.version == "0.3.5"
+                    && update.command.contains("/releases/download/v0.3.5/")
+                    && update.command.contains("TERMLEAF_VERSION=0.3.5")
+                    && update.evidence.ends_with("/releases/tag/v0.3.5")
             })
     }));
     assert!(

@@ -1181,30 +1181,30 @@ tools:
       - platform: macos
         method: script
         package_hints: ["termleaf"]
-        install_cmd: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.0/termleaf-installer.sh | TERMLEAF_VERSION=0.3.0 sh"
+        install_cmd: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.5/termleaf-installer.sh | TERMLEAF_VERSION=0.3.5 sh"
         requires_confirm: true
         verified_update:
-          version: "0.3.0"
+          version: "0.3.5"
           version_probe:
             executable: "termleaf"
             args: ["--version"]
-          command: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.0/termleaf-installer.sh | TERMLEAF_VERSION=0.3.0 sh"
-          verified_at: "2026-07-31"
-          evidence: "https://github.com/andy5090/termleaf/releases/tag/v0.3.0"
+          command: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.5/termleaf-installer.sh | TERMLEAF_VERSION=0.3.5 sh"
+          verified_at: "2026-08-08"
+          evidence: "https://github.com/andy5090/termleaf/releases/tag/v0.3.5"
       - platform: linux
         method: script
         package_hints: ["termleaf"]
-        install_cmd: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.0/termleaf-installer.sh | TERMLEAF_VERSION=0.3.0 sh"
+        install_cmd: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.5/termleaf-installer.sh | TERMLEAF_VERSION=0.3.5 sh"
         requires_confirm: true
         verified_update:
-          version: "0.3.0"
+          version: "0.3.5"
           version_probe:
             executable: "termleaf"
             args: ["--version"]
-          command: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.0/termleaf-installer.sh | TERMLEAF_VERSION=0.3.0 sh"
-          verified_at: "2026-07-31"
-          evidence: "https://github.com/andy5090/termleaf/releases/tag/v0.3.0"
-    notes: "T4E installs and updates only the pinned Termleaf 0.3.0 release after catalog verification."
+          command: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.5/termleaf-installer.sh | TERMLEAF_VERSION=0.3.5 sh"
+          verified_at: "2026-08-08"
+          evidence: "https://github.com/andy5090/termleaf/releases/tag/v0.3.5"
+    notes: "T4E installs and updates only the pinned Termleaf 0.3.5 release after catalog verification."
   - id: micro
     name: "Micro"
     description: "A straightforward terminal text editor with familiar shortcuts."

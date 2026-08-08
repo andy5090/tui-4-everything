@@ -240,6 +240,61 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             Some(OutputFilter::Lolcat) => format!("{command} | lolcat"),
             None => command.to_string(),
         };
+        self.launch_validated_app_at_size(
+            session_name,
+            workspace_id,
+            app_id,
+            &command,
+            width,
+            height,
+            keep_open,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn launch_pipeline_at_size_with_mode(
+        &self,
+        session_name: &str,
+        workspace_id: &str,
+        app_id: &str,
+        commands: &[&str],
+        width: u16,
+        height: u16,
+        keep_open: bool,
+    ) -> Result<LaunchOutcome> {
+        validate_identifier("session name", session_name)?;
+        validate_identifier("workspace id", workspace_id)?;
+        validate_identifier("app id", app_id)?;
+        if commands.len() < 2 {
+            bail!("app pipeline requires at least two stages");
+        }
+        commands
+            .iter()
+            .try_for_each(|command| validate_command(command))?;
+        validate_app_viewport(width, height)?;
+        let command = commands.join(" | ");
+        self.launch_validated_app_at_size(
+            session_name,
+            workspace_id,
+            app_id,
+            &command,
+            width,
+            height,
+            keep_open,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn launch_validated_app_at_size(
+        &self,
+        session_name: &str,
+        workspace_id: &str,
+        app_id: &str,
+        command: &str,
+        width: u16,
+        height: u16,
+        keep_open: bool,
+    ) -> Result<LaunchOutcome> {
         let app_command = if keep_open {
             persistent_output_command(&command)
         } else {

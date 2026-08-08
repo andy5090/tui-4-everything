@@ -305,6 +305,62 @@ fn process_effects(
                     Err(error) => app.apply_workspace_error("app preflight", &error),
                 }
             }
+            AppEffect::LaunchPipeline(request) => {
+                let executables = request
+                    .stages
+                    .iter()
+                    .map(|stage| {
+                        stage
+                            .command
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or(stage.tool_id.as_str())
+                            .to_string()
+                    })
+                    .collect::<Vec<_>>();
+                match tmux.preflight(&executables) {
+                    Ok(preflight) if !preflight.tmux_available => app.apply_workspace_error(
+                        "pipeline launch",
+                        &anyhow::anyhow!("tmux is not installed"),
+                    ),
+                    Ok(preflight) if !preflight.missing_commands.is_empty() => {
+                        app.apply_workspace_error(
+                            "pipeline launch",
+                            &anyhow::anyhow!(
+                                "pipeline apps must be installed first: {}",
+                                preflight.missing_commands.join(", ")
+                            ),
+                        );
+                    }
+                    Ok(_) => {
+                        let (width, height) = app_viewport_size(session).unwrap_or((80, 17));
+                        let commands = request
+                            .stages
+                            .iter()
+                            .map(|stage| stage.command.as_str())
+                            .collect::<Vec<_>>();
+                        match tmux.launch_pipeline_at_size_with_mode(
+                            "t4e-apps",
+                            "app-launcher",
+                            &request.pipeline_id,
+                            &commands,
+                            width,
+                            height,
+                            request.keep_open,
+                        ) {
+                            Ok(_) => match tmux.list_apps("t4e-apps") {
+                                Ok(apps) => {
+                                    app.open_app_view("t4e-apps".to_string(), apps);
+                                    app.focus_app(&request.pipeline_id);
+                                }
+                                Err(error) => app.apply_workspace_error("open app", &error),
+                            },
+                            Err(error) => app.apply_workspace_error("pipeline launch", &error),
+                        }
+                    }
+                    Err(error) => app.apply_workspace_error("pipeline preflight", &error),
+                }
+            }
             AppEffect::LaunchWorkspace(request) => {
                 let commands = request
                     .required_tools

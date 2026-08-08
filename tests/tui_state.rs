@@ -8,7 +8,7 @@ use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 use t4e::ai::service::{AiEvent, AiProvider, ProviderReadiness};
 use t4e::app::events::Screen;
-use t4e::app::state::{AppEffect, AppState, HomeFilter, HomeFocus};
+use t4e::app::state::{AiMessage, AppEffect, AppState, HomeFilter, HomeFocus};
 use t4e::app::ui::render;
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::{AppCategory, InstallMethod, OutputFilter, Platform};
@@ -68,6 +68,37 @@ fn shift_tab_switches_header_sections_outside_running_apps() {
 
     app.handle_key(key(KeyCode::BackTab));
     assert_eq!(app.screen, Screen::Settings);
+}
+
+#[test]
+fn agents_conversation_keeps_the_latest_message_visible() {
+    let mut app = app();
+    app.screen = Screen::Agents;
+    for index in 0..30 {
+        app.ai_messages.push(AiMessage {
+            role: "Codex".to_string(),
+            text: format!("history message {index}"),
+        });
+    }
+    app.ai_messages.push(AiMessage {
+        role: "Codex".to_string(),
+        text: "LATEST CONVERSATION MESSAGE".to_string(),
+    });
+
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("conversation renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(rendered.contains("LATEST CONVERSATION MESSAGE"));
 }
 
 #[test]
@@ -1264,6 +1295,63 @@ fn mouse_drag_requests_automatic_panel_selection_copy() {
 }
 
 #[test]
+fn mouse_wheel_scrolls_the_focused_home_assistant_conversation() {
+    let mut app = app();
+    app.home_focus = HomeFocus::Assistant;
+    let selected_app = app.home_app_index;
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 80,
+            row: 24,
+            modifiers: KeyModifiers::NONE,
+        },
+        30,
+    );
+    assert!(app.ai_conversation_scroll > 0);
+    assert_eq!(app.home_app_index, selected_app);
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::ScrollDown,
+            column: 80,
+            row: 24,
+            modifiers: KeyModifiers::NONE,
+        },
+        30,
+    );
+    assert_eq!(app.ai_conversation_scroll, 0);
+    assert_eq!(app.home_app_index, selected_app);
+}
+
+#[test]
+fn assistant_conversation_remains_scrollable_while_composing() {
+    let mut app = app();
+    app.home_focus = HomeFocus::Assistant;
+    app.ai_input_mode = true;
+    app.ai_input = "draft".to_string();
+
+    app.handle_key(key(KeyCode::PageUp));
+    assert!(app.ai_conversation_scroll > 0);
+    let keyboard_scroll = app.ai_conversation_scroll;
+
+    app.handle_mouse(
+        MouseEvent {
+            kind: MouseEventKind::ScrollUp,
+            column: 80,
+            row: 24,
+            modifiers: KeyModifiers::NONE,
+        },
+        30,
+    );
+
+    assert!(app.ai_conversation_scroll > keyboard_scroll);
+    assert!(app.ai_input_mode);
+    assert_eq!(app.ai_input, "draft");
+}
+
+#[test]
 fn closing_an_app_returns_to_home_when_launched_from_home() {
     let mut app = app();
     app.handle_key(key(KeyCode::Enter));
@@ -1448,6 +1536,58 @@ fn home_spans_assistant_below_the_app_and_information_columns() {
         buffer.cell((119, assistant_row as u16)).unwrap().symbol(),
         "┐"
     );
+}
+
+#[test]
+fn home_assistant_accumulates_full_messages_and_scrolls_to_history() {
+    let mut app = app();
+    app.home_focus = HomeFocus::Assistant;
+    app.ai_messages.push(AiMessage {
+        role: "You".to_string(),
+        text: "OLDEST LINE 1\nOLDEST LINE 2\nOLDEST LINE 3\nOLDEST LINE 4".to_string(),
+    });
+    for index in 0..12 {
+        app.ai_messages.push(AiMessage {
+            role: "Codex".to_string(),
+            text: format!("history response {index}"),
+        });
+    }
+    app.ai_messages.push(AiMessage {
+        role: "Codex".to_string(),
+        text: "LATEST ASSISTANT RESPONSE".to_string(),
+    });
+
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("latest conversation renders");
+    let latest = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(latest.contains("LATEST ASSISTANT RESPONSE"));
+    assert!(!latest.contains("OLDEST LINE 4"));
+
+    for _ in 0..100 {
+        app.handle_key(key(KeyCode::Up));
+    }
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("conversation history renders");
+    let history = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+
+    assert!(history.contains("OLDEST LINE 1"));
+    assert!(history.contains("OLDEST LINE 4"));
 }
 
 #[test]
@@ -1932,7 +2072,7 @@ fn settings_controls_update_execution_policy() {
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Char(' ')));
-    assert_eq!(app.settings.ai_approval_mode, AiApprovalMode::SafeOnly);
+    assert_eq!(app.settings.ai_approval_mode, AiApprovalMode::Ask);
 }
 
 #[test]
@@ -1944,7 +2084,7 @@ fn settings_explain_the_selected_policy_and_reset_scope() {
         "Total automatic attempts",
         "Script and DANGER installs",
         "one setup flow for subscription or API-key mode",
-        "AI action approval",
+        "AI permission mode",
         "Favorites, recent apps, activity history",
     ]
     .into_iter()
@@ -2140,6 +2280,7 @@ fn ai_context_describes_the_catalog_and_queue_without_legacy_workspaces() {
     } else {
         "platform: linux"
     }));
+    assert!(context.contains("AI permission mode: Auto"));
     assert!(context.contains("yazi=Yazi (not installed; run: yazi)"));
     assert!(context.contains("yazi:Queued"));
     assert!(!context.contains("video-desk=Video Desk"));
@@ -2171,7 +2312,7 @@ fn ai_rejects_legacy_workspace_actions_hidden_from_the_main_product() {
         kind: "workspace_launch".to_string(),
         target: "video-desk".to_string(),
     });
-    assert!(app.pending_ai_action.is_none());
+    assert!(app.ai_confirmation.is_none());
     assert!(app.take_effect().is_none());
     assert!(app.ai_status.contains("Rejected unsupported AI action"));
     assert_eq!(app.screen, Screen::Home);
@@ -2180,13 +2321,13 @@ fn ai_rejects_legacy_workspace_actions_hidden_from_the_main_product() {
 #[test]
 fn ai_catalog_search_is_bounded_to_local_navigation() {
     let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Ask;
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "catalog_search".to_string(),
         target: "yazi".to_string(),
     });
     assert_eq!(app.screen, Screen::Home);
-    assert!(app.pending_ai_action.is_some());
-    app.handle_key(key(KeyCode::Char('A')));
+    assert!(app.ai_confirmation.is_some());
     app.handle_key(key(KeyCode::Char('y')));
     assert_eq!(app.screen, Screen::Home);
     assert_eq!(app.search_query, "yazi");
@@ -2194,33 +2335,246 @@ fn ai_catalog_search_is_bounded_to_local_navigation() {
 }
 
 #[test]
-fn safe_ai_auto_approval_only_applies_to_catalog_search() {
+fn auto_ai_permission_executes_validated_actions_without_review_input() {
     let mut app = app();
-    app.settings.ai_approval_mode = AiApprovalMode::SafeOnly;
+    app.settings.ai_approval_mode = AiApprovalMode::Auto;
 
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "catalog_search".to_string(),
         target: "yazi".to_string(),
     });
     assert_eq!(app.search_query, "yazi");
-    assert!(app.pending_ai_action.is_none());
+    assert!(app.ai_confirmation.is_none());
     assert!(app.ai_status.contains("auto-approved"));
 
-    app.apply_codex_event(CodexEvent::ActionProposed {
-        kind: "launch_app".to_string(),
-        target: "yazi".to_string(),
-    });
-    assert!(app.pending_ai_action.is_some());
-    assert!(app.take_effect().is_none());
-
-    app.pending_ai_action = None;
     app.apply_installed_tools(["yazi".to_string()].into_iter().collect());
-    app.settings.ai_approval_mode = AiApprovalMode::AllBounded;
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "launch_app".to_string(),
         target: "yazi".to_string(),
     });
-    assert!(app.pending_ai_action.is_none());
+    assert!(app.ai_confirmation.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request)) if request.tool_id == "yazi"
+    ));
+}
+
+#[test]
+fn auto_ai_permission_launches_a_validated_multi_app_pipeline() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Auto;
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_pipeline".to_string(),
+        target: "fortune | figlet | lolcat".to_string(),
+    });
+
+    assert!(app.ai_confirmation.is_none());
+    let Some(AppEffect::LaunchPipeline(request)) = app.take_effect() else {
+        panic!("validated pipeline should launch");
+    };
+    assert_eq!(request.pipeline_id, "fortune-to-figlet-to-lolcat");
+    assert_eq!(
+        request
+            .stages
+            .iter()
+            .map(|stage| (stage.tool_id.as_str(), stage.command.as_str()))
+            .collect::<Vec<_>>(),
+        [
+            ("fortune", "fortune"),
+            ("figlet", "figlet"),
+            ("lolcat", "lolcat"),
+        ]
+    );
+    assert!(request.keep_open);
+}
+
+#[test]
+fn auto_ai_permission_searches_youtube_and_launches_tplay_without_input() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Auto;
+    app.apply_installed_tools(["tplay".to_string()].into_iter().collect());
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_tplay_search".to_string(),
+        target: "jellyfish 4K ambient".to_string(),
+    });
+
+    assert!(app.ai_confirmation.is_none());
+    assert!(app.launch_argument.is_none());
+    let Some(AppEffect::LaunchTool(request)) = app.take_effect() else {
+        panic!("bounded YouTube search should launch tplay");
+    };
+    assert_eq!(request.tool_id, "tplay");
+    assert_eq!(
+        request.command,
+        "t4e tplay-search 'jellyfish%204K%20ambient'"
+    );
+}
+
+#[test]
+fn ai_tplay_search_encodes_shell_syntax_instead_of_executing_it() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Auto;
+    app.apply_installed_tools(["tplay".to_string()].into_iter().collect());
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_tplay_search".to_string(),
+        target: "ink; $(touch nope) | night".to_string(),
+    });
+
+    let Some(AppEffect::LaunchTool(request)) = app.take_effect() else {
+        panic!("encoded YouTube search should launch tplay");
+    };
+    assert!(!request.command.contains(';'));
+    assert!(!request.command.contains("$("));
+    assert!(!request.command.contains('|'));
+    assert!(
+        request
+            .command
+            .contains("ink%3B%20%24%28touch%20nope%29%20%7C%20night")
+    );
+}
+
+#[test]
+fn ai_tplay_search_rejects_empty_or_unbounded_queries() {
+    for target in ["   ".to_string(), "x".repeat(161)] {
+        let mut app = app();
+        app.settings.ai_approval_mode = AiApprovalMode::Auto;
+
+        app.apply_codex_event(CodexEvent::ActionProposed {
+            kind: "launch_tplay_search".to_string(),
+            target,
+        });
+
+        assert!(app.ai_confirmation.is_none());
+        assert!(app.take_effect().is_none());
+        assert!(app.ai_status.contains("Rejected unsupported AI action"));
+    }
+}
+
+#[test]
+fn bypass_ai_tplay_search_installs_then_launches_without_intermediate_input() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Bypass;
+    app.apply_installed_tools(Default::default());
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_tplay_search".to_string(),
+        target: "Tokyo night drive 4K".to_string(),
+    });
+
+    let Some(AppEffect::Execute(mut install)) = app.take_effect() else {
+        panic!("missing tplay should install immediately");
+    };
+    assert_eq!(install.item.tool_id, "tplay");
+    assert!(app.confirmation.is_none());
+    install
+        .item
+        .transition(QueueState::Installing)
+        .expect("installation starts");
+    install
+        .item
+        .transition(QueueState::Success)
+        .expect("installation succeeds");
+
+    app.apply_execution(*install);
+
+    assert!(app.launch_argument.is_none());
+    let Some(AppEffect::LaunchTool(request)) = app.take_effect() else {
+        panic!("tplay should launch with the retained search after installation");
+    };
+    assert!(request.command.contains("Tokyo%20night%20drive%204K"));
+}
+
+#[test]
+fn ai_pipeline_rejects_shell_syntax_and_fewer_than_two_stages() {
+    for target in ["fortune --help | figlet", "fortune"] {
+        let mut app = app();
+        app.settings.ai_approval_mode = AiApprovalMode::Auto;
+
+        app.apply_codex_event(CodexEvent::ActionProposed {
+            kind: "launch_pipeline".to_string(),
+            target: target.to_string(),
+        });
+
+        assert!(app.ai_confirmation.is_none());
+        assert!(app.take_effect().is_none());
+        assert!(app.ai_status.contains("Rejected unsupported AI action"));
+    }
+}
+
+#[test]
+fn auto_ai_install_plan_starts_safe_install_without_queue_input() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Auto;
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "install_plan".to_string(),
+        target: "ripgrep".to_string(),
+    });
+
+    assert!(app.ai_confirmation.is_none());
+    assert!(app.confirmation.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::Execute(job)) if job.item.tool_id == "ripgrep"
+    ));
+}
+
+#[test]
+fn bypass_ai_permission_skips_install_and_camera_approvals() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Bypass;
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "install_plan".to_string(),
+        target: "claude-code".to_string(),
+    });
+    assert!(app.confirmation.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::Execute(job)) if job.item.tool_id == "claude-code"
+    ));
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_app".to_string(),
+        target: "ascii-camera".to_string(),
+    });
+    assert!(app.launch_approval.is_none());
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::LaunchTool(request)) if request.tool_id == "ascii-camera"
+    ));
+}
+
+#[test]
+fn bypass_ai_launch_installs_then_starts_without_intermediate_input() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Bypass;
+    app.apply_installed_tools(Default::default());
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_app".to_string(),
+        target: "yazi".to_string(),
+    });
+    let Some(AppEffect::Execute(mut install)) = app.take_effect() else {
+        panic!("missing app installation should start immediately");
+    };
+    assert!(app.confirmation.is_none());
+    install
+        .item
+        .transition(QueueState::Installing)
+        .expect("installation starts");
+    install
+        .item
+        .transition(QueueState::Success)
+        .expect("installation succeeds");
+
+    app.apply_execution(*install);
+
+    assert!(app.launch_options.is_none());
+    assert!(app.launch_approval.is_none());
     assert!(matches!(
         app.take_effect(),
         Some(AppEffect::LaunchTool(request)) if request.tool_id == "yazi"
@@ -2230,12 +2584,12 @@ fn safe_ai_auto_approval_only_applies_to_catalog_search() {
 #[test]
 fn ai_action_can_be_denied_without_typing_a_phrase() {
     let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Ask;
     app.apply_codex_event(CodexEvent::ActionProposed {
         kind: "launch_app".to_string(),
         target: "yazi".to_string(),
     });
 
-    app.handle_key(key(KeyCode::Char('A')));
     app.handle_key(key(KeyCode::Char('n')));
 
     assert!(app.ai_confirmation.is_none());
@@ -2246,6 +2600,7 @@ fn ai_action_can_be_denied_without_typing_a_phrase() {
 #[test]
 fn ai_launch_resolves_a_catalog_display_name_to_its_exact_id() {
     let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Ask;
     app.apply_installed_tools(["yazi".to_string()].into_iter().collect());
     app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
         provider: AiProvider::Claude,
@@ -2257,13 +2612,12 @@ fn ai_launch_resolves_a_catalog_display_name_to_its_exact_id() {
         target: "Yazi".to_string(),
     });
     assert_eq!(
-        app.pending_ai_action
+        app.ai_confirmation
             .as_ref()
-            .map(|action| action.target.as_str()),
+            .map(|confirmation| confirmation.action.target.as_str()),
         Some("yazi")
     );
 
-    app.handle_key(key(KeyCode::Char('A')));
     app.handle_key(key(KeyCode::Enter));
 
     assert!(matches!(
@@ -2288,6 +2642,25 @@ fn home_ai_is_disabled_without_a_ready_provider_and_enables_after_login() {
     app.handle_key(key(KeyCode::Char('a')));
     assert!(app.ai_input_mode);
     assert_eq!(app.ai_provider, AiProvider::Claude);
+}
+
+#[test]
+fn assistant_focus_starts_conversation_input_on_the_first_character() {
+    let mut app = app();
+    app.apply_ai_event(AiEvent::ProviderReady(ProviderReadiness {
+        provider: AiProvider::Claude,
+        account: "max subscription".to_string(),
+    }));
+    app.home_focus = HomeFocus::Assistant;
+    assert!(!app.ai_input_mode);
+
+    for ch in "안녕하세요".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+
+    assert!(app.ai_input_mode);
+    assert_eq!(app.ai_input, "안녕하세요");
+    assert!(app.take_effect().is_none());
 }
 
 #[test]
@@ -2353,13 +2726,13 @@ fn termleaf_update_queues_only_the_t4e_verified_version() {
     let mut app = app();
     open_catalog_search(&mut app, "termleaf");
     app.installed_tools.insert("termleaf".to_string());
-    app.apply_update_probe("termleaf", Ok("0.2.0".to_string()), "0.3.0".to_string());
+    app.apply_update_probe("termleaf", Ok("0.3.0".to_string()), "0.3.5".to_string());
 
     app.handle_key(key(KeyCode::Char('u')));
 
     let job = app.queue.last().expect("verified update queued");
-    assert_eq!(job.task.expected_version.as_deref(), Some("0.3.0"));
-    assert!(job.task.command.contains("v0.3.0"));
+    assert_eq!(job.task.expected_version.as_deref(), Some("0.3.5"));
+    assert!(job.task.command.contains("v0.3.5"));
     assert!(!job.task.command.contains("/latest"));
     assert!(app.confirmation.is_some());
     assert!(app.take_effect().is_none());
