@@ -56,7 +56,11 @@ mod unix {
             .expect("Linux installer exists");
         let task = build_install_task(tool, installer, &InstallPolicy::default())
             .expect("install task builds");
-        let path = format!("{}:/usr/bin:/bin", fake_bin.display());
+        let path = format!(
+            "{}:{}",
+            fake_bin.display(),
+            std::env::var("PATH").unwrap_or_else(|_| "/usr/bin:/bin".to_string())
+        );
 
         let install = Command::new("sh")
             .arg("-c")

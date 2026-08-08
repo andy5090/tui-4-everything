@@ -122,6 +122,23 @@ pub struct Check {
 }
 
 impl Tool {
+    /// Prefer a native Termux installer while retaining the legacy Linux plan
+    /// until each catalog application has been migrated explicitly.
+    pub fn installer_for(&self, platform: Platform) -> Option<&Installer> {
+        self.installers
+            .iter()
+            .find(|installer| installer.platform == platform)
+            .or_else(|| {
+                if platform == Platform::Termux {
+                    self.installers
+                        .iter()
+                        .find(|installer| installer.platform == Platform::Linux)
+                } else {
+                    None
+                }
+            })
+    }
+
     pub fn is_launchable_app(&self) -> bool {
         !self.tags.iter().any(|tag| tag == "support")
     }
@@ -162,19 +179,13 @@ impl Tool {
         if self.is_builtin() {
             return crate::builtin::launch_command(&self.run.cmd);
         }
-        self.installers
-            .iter()
-            .find(|installer| installer.platform == platform)
+        self.installer_for(platform)
             .and_then(|installer| installer.executable.clone())
             .unwrap_or_else(|| self.run.cmd.clone())
     }
 
     pub fn run_command_for_current_platform(&self) -> String {
-        self.run_command_for(if cfg!(target_os = "macos") {
-            Platform::Macos
-        } else {
-            Platform::Linux
-        })
+        self.run_command_for(Platform::current())
     }
 
     pub fn install_check_commands(&self, platform: Platform) -> Vec<String> {
@@ -186,9 +197,7 @@ impl Tool {
         if !checks.is_empty() {
             return checks;
         }
-        self.installers
-            .iter()
-            .find(|installer| installer.platform == platform)
+        self.installer_for(platform)
             .and_then(|installer| installer.executable.clone())
             .or_else(|| {
                 self.run_command_for(platform)
@@ -334,12 +343,34 @@ impl RiskLevel {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Platform {
     #[serde(rename = "macos")]
     Macos,
     #[serde(rename = "linux")]
     Linux,
+    #[serde(rename = "termux")]
+    Termux,
+}
+
+impl Platform {
+    pub fn current() -> Self {
+        if cfg!(target_os = "macos") {
+            Self::Macos
+        } else if cfg!(target_os = "android") {
+            Self::Termux
+        } else {
+            Self::Linux
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Macos => "macos",
+            Self::Linux => "linux",
+            Self::Termux => "termux",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

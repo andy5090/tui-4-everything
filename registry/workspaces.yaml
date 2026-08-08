@@ -84,7 +84,7 @@ workspaces:
           split: preview
           direction: down
           size: "50%"
-          cmd: "bash"
+          cmd: "sh"
 
   - id: coding-desk
     title: Coding Desk

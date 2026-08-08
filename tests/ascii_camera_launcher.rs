@@ -73,6 +73,81 @@ mod unix {
         fs::remove_dir_all(root).expect("test directory removed");
     }
 
+    #[test]
+    fn termux_ascii_camera_captures_and_renders_a_bounded_frame() {
+        let root = temporary_directory();
+        let fake_bin = root.join("bin");
+        fs::create_dir_all(&fake_bin).expect("fake bin created");
+        write_executable(
+            &fake_bin.join("pkg"),
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/pkg-args\"\n",
+        );
+        write_executable(
+            &fake_bin.join("termux-camera-photo"),
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/camera-args\"\nprintf 'jpeg' > \"$3\"\n",
+        );
+        write_executable(
+            &fake_bin.join("chafa"),
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/chafa-args\"\n",
+        );
+        write_executable(
+            &fake_bin.join("tput"),
+            "#!/bin/sh\ncase \"$1\" in cols) printf '90\\n' ;; lines) printf '30\\n' ;; esac\n",
+        );
+
+        let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+        let tool = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "ascii-camera")
+            .expect("ASCII Camera exists");
+        let installer = tool
+            .installers
+            .iter()
+            .find(|installer| installer.platform == Platform::Termux)
+            .expect("Termux installer exists");
+        let task = build_install_task(tool, installer, &InstallPolicy::default())
+            .expect("install task builds");
+        let path = format!("{}:/usr/bin:/bin", fake_bin.display());
+
+        let install = Command::new("sh")
+            .arg("-c")
+            .arg(&task.command)
+            .env("HOME", &root)
+            .env("PATH", &path)
+            .status()
+            .expect("installer runs");
+        assert!(install.success());
+        assert_eq!(
+            fs::read_to_string(root.join("pkg-args")).expect("pkg arguments recorded"),
+            "install\n-y\ntermux-api\nchafa\n"
+        );
+
+        let run = Command::new(root.join(".local/bin/t4e-ascii-camera"))
+            .args(["--device", "1", "--vo", "caca"])
+            .env("HOME", &root)
+            .env("PATH", &path)
+            .env("TMPDIR", &root)
+            .env("T4E_ASCII_CAMERA_FRAMES", "1")
+            .status()
+            .expect("launcher runs");
+        assert!(run.success());
+
+        let camera_args =
+            fs::read_to_string(root.join("camera-args")).expect("camera arguments recorded");
+        assert!(camera_args.starts_with("-c\n1\n"));
+        let chafa_args =
+            fs::read_to_string(root.join("chafa-args")).expect("chafa arguments recorded");
+        assert!(chafa_args.contains("--probe\noff\n"));
+        assert!(chafa_args.contains("--format\nsymbols\n"));
+        assert!(chafa_args.contains("--colors\n16\n"));
+        assert!(chafa_args.contains("--size\n90x29\n"));
+        assert!(!task.requires_privileges);
+        assert_eq!(task.check_command.as_deref(), Some("t4e-ascii-camera-v2"));
+
+        fs::remove_dir_all(root).expect("test directory removed");
+    }
+
     fn temporary_directory() -> PathBuf {
         let nonce = SystemTime::now()
             .duration_since(UNIX_EPOCH)

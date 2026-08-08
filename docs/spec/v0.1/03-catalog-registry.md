@@ -38,7 +38,7 @@ v0.2+에서 tool/packs 분리 파일 및 원격 동기화 고려.
 
 ## 3.3 Installer 스키마(v0.1)
 Installer:
-- platform: macos|linux
+- platform: macos|linux|termux
 - method: brew|brew_cask|apt|dnf|pacman|pipx|npm_global|cargo|go|script|brew_or_pkg|pkg_or_brew|script_or_npm|...
 - package_hints: string[]
 - install_cmd: string (method가 script면 명시)

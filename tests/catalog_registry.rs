@@ -93,6 +93,11 @@ fn registry_loads_and_validates() {
             && installer.method == InstallMethod::AsciiCamera
             && installer.system_packages == ["mpv"]
     }));
+    assert!(ascii_camera.installers.iter().any(|installer| {
+        installer.platform == Platform::Termux
+            && installer.method == InstallMethod::AsciiCamera
+            && installer.system_packages == ["termux-api", "chafa"]
+    }));
     assert!(
         catalog
             .packs

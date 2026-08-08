@@ -108,7 +108,7 @@ fn build_task(
         bail!("script installer for {} must require confirmation", tool.id);
     }
 
-    let mut check_commands = tool.install_check_commands(installer.platform.clone());
+    let mut check_commands = tool.install_check_commands(installer.platform);
     if expected_version.is_some() && check_commands.is_empty() {
         bail!(
             "verified update task for {} requires at least one executable check",
@@ -123,7 +123,8 @@ fn build_task(
         check_command,
         additional_check_commands: check_commands,
         install_timeout_sec: tool.install_timeout_sec,
-        requires_privileges: !installer.system_packages.is_empty(),
+        requires_privileges: !installer.system_packages.is_empty()
+            && installer.platform == crate::catalog::models::Platform::Linux,
         requires_confirmation,
         expected_version,
         version_probe,
@@ -206,15 +207,22 @@ fn materialize_command(installer: &Installer) -> Result<String> {
     };
 
     if installer.system_packages.is_empty() {
-        Ok(command)
-    } else if installer.platform == crate::catalog::models::Platform::Linux {
-        Ok(format!(
+        return Ok(command);
+    }
+    match installer.platform {
+        crate::catalog::models::Platform::Linux => Ok(format!(
             "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y {} && {}",
             installer.system_packages.join(" "),
             command
-        ))
-    } else {
-        bail!("system_packages are only supported by Linux installers")
+        )),
+        crate::catalog::models::Platform::Termux => Ok(format!(
+            "pkg install -y {} && {}",
+            installer.system_packages.join(" "),
+            command
+        )),
+        crate::catalog::models::Platform::Macos => {
+            bail!("system_packages are not supported by macOS installers")
+        }
     }
 }
 
@@ -233,6 +241,7 @@ fn materialize_fastfetch_command(platform: &crate::catalog::models::Platform) ->
             "-o DPkg::Lock::Timeout=300 install -y \"$package\""
         )
         .to_string(),
+        crate::catalog::models::Platform::Termux => "pkg install -y fastfetch".to_string(),
     }
 }
 
@@ -244,6 +253,10 @@ fn materialize_newsboat_command(platform: &crate::catalog::models::Platform) -> 
         ),
         crate::catalog::models::Platform::Macos => (
             "brew install newsboat",
+            "${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat",
+        ),
+        crate::catalog::models::Platform::Termux => (
+            "pkg install -y newsboat",
             "${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat",
         ),
     };
@@ -258,6 +271,7 @@ fn materialize_tplay_command(platform: &crate::catalog::models::Platform) -> Str
             "cargo install --locked tplay && data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\" && python3 -m venv \"$data_dir/yt-dlp\" && \"$data_dir/yt-dlp/bin/python\" -m pip install --upgrade 'yt-dlp[default]' && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/tplay\"' 'exec env PATH=\"$data_dir/yt-dlp/bin:$PATH\" tplay \"$@\"' > \"$HOME/.local/bin/t4e-tplay\" && chmod +x \"$HOME/.local/bin/t4e-tplay\"".to_string()
         }
         crate::catalog::models::Platform::Macos => "cargo install --locked tplay".to_string(),
+        crate::catalog::models::Platform::Termux => "cargo install --locked tplay".to_string(),
     }
 }
 
@@ -271,6 +285,9 @@ fn materialize_youtube_tui_command(platform: &crate::catalog::models::Platform) 
         ),
         crate::catalog::models::Platform::Macos => {
             "brew install mpv yt-dlp && cargo install --locked youtube-tui"
+        }
+        crate::catalog::models::Platform::Termux => {
+            "printf 'YouTube TUI has no verified Termux installer yet.\\n' >&2; exit 1"
         }
     };
     let launcher = concat!(
@@ -316,6 +333,9 @@ fn materialize_yewtube_command(platform: &crate::catalog::models::Platform) -> S
             "pipx install --force yewtube"
         ),
         crate::catalog::models::Platform::Macos => "brew install yewtube mpv",
+        crate::catalog::models::Platform::Termux => {
+            "printf 'Yewtube has no verified Termux installer yet.\\n' >&2; exit 1"
+        }
     };
     let launcher = concat!(
         "mkdir -p \"$HOME/.local/bin\" && ",
@@ -382,9 +402,73 @@ fn managed_mpv_player_install_command() -> &'static str {
 }
 
 fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform) -> String {
+    if *platform == crate::catalog::models::Platform::Termux {
+        return concat!(
+            "mkdir -p \"$HOME/.local/bin\" && ",
+            "printf '%s\\n' ",
+            "'#!/bin/sh' ",
+            "'device=0' ",
+            "'renderer=tct' ",
+            "'mirror=0' ",
+            "'lavf_options=' ",
+            "'while [ \"$#\" -gt 0 ]; do' ",
+            "'  case \"$1\" in' ",
+            "'    --device) device=\"${2:-0}\"; shift 2 ;;' ",
+            "'    --vo) renderer=\"${2:-tct}\"; shift 2 ;;' ",
+            "'    --vf=hflip) mirror=1; shift ;;' ",
+            "'    --demuxer-lavf-o) lavf_options=\"${2:-}\"; shift 2 ;;' ",
+            "'    *) printf \"Unknown ASCII Camera option: %s\\n\" \"$1\" >&2; exit 2 ;;' ",
+            "'  esac' ",
+            "'done' ",
+            "'case \"$device\" in \"\"|*[!0-9]*) printf \"Camera device must be a number: %s\\n\" \"$device\" >&2; exit 2 ;; esac' ",
+            "'case \"$renderer\" in' ",
+            "'  tct) colors=full ;;' ",
+            "'  caca) colors=16 ;;' ",
+            "'  *) printf \"Unsupported ASCII Camera renderer: %s\\n\" \"$renderer\" >&2; exit 2 ;;' ",
+            "'esac' ",
+            "'command -v termux-camera-photo >/dev/null 2>&1 || { printf \"ASCII Camera needs the termux-api package and matching Termux:API app.\\n\" >&2; exit 1; }' ",
+            "'command -v chafa >/dev/null 2>&1 || { printf \"ASCII Camera needs chafa. Run: pkg install chafa\\n\" >&2; exit 1; }' ",
+            "'work_dir=$(mktemp -d \"${TMPDIR:-/tmp}/t4e-ascii-camera.XXXXXX\") || exit 1' ",
+            "'frame=\"$work_dir/frame.jpg\"' ",
+            "'render_frame=\"$frame\"' ",
+            "'error_file=\"$work_dir/camera-error\"' ",
+            "'cleanup() { printf \"\\033[?25h\\033[0m\\n\"; rm -rf \"$work_dir\"; }' ",
+            "'trap cleanup EXIT HUP INT TERM' ",
+            "'printf \"\\033[2J\\033[H\\033[?25l\"' ",
+            "'frames=0' ",
+            "'while :; do' ",
+            "'  : > \"$error_file\"' ",
+            "'  if ! termux-camera-photo -c \"$device\" \"$frame\" >\"$error_file\" 2>&1 || [ ! -s \"$frame\" ]; then' ",
+            "'    printf \"\\033[2J\\033[HASCII Camera could not capture camera %s.\\n\" \"$device\" >&2' ",
+            "'    if [ -s \"$error_file\" ]; then sed -n \"1,4p\" \"$error_file\" >&2; fi' ",
+            "'    printf \"Grant Camera permission in Android Settings > Apps > Termux:API > Permissions.\\n\" >&2' ",
+            "'    exit 1' ",
+            "'  fi' ",
+            "'  render_frame=\"$frame\"' ",
+            "'  if [ \"$mirror\" -eq 1 ]; then' ",
+            "'    if command -v magick >/dev/null 2>&1; then magick \"$frame\" -flop \"$work_dir/mirror.jpg\" && render_frame=\"$work_dir/mirror.jpg\"' ",
+            "'    elif command -v convert >/dev/null 2>&1; then convert \"$frame\" -flop \"$work_dir/mirror.jpg\" && render_frame=\"$work_dir/mirror.jpg\"' ",
+            "'    elif [ \"$frames\" -eq 0 ]; then printf \"Mirror requires ImageMagick; rendering the original frame.\\n\" >&2' ",
+            "'    fi' ",
+            "'  fi' ",
+            "'  columns=$(tput cols 2>/dev/null || printf 80)' ",
+            "'  rows=$(tput lines 2>/dev/null || printf 24)' ",
+            "'  [ \"$rows\" -gt 1 ] && rows=$((rows - 1))' ",
+            "'  printf \"\\033[H\"' ",
+            "'  chafa --probe off --format symbols --colors \"$colors\" --size \"${columns}x${rows}\" --stretch \"$render_frame\" || exit 1' ",
+            "'  frames=$((frames + 1))' ",
+            "'  if [ -n \"${T4E_ASCII_CAMERA_FRAMES:-}\" ] && [ \"$frames\" -ge \"$T4E_ASCII_CAMERA_FRAMES\" ]; then break; fi' ",
+            "'done' ",
+            "> \"$HOME/.local/bin/t4e-ascii-camera\" && ",
+            "chmod +x \"$HOME/.local/bin/t4e-ascii-camera\" && ",
+            "ln -sf t4e-ascii-camera \"$HOME/.local/bin/t4e-ascii-camera-v2\""
+        )
+        .to_string();
+    }
     let install = match platform {
         crate::catalog::models::Platform::Linux => "",
         crate::catalog::models::Platform::Macos => "brew install mpv && ",
+        crate::catalog::models::Platform::Termux => unreachable!(),
     };
     format!(
         "{install}mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' \
@@ -422,6 +506,7 @@ fn materialize_lazyvim_command(platform: &crate::catalog::models::Platform) -> S
             "sudo -n snap install nvim --classic && sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y git ripgrep fd-find gcc"
         }
         crate::catalog::models::Platform::Macos => "brew install neovim git ripgrep fd",
+        crate::catalog::models::Platform::Termux => "pkg install -y neovim git ripgrep fd",
     };
     format!(
         "{dependencies} && config_dir=\"${{XDG_CONFIG_HOME:-$HOME/.config}}/t4e-lazyvim\" && if [ ! -f \"$config_dir/init.lua\" ]; then if [ -e \"$config_dir\" ]; then echo 'T4E LazyVim config path already exists' >&2; exit 1; fi; git clone --filter=blob:none https://github.com/LazyVim/starter \"$config_dir\" && rm -rf \"$config_dir/.git\"; fi && mkdir -p \"$HOME/.local/bin\" && printf '%s\\n' '#!/bin/sh' 'exec env NVIM_APPNAME=t4e-lazyvim nvim \"$@\"' > \"$HOME/.local/bin/t4e-lazyvim\" && chmod +x \"$HOME/.local/bin/t4e-lazyvim\""

@@ -146,7 +146,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             session_name,
             "-n",
             "main",
-            "bash",
+            "sh",
         ]))?;
         ensure_success("create session", &create)?;
 
@@ -295,10 +295,15 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         height: u16,
         keep_open: bool,
     ) -> Result<LaunchOutcome> {
-        let app_command = if keep_open {
-            persistent_output_command(&command)
+        let managed_script = if keep_open {
+            format!("PATH=\"$HOME/.local/bin:$PATH\"; export PATH; {command}")
         } else {
-            format!("exec {command}")
+            format!("PATH=\"$HOME/.local/bin:$PATH\"; export PATH; exec {command}")
+        };
+        let app_command = if keep_open {
+            persistent_output_command(&managed_script)
+        } else {
+            format!("exec sh -c {}", shell_quote(&managed_script))
         };
 
         if self.session_exists(session_name)? {
@@ -337,7 +342,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 "-P",
                 "-F",
                 "#{pane_id}",
-                "bash",
+                "sh",
             ]))?;
             ensure_success(&format!("create app window {app_id}"), &create)?;
             let pane_id = create.stdout.trim().to_string();
@@ -375,7 +380,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             "-P",
             "-F",
             "#{pane_id}",
-            "bash",
+            "sh",
         ]))?;
         ensure_success("create app session", &create)?;
         let pane_id = create.stdout.trim().to_string();
@@ -460,7 +465,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 "-P",
                 "-F",
                 "#{pane_id}",
-                "bash",
+                "sh",
             ]))?;
             ensure_success(&format!("create app window {}", app.id), &create)?;
             let pane_id = create.stdout.trim().to_string();
@@ -530,6 +535,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
                 "#{pane_id}",
                 "-t",
                 parent,
+                "sh",
             ]));
             let split = self.runner.run(&args)?;
             ensure_success(&format!("split pane {}", pane.id), &split)?;
@@ -945,7 +951,7 @@ fn persistent_output_command(command: &str) -> String {
          printf '\\n[T4E] command exited with status %s\\n' \"$status\"; fi; \
          trap 'exit 0' INT TERM; while :; do sleep 86400; done"
     );
-    format!("exec bash -c {}", shell_quote(&script))
+    format!("exec sh -c {}", shell_quote(&script))
 }
 
 fn shell_quote(value: &str) -> String {

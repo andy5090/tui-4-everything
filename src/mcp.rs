@@ -134,15 +134,14 @@ fn call_tool(
         }
         "install_plan" => {
             let tool_id = required_string(arguments, "toolId")?;
-            let platform = match arguments.get("platform").and_then(Value::as_str).unwrap_or(
-                if cfg!(target_os = "macos") {
-                    "macos"
-                } else {
-                    "linux"
-                },
-            ) {
+            let platform = match arguments
+                .get("platform")
+                .and_then(Value::as_str)
+                .unwrap_or_else(|| Platform::current().as_str())
+            {
                 "macos" => Platform::Macos,
                 "linux" => Platform::Linux,
+                "termux" => Platform::Termux,
                 value => anyhow::bail!("unsupported platform: {value}"),
             };
             let tool = catalog
@@ -227,7 +226,7 @@ fn tool_definitions() -> Value {
                 "type": "object",
                 "properties": {
                     "toolId": { "type": "string" },
-                    "platform": { "type": "string", "enum": ["macos", "linux"] }
+                    "platform": { "type": "string", "enum": ["macos", "linux", "termux"] }
                 },
                 "required": ["toolId"],
                 "additionalProperties": false

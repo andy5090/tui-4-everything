@@ -2275,11 +2275,10 @@ fn ai_context_describes_the_catalog_and_queue_without_legacy_workspaces() {
 
     let context = app.ai_environment_context();
 
-    assert!(context.contains(if cfg!(target_os = "macos") {
-        "platform: macos"
-    } else {
-        "platform: linux"
-    }));
+    assert!(context.contains(&format!(
+        "platform: {}",
+        t4e::catalog::models::Platform::current().as_str()
+    )));
     assert!(context.contains("AI permission mode: Auto"));
     assert!(context.contains("yazi=Yazi (not installed; run: yazi)"));
     assert!(context.contains("yazi:Queued"));

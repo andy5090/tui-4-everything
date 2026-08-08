@@ -210,6 +210,7 @@ fn main() -> Result<()> {
             let target_platform = match platform.as_str() {
                 "macos" => Platform::Macos,
                 "linux" => Platform::Linux,
+                "termux" => Platform::Termux,
                 other => anyhow::bail!("unsupported platform: {}", other),
             };
 
@@ -678,17 +679,14 @@ fn run_tui(catalog: PathBuf, workspaces: PathBuf) -> Result<()> {
 }
 
 fn current_platform_name() -> String {
-    if cfg!(target_os = "macos") {
-        "macos".to_string()
-    } else {
-        "linux".to_string()
-    }
+    Platform::current().as_str().to_string()
 }
 
 fn parse_platform(value: &str) -> Result<Platform> {
     match value {
         "macos" => Ok(Platform::Macos),
         "linux" => Ok(Platform::Linux),
+        "termux" => Ok(Platform::Termux),
         other => anyhow::bail!("unsupported platform: {}", other),
     }
 }

@@ -917,11 +917,7 @@ impl AppState {
     }
 
     pub fn ai_environment_context(&self) -> String {
-        let platform = if cfg!(target_os = "macos") {
-            "macos"
-        } else {
-            "linux"
-        };
+        let platform = Platform::current().as_str();
         let apps = self
             .catalog
             .tools
@@ -2218,20 +2214,12 @@ impl AppState {
     }
 
     fn queue_verified_update_with_policy(&mut self, tool_id: &str, bypass_confirmation: bool) {
-        let platform = if cfg!(target_os = "macos") {
-            Platform::Macos
-        } else {
-            Platform::Linux
-        };
+        let platform = Platform::current();
         let Some(tool) = self.catalog.tools.iter().find(|tool| tool.id == tool_id) else {
             self.status = format!("Unknown app {tool_id}");
             return;
         };
-        let Some(installer) = tool
-            .installers
-            .iter()
-            .find(|installer| installer.platform == platform)
-        else {
+        let Some(installer) = tool.installer_for(platform) else {
             self.status = format!("No installer for {tool_id} on this platform");
             return;
         };
@@ -3344,16 +3332,9 @@ fn build_current_task(
     catalog: &CatalogRegistry,
     tool_id: &str,
 ) -> Option<crate::installer::engine::InstallTask> {
-    let platform = if cfg!(target_os = "macos") {
-        Platform::Macos
-    } else {
-        Platform::Linux
-    };
+    let platform = Platform::current();
     let tool = catalog.tools.iter().find(|tool| tool.id == tool_id)?;
-    let installer = tool
-        .installers
-        .iter()
-        .find(|installer| installer.platform == platform)?;
+    let installer = tool.installer_for(platform)?;
     build_install_task(tool, installer, &InstallPolicy::default()).ok()
 }
 
@@ -3361,16 +3342,9 @@ fn build_current_verified_task(
     catalog: &CatalogRegistry,
     tool_id: &str,
 ) -> Option<crate::installer::engine::InstallTask> {
-    let platform = if cfg!(target_os = "macos") {
-        Platform::Macos
-    } else {
-        Platform::Linux
-    };
+    let platform = Platform::current();
     let tool = catalog.tools.iter().find(|tool| tool.id == tool_id)?;
-    let installer = tool
-        .installers
-        .iter()
-        .find(|installer| installer.platform == platform)?;
+    let installer = tool.installer_for(platform)?;
     build_verified_update_task(tool, installer, &InstallPolicy::default()).ok()
 }
 
@@ -3390,15 +3364,8 @@ fn install_plan_changed(
 }
 
 fn uninstall_request_for_tool(tool: &Tool, reinstall: bool) -> Option<UninstallRequest> {
-    let platform = if cfg!(target_os = "macos") {
-        Platform::Macos
-    } else {
-        Platform::Linux
-    };
-    let installer = tool
-        .installers
-        .iter()
-        .find(|installer| installer.platform == platform)?;
+    let platform = Platform::current();
+    let installer = tool.installer_for(platform)?;
     let packages = if installer.method == InstallMethod::Cargo {
         installer.package_hints.join(" ")
     } else {

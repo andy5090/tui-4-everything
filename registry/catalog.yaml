@@ -75,7 +75,6 @@ tools:
         values: ["framerate=15", "framerate=24", "framerate=30"]
         default_value: "framerate=30"
     checks:
-      - which: "mpv"
       - which: "t4e-ascii-camera-v2"
     installers:
       - platform: macos
@@ -86,6 +85,11 @@ tools:
         method: ascii_camera
         package_hints: ["mpv"]
         system_packages: ["mpv"]
+        executable: "t4e-ascii-camera"
+      - platform: termux
+        method: ascii_camera
+        package_hints: ["chafa"]
+        system_packages: ["termux-api", "chafa"]
         executable: "t4e-ascii-camera"
   - id: spotatui
     name: "Spotatui"
