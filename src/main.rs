@@ -24,6 +24,7 @@ use t4e::installer::resolver::{Candidate, ShellPackageSearch, resolve_with_fallb
 use t4e::mux::tmux::compile_workspace;
 use t4e::mux::workspace::MuxBackend;
 use t4e::mux::zellij::render_layout_kdl;
+use t4e::self_update::{self, UpdateRequest};
 use t4e::storage::{default_state_path, log_dir_for_state};
 
 #[derive(Debug, Parser)]
@@ -37,6 +38,16 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Check for or install a verified T4E release.
+    #[command(alias = "upgrade")]
+    Update {
+        /// Report whether an update is available without installing it.
+        #[arg(long)]
+        check: bool,
+        /// Install a specific release instead of the latest one.
+        #[arg(long, value_name = "VERSION")]
+        version: Option<String>,
+    },
     Tui {
         #[arg(long, default_value = "registry/catalog.yaml")]
         catalog: PathBuf,
@@ -181,6 +192,13 @@ fn main() -> Result<()> {
             PathBuf::from("registry/catalog.yaml"),
             PathBuf::from("registry/workspaces.yaml"),
         )?,
+        Some(Command::Update { check, version }) => {
+            let outcome = self_update::run(UpdateRequest {
+                check_only: check,
+                version,
+            })?;
+            println!("{outcome}");
+        }
         Some(Command::Tui {
             catalog,
             workspaces,
@@ -740,5 +758,37 @@ fn classify_gate_failure(
         FailureClassification::Infra
     } else {
         FailureClassification::Product
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn parses_self_update_options() {
+        let cli = Cli::try_parse_from(["t4e", "update", "--check", "--version", "1.2.3"])
+            .expect("update command parses");
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Update {
+                check: true,
+                version: Some(version),
+            }) if version == "1.2.3"
+        ));
+    }
+
+    #[test]
+    fn upgrade_is_an_alias_for_update() {
+        let cli = Cli::try_parse_from(["t4e", "upgrade", "--check"]).expect("upgrade alias parses");
+
+        assert!(matches!(
+            cli.command,
+            Some(Command::Update {
+                check: true,
+                version: None,
+            })
+        ));
     }
 }

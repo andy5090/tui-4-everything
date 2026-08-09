@@ -10,6 +10,7 @@ pub mod installer;
 pub mod mcp;
 pub mod mux;
 pub mod security;
+pub mod self_update;
 pub mod storage;
 pub mod system_info;
 pub mod tplay;

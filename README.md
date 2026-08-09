@@ -77,8 +77,23 @@ and a ready AI provider for HOME AI. Without one, application browsing and
 management continue normally while AI input stays disabled. Rust is only
 required when building from source.
 
-To upgrade, rerun the installer (or repeat the checksum and install steps) with
-the newer release. To uninstall the installer-managed binary, run
+After the first installation, T4E can check for and install its own verified
+releases without rerunning the installer command:
+
+```bash
+t4e update --check
+t4e update
+```
+
+Use `t4e update --version VERSION` to install a specific release. `t4e upgrade`
+is an alias for the same command. Self-update selects the release for the current
+OS and CPU, verifies the adjacent SHA-256 file, and atomically replaces the
+running executable so a failed download or verification leaves the installed
+version unchanged. It requires `curl` or `wget` plus `tar`, and the executable's
+directory must be writable by the current user.
+
+Rerunning the installer remains available as a recovery path. To uninstall the
+installer-managed binary, run
 `curl -fsSL https://raw.githubusercontent.com/andy5090/tui-4-everything/main/install.sh | bash -s -- --uninstall`.
 Removing `$HOME/.local/bin/t4e` does the same; neither option removes apps
 installed through T4E, which can be removed individually from the catalog with
