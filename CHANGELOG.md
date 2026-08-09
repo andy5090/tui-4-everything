@@ -6,11 +6,22 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-08-10
+
 ### Added
 
+- Add a visible `REQUEST → REVIEW → RUN` workflow rail to HOME AI so the active
+  bounded-action phase remains clear above the scrollable conversation.
+- Add a persisted application theme foundation with the existing `Default`
+  palette plus `Amber` and `Green Screen`, selectable immediately in Settings.
 - Add a framework-free T4E brand site with four deterministic product demos,
-  responsive and accessible terminal-native presentation, and automated GitHub
-  Pages deployment.
+  a responsive CRT-inspired presentation, and automated GitHub Pages deployment.
+
+### Changed
+
+- Prepare missing applications in validated multi-stage AI pipelines
+  sequentially, then launch the complete managed pipeline once every stage is
+  ready.
 
 ## [0.4.0] - 2026-08-09
 
