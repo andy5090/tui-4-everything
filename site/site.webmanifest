@@ -1,7 +1,7 @@
 {
   "name": "T4E — Terminal Application Environment",
   "short_name": "T4E",
-  "description": "A whole terminal world, ready to explore.",
+  "description": "Discover, install, update, and run curated terminal apps with bounded AI actions.",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#13110b",

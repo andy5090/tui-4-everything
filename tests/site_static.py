@@ -20,6 +20,7 @@ class SiteParser(HTMLParser):
         self.ids: list[str] = []
         self.local_references: list[str] = []
         self.demo_ids: list[str] = []
+        self.catalog_ids: list[str] = []
         self.inline_handlers: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -28,6 +29,8 @@ class SiteParser(HTMLParser):
             self.ids.append(identifier)
         if demo_id := values.get("data-demo"):
             self.demo_ids.append(demo_id)
+        if catalog_ids := values.get("data-catalog-ids"):
+            self.catalog_ids.extend(catalog_ids.split())
         for name, value in attrs:
             if name.startswith("on"):
                 self.inline_handlers.append(name)
@@ -83,6 +86,44 @@ def main() -> None:
     assert logo_match.group(1).strip("\n") == canonical_logo.strip("\n"), (
         "production ASCII logo must exactly match the canonical source"
     )
+
+    catalog_source = (ROOT / "registry/catalog.yaml").read_text(encoding="utf-8")
+    tools_source = catalog_source.split("\ntools:\n", maxsplit=1)[1]
+    registry_ids = set(re.findall(r"^  - id: ([a-z0-9-]+)$", tools_source, re.MULTILINE))
+    missing_catalog_ids = sorted(set(parser.catalog_ids) - registry_ids)
+    assert not missing_catalog_ids, (
+        "site examples must exist in the T4E catalog: " + ", ".join(missing_catalog_ids)
+    )
+    assert f"<dt>{len(registry_ids)}</dt><dd>CATALOG TOOLS</dd>" in html, (
+        "site catalog total must match registry/catalog.yaml"
+    )
+    support_tool_count = len(re.findall(r"^    tags: \[support\]$", tools_source, re.MULTILINE))
+    interactive_app_count = len(registry_ids) - support_tool_count
+    assert f"<dt>{interactive_app_count}</dt><dd>INTERACTIVE APPS</dd>" in html, (
+        "site application total must match launchable catalog entries"
+    )
+
+    expected_metadata = {
+        'property="og:site_name"',
+        'property="og:image:alt"',
+        'name="twitter:title"',
+        'name="twitter:description"',
+        'name="twitter:image"',
+        'name="robots"',
+        'rel="canonical"',
+    }
+    missing_metadata = sorted(item for item in expected_metadata if item not in html)
+    assert not missing_metadata, "missing SEO metadata: " + ", ".join(missing_metadata)
+
+    structured_data_match = re.search(
+        r'<script type="application/ld\+json">(.*?)</script>', html, flags=re.DOTALL
+    )
+    assert structured_data_match, "SoftwareApplication structured data is missing"
+    structured_data = json.loads(structured_data_match.group(1))
+    assert structured_data["@type"] == "SoftwareApplication"
+    assert structured_data["softwareVersion"] == "0.5.1"
+    assert structured_data["releaseNotes"].endswith("/releases/tag/v0.5.1")
+    assert structured_data["featureList"], "structured feature list must not be empty"
 
     manifest = json.loads((SITE / "site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["start_url"] == "./"
