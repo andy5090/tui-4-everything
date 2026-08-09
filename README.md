@@ -246,15 +246,20 @@ Important actions are intentionally explicit:
   managed output filter. Figlet prompts for a message before showing its font,
   alignment, width, and color-effect options.
 - Apps with a required positional value, such as tplay, open an input dialog.
-- Settings includes `Reset saved preferences`, which restores runtime policy
-  defaults and clears remembered app launch options.
+- Settings includes a persistent Theme selector. `Default` preserves the
+  existing T4E palette, while `Amber` and `Green Screen` provide complete
+  phosphor palettes without changing application behavior. `Reset saved
+  preferences` restores runtime policy defaults and clears remembered app
+  launch options.
   The value is shell-quoted before launch rather than interpreted as a command.
 - Package-manager and T4E-managed installations can be removed with `U`;
   removal requires confirmation and verifies that the executable is gone.
   All other keys go to the current app; users do not need tmux commands.
 - AI lives in HOME's assistant rail rather than a separate tab. `a` focuses the
   composer, while Settings selects and configures every subscription or API
-  connection in one flow, and `x` interrupts supported turns. Providers
+  connection in one flow, and `x` interrupts supported turns. A persistent
+  `REQUEST → REVIEW → RUN` rail shows whether T4E is interpreting the prompt,
+  validating or awaiting approval for an action, or executing it. Providers
   may propose catalog search, install planning, a pinned T4E-verified update, or
   an app launch. Settings offers `Auto` by default, immediate `Ask` confirmation,
   and `Bypass`. Auto starts validated action chains without a separate review
@@ -262,6 +267,9 @@ Important actions are intentionally explicit:
   Yes/No as soon as an action is proposed. Bypass skips approval input for the
   complete validated chain, including installer and sensitive-device gates.
   Required launch values not present in the request still need input.
+  Validated pipelines may contain two or more exact catalog IDs; missing stages
+  are installed sequentially under the selected permission mode before the
+  complete pipeline launches once.
 - Settings can configure OpenAI (`OPENAI_API_KEY`), Anthropic
   (`ANTHROPIC_API_KEY`), Gemini (`GEMINI_API_KEY`), Zhipu AI
   (`ZHIPU_API_KEY`), Kimi (`MOONSHOT_API_KEY`), and custom OpenAI-compatible

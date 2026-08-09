@@ -8,7 +8,7 @@ use ratatui::backend::TestBackend;
 use ratatui::style::Color;
 use t4e::ai::service::{AiEvent, AiProvider, ProviderReadiness};
 use t4e::app::events::Screen;
-use t4e::app::state::{AiMessage, AppEffect, AppState, HomeFilter, HomeFocus};
+use t4e::app::state::{AiMessage, AiWorkflowPhase, AppEffect, AppState, HomeFilter, HomeFocus};
 use t4e::app::ui::render;
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::{AppCategory, InstallMethod, OutputFilter, Platform};
@@ -18,7 +18,7 @@ use t4e::installer::engine::{InstallPolicy, build_install_task};
 use t4e::installer::execution::{InstallAttempt, InstallJob};
 use t4e::installer::queue::QueueState;
 use t4e::mux::runtime::ManagedApp;
-use t4e::storage::{AiApprovalMode, PersistentState, UserSettings, save_state};
+use t4e::storage::{AiApprovalMode, AppTheme, PersistentState, UserSettings, save_state};
 
 fn app() -> AppState {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
@@ -2073,6 +2073,9 @@ fn settings_controls_update_execution_policy() {
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Char(' ')));
     assert_eq!(app.settings.ai_approval_mode, AiApprovalMode::Ask);
+    app.handle_key(key(KeyCode::Down));
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(app.settings.theme, AppTheme::Amber);
 }
 
 #[test]
@@ -2085,6 +2088,7 @@ fn settings_explain_the_selected_policy_and_reset_scope() {
         "Script and DANGER installs",
         "one setup flow for subscription or API-key mode",
         "AI permission mode",
+        "interface palette independently",
         "Favorites, recent apps, activity history",
     ]
     .into_iter()
@@ -2126,7 +2130,7 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
         .into(),
     );
     app.handle_key(key(KeyCode::Char('7')));
-    for _ in 0..5 {
+    for _ in 0..6 {
         app.handle_key(key(KeyCode::Down));
     }
     app.handle_key(key(KeyCode::Enter));
@@ -2134,6 +2138,60 @@ fn settings_reset_restores_defaults_and_clears_saved_app_options() {
     assert_eq!(app.settings, UserSettings::default());
     assert!(app.launch_preferences.is_empty());
     assert!(app.status.contains("reset"));
+}
+
+#[test]
+fn home_ai_shows_and_advances_request_review_run_workflow() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Ask;
+
+    app.apply_codex_event(CodexEvent::TurnStarted("turn-flow".to_string()));
+    assert_eq!(app.ai_workflow_phase, AiWorkflowPhase::Request);
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "catalog_search".to_string(),
+        target: "yazi".to_string(),
+    });
+    assert_eq!(app.ai_workflow_phase, AiWorkflowPhase::Review);
+    assert!(app.ai_confirmation.is_some());
+
+    app.handle_key(key(KeyCode::Char('y')));
+    assert_eq!(app.ai_workflow_phase, AiWorkflowPhase::Run);
+
+    let backend = TestBackend::new(140, 45);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("workflow renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    for label in ["REQUEST", "REVIEW", "RUN"] {
+        assert!(rendered.contains(label), "workflow is missing {label}");
+    }
+}
+
+#[test]
+fn amber_theme_applies_a_full_app_palette_without_changing_the_default() {
+    let mut themed = app();
+    themed.settings.theme = AppTheme::Amber;
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut themed))
+        .expect("amber theme renders");
+    let buffer = terminal.backend().buffer();
+    assert!(
+        buffer.content().iter().any(|cell| {
+            cell.fg == Color::Rgb(255, 200, 90) && cell.bg == Color::Rgb(32, 29, 15)
+        })
+    );
+
+    assert_eq!(UserSettings::default().theme, AppTheme::Default);
 }
 
 #[test]
@@ -2386,6 +2444,41 @@ fn auto_ai_permission_launches_a_validated_multi_app_pipeline() {
         ]
     );
     assert!(request.keep_open);
+}
+
+#[test]
+fn bypass_ai_pipeline_prepares_missing_stages_then_launches_once() {
+    let mut app = app();
+    app.settings.ai_approval_mode = AiApprovalMode::Bypass;
+    app.apply_installed_tools(Default::default());
+
+    app.apply_codex_event(CodexEvent::ActionProposed {
+        kind: "launch_pipeline".to_string(),
+        target: "fortune | figlet | lolcat".to_string(),
+    });
+
+    for expected in ["fortune", "figlet", "lolcat"] {
+        let Some(AppEffect::Execute(job)) = app.take_effect() else {
+            panic!("{expected} should be installed before pipeline launch");
+        };
+        assert_eq!(job.item.tool_id, expected);
+        let mut completed = *job;
+        completed
+            .item
+            .transition(QueueState::Installing)
+            .expect("installation starts");
+        completed
+            .item
+            .transition(QueueState::Success)
+            .expect("installation succeeds");
+        app.apply_execution(completed);
+    }
+
+    let Some(AppEffect::LaunchPipeline(request)) = app.take_effect() else {
+        panic!("pipeline should launch after every missing stage is ready");
+    };
+    assert_eq!(request.pipeline_id, "fortune-to-figlet-to-lolcat");
+    assert!(app.take_effect().is_none());
 }
 
 #[test]

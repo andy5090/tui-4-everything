@@ -14,18 +14,38 @@ use crate::storage::{ProviderAuthMode, default_api_provider_profiles};
 
 use super::events::Screen;
 use super::state::{
-    AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_LABELS, ToolUpdateState,
+    AiWorkflowPhase, AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_LABELS,
+    ToolUpdateState,
 };
+use super::theme::{activate as activate_theme, active_palette};
 
-const ACCENT: Color = Color::Cyan;
-const MUTED: Color = Color::DarkGray;
-const SELECTED: Color = Color::Yellow;
+fn accent() -> Color {
+    active_palette().accent
+}
+
+fn muted() -> Color {
+    active_palette().muted
+}
+
+fn selected() -> Color {
+    active_palette().selected
+}
 
 type ScreenPoint = (u16, u16);
 type PanelSelection = (Rect, ScreenPoint, ScreenPoint);
 
 pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
     let area = frame.area();
+    activate_theme(app.settings.theme);
+    let palette = active_palette();
+    frame.render_widget(
+        Block::default().style(
+            Style::default()
+                .bg(palette.background)
+                .fg(palette.foreground),
+        ),
+        area,
+    );
     if area.width < 60 || area.height < 16 {
         frame.render_widget(
             Paragraph::new("T4E needs a terminal of at least 60x16")
@@ -276,7 +296,7 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
                     .title(Line::from(vec![
                         Span::styled(
                             " T4E",
-                            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                            Style::default().fg(accent()).add_modifier(Modifier::BOLD),
                         ),
                         Span::raw(format!(" · {section} ")),
                     ]))
@@ -286,7 +306,7 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             .style(Style::default().fg(Color::Gray))
             .highlight_style(
                 Style::default()
-                    .fg(SELECTED)
+                    .fg(selected())
                     .add_modifier(Modifier::BOLD | Modifier::REVERSED),
             )
             .padding("", "")
@@ -335,14 +355,14 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         .constraints([Constraint::Length(5), Constraint::Min(6)])
         .split(left_sections[1]);
     let search_value = if app.search_query.is_empty() {
-        Span::styled("Search apps...", Style::default().fg(MUTED))
+        Span::styled("Search apps...", Style::default().fg(muted()))
     } else {
         Span::raw(app.search_query.clone())
     };
     let search_cursor = app.search_mode.then(|| {
         Span::styled(
             "│",
-            Style::default().fg(SELECTED).add_modifier(Modifier::BOLD),
+            Style::default().fg(selected()).add_modifier(Modifier::BOLD),
         )
     });
     let mut search_line = vec![Span::raw(" "), search_value];
@@ -411,7 +431,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 .iter()
                 .any(|job| job.item.tool_id == tool.id && job.item.state == QueueState::Installing);
             let (state, state_style) = if app.is_tool_running(&tool.id) {
-                ("RUNNING", Style::default().fg(ACCENT))
+                ("RUNNING", Style::default().fg(accent()))
             } else if is_installing {
                 (
                     "INSTALLING",
@@ -446,7 +466,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 Span::raw(format!("{:<19}", tool.name)),
                 Span::styled(
                     format!("{:<14}", tool.app_category().label()),
-                    Style::default().fg(MUTED),
+                    Style::default().fg(muted()),
                 ),
                 Span::styled(state, state_style),
             ]))
@@ -517,7 +537,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     information.extend([
         Line::from(""),
         Line::from(vec![
-            Span::styled("Available: ", Style::default().fg(ACCENT)),
+            Span::styled("Available: ", Style::default().fg(accent())),
             Span::raw(format!(
                 "{} apps · {} tools",
                 app.catalog
@@ -592,7 +612,7 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 app.settings.max_install_attempts,
                 job.item.channel
             ),
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         )];
         let recent = recent_tool_activity(app, &tool.id, 4);
         if recent.is_empty() {
@@ -609,8 +629,29 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
 
 fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let focused = app.home_focus == HomeFocus::Assistant;
+    let (workflow_area, conversation_area) = if area.height >= 9 {
+        let sections = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(3)])
+            .split(area);
+        (Some(sections[0]), sections[1])
+    } else {
+        (None, area)
+    };
+    if let Some(workflow_area) = workflow_area {
+        frame.render_widget(
+            Paragraph::new(ai_workflow_line(app.ai_workflow_phase))
+                .alignment(Alignment::Center)
+                .block(home_panel("Request · Review · Run", focused)),
+            workflow_area,
+        );
+    }
     let provider_count = app.ai_ready_providers.len();
-    let mut lines = vec![
+    let mut lines = Vec::new();
+    if workflow_area.is_none() {
+        lines.push(ai_workflow_line(app.ai_workflow_phase));
+    }
+    lines.extend([
         Line::from(vec![
             Span::styled(
                 format!("{} · ", app.ai_provider.label()),
@@ -633,13 +674,13 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             } else {
                 "Configure a CLI or API provider in Settings".to_string()
             },
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ),
-    ];
+    ]);
     for message in &app.ai_messages {
         lines.push(Line::styled(
             format!("{}:", message.role),
-            Style::default().fg(ACCENT),
+            Style::default().fg(accent()),
         ));
         lines.extend(
             message
@@ -652,7 +693,7 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     if !app.ai_streaming.is_empty() {
         lines.push(Line::styled(
             format!("{}:", app.ai_provider.label()),
-            Style::default().fg(ACCENT),
+            Style::default().fg(accent()),
         ));
         lines.extend(app.ai_streaming.lines().map(Line::from));
         lines.push(Line::from(""));
@@ -669,17 +710,42 @@ fn render_home_ai(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     };
     lines.push(Line::styled(
         composer,
-        Style::default().fg(if focused { SELECTED } else { MUTED }),
+        Style::default().fg(if focused { selected() } else { muted() }),
     ));
     let conversation = Paragraph::new(lines)
         .block(home_panel("Assistant", focused))
         .wrap(Wrap { trim: true });
     let max_scroll = conversation
-        .line_count(area.width)
-        .saturating_sub(usize::from(area.height))
+        .line_count(conversation_area.width)
+        .saturating_sub(usize::from(conversation_area.height))
         .min(usize::from(u16::MAX));
     let scroll = max_scroll.saturating_sub(app.ai_conversation_scroll.min(max_scroll)) as u16;
-    frame.render_widget(conversation.scroll((scroll, 0)), area);
+    frame.render_widget(conversation.scroll((scroll, 0)), conversation_area);
+}
+
+fn ai_workflow_line(phase: AiWorkflowPhase) -> Line<'static> {
+    let active = phase.step();
+    let mut spans = Vec::new();
+    for (index, label) in ["REQUEST", "REVIEW", "RUN"].into_iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::styled("  >  ", Style::default().fg(muted())));
+        }
+        let (marker, style) = match active {
+            Some(current) if index < current => (
+                "✓ ",
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
+            ),
+            Some(current) if index == current => (
+                "● ",
+                Style::default()
+                    .fg(selected())
+                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
+            ),
+            _ => ("○ ", Style::default().fg(muted())),
+        };
+        spans.push(Span::styled(format!("{marker}{label}"), style));
+    }
+    Line::from(spans)
 }
 
 fn ansi_line(value: &str) -> Line<'static> {
@@ -735,9 +801,9 @@ fn home_selection_symbol(focused: bool) -> &'static str {
 
 fn home_panel(title: &str, focused: bool) -> Block<'_> {
     panel(title).border_style(if focused {
-        Style::default().fg(ACCENT)
+        Style::default().fg(accent())
     } else {
-        Style::default()
+        Style::default().fg(active_palette().border)
     })
 }
 
@@ -865,7 +931,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                             QueueState::Failed => "Last output before failure",
                             _ => "Recent install output",
                         },
-                        Style::default().fg(MUTED),
+                        Style::default().fg(muted()),
                     ));
                     lines.extend(recent.into_iter().map(Line::from));
                 }
@@ -877,7 +943,7 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 Line::from(""),
                 Line::styled(
                     "Enter run  I install  U remove  R reinstall  f favorite  Backspace HOME",
-                    Style::default().fg(MUTED),
+                    Style::default().fg(muted()),
                 ),
             ]);
             Text::from(lines)
@@ -911,7 +977,7 @@ fn catalog_install_status(app: &AppState, tool_id: &str) -> (String, Style) {
             QueueState::Queued => ("QUEUED".to_string(), Style::default().fg(Color::Yellow)),
             QueueState::Success => ("INSTALLED".to_string(), Style::default().fg(Color::Green)),
             QueueState::Failed => ("FAILED".to_string(), Style::default().fg(Color::Red)),
-            QueueState::Idle => ("PENDING".to_string(), Style::default().fg(MUTED)),
+            QueueState::Idle => ("PENDING".to_string(), Style::default().fg(muted())),
         };
     }
     if let Some(ToolUpdateState::Drift {
@@ -929,7 +995,7 @@ fn catalog_install_status(app: &AppState, tool_id: &str) -> (String, Style) {
     if app.installed_tools.contains(tool_id) {
         ("INSTALLED".to_string(), Style::default().fg(Color::Green))
     } else {
-        ("NOT INSTALLED".to_string(), Style::default().fg(MUTED))
+        ("NOT INSTALLED".to_string(), Style::default().fg(muted()))
     }
 }
 
@@ -1002,7 +1068,7 @@ fn render_install(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             } else {
                 lines.push(Line::styled(
                     "x execute   X run queue   c cancel   r retry   d remove",
-                    Style::default().fg(MUTED),
+                    Style::default().fg(muted()),
                 ));
             }
             Text::from(lines)
@@ -1087,7 +1153,7 @@ fn render_workspaces(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             lines.push(Line::from(""));
             lines.push(Line::styled(
                 "Enter start/open  a open  x stop all  r refresh  h hash  I install tools",
-                Style::default().fg(MUTED),
+                Style::default().fg(muted()),
             ));
             Text::from(lines)
         },
@@ -1131,7 +1197,7 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             )
             .select(view.selected)
             .style(Style::default().fg(Color::Gray))
-            .highlight_style(Style::default().fg(ACCENT).add_modifier(Modifier::BOLD))
+            .highlight_style(Style::default().fg(accent()).add_modifier(Modifier::BOLD))
             .divider(" | "),
         sections[0],
     );
@@ -1231,16 +1297,16 @@ fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
         conversation.push(Line::styled(
             format!("{}:", message.role),
             Style::default().fg(if message.role == "You" {
-                SELECTED
+                selected()
             } else {
-                ACCENT
+                accent()
             }),
         ));
         conversation.extend(message.text.lines().map(Line::from));
         conversation.push(Line::from(""));
     }
     if !app.ai_streaming.is_empty() {
-        conversation.push(Line::styled("Codex:", Style::default().fg(ACCENT)));
+        conversation.push(Line::styled("Codex:", Style::default().fg(accent())));
         conversation.extend(app.ai_streaming.lines().map(Line::from));
     }
     let conversation = Paragraph::new(conversation)
@@ -1273,7 +1339,7 @@ fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     }));
     status.extend([
         Line::from(""),
-        Line::styled("Enter/i prompt   x interrupt", Style::default().fg(MUTED)),
+        Line::styled("Enter/i prompt   x interrupt", Style::default().fg(muted())),
     ]);
     frame.render_widget(
         Paragraph::new(Text::from(status))
@@ -1290,7 +1356,11 @@ fn render_agents(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
     frame.render_widget(
         Paragraph::new(input)
             .block(panel("Prompt"))
-            .style(Style::default().fg(if app.ai_input_mode { SELECTED } else { MUTED })),
+            .style(Style::default().fg(if app.ai_input_mode {
+                selected()
+            } else {
+                muted()
+            })),
         vertical[1],
     );
 }
@@ -1340,7 +1410,7 @@ fn render_logs(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
 }
 
 fn activity_line(entry: &str) -> Line<'_> {
-    let mut spans = vec![Span::styled("> ", Style::default().fg(MUTED))];
+    let mut spans = vec![Span::styled("> ", Style::default().fg(muted()))];
     let (timestamp, message) = entry
         .strip_prefix('[')
         .and_then(|entry| entry.split_once("] "))
@@ -1350,7 +1420,7 @@ fn activity_line(entry: &str) -> Line<'_> {
     if let Some(timestamp) = timestamp {
         spans.push(Span::styled(
             format!("[{timestamp}] "),
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ));
     }
 
@@ -1361,12 +1431,12 @@ fn activity_line(entry: &str) -> Line<'_> {
             "output" => Color::Green,
             "progress" => Color::Yellow,
             "error" | "err" => Color::Red,
-            _ => ACCENT,
+            _ => accent(),
         };
         spans.extend([
             Span::styled(
                 tool_id.to_string(),
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Span::raw(" "),
             Span::styled(
@@ -1388,7 +1458,7 @@ fn activity_line(entry: &str) -> Line<'_> {
             "uninstall" | "reinstall" => Color::Yellow,
             "codex" | "codex diagnostic" => Color::Magenta,
             "settings" => Color::Blue,
-            "workspace" => ACCENT,
+            "workspace" => accent(),
             _ => Color::White,
         };
         spans.extend([
@@ -1470,6 +1540,7 @@ fn render_settings(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             "AI permission mode       {}",
             app.settings.ai_approval_mode.label()
         ),
+        format!("Theme                   {}", app.settings.theme.label()),
         "Reset saved preferences    Enter".to_string(),
     ];
     let items = values.into_iter().map(ListItem::new).collect::<Vec<_>>();
@@ -1543,6 +1614,13 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             "Bypass includes install execution, verified updates, default launch options, and sensitive install/device approvals. Required values missing from the request still need input.",
             "Left/Right select permission mode",
         ),
+        5 => (
+            "Theme",
+            app.settings.theme.label().to_string(),
+            "Selects the T4E interface palette independently from terminal apps.",
+            "Default preserves the existing T4E colors. Amber and Green Screen provide complete phosphor palettes without changing app behavior.",
+            "Left/Right select theme",
+        ),
         _ => (
             "Reset saved preferences",
             "Ready".to_string(),
@@ -1555,7 +1633,7 @@ fn setting_detail(app: &AppState) -> Text<'static> {
         Line::styled(title, Style::default().add_modifier(Modifier::BOLD)),
         Line::from(""),
         Line::from(vec![
-            Span::styled("Current: ", Style::default().fg(ACCENT)),
+            Span::styled("Current: ", Style::default().fg(accent())),
             Span::raw(value),
         ]),
         Line::from(""),
@@ -1563,10 +1641,10 @@ fn setting_detail(app: &AppState) -> Text<'static> {
         Line::from(""),
         Line::from(effect),
         Line::from(""),
-        Line::styled(controls, Style::default().fg(MUTED)),
+        Line::styled(controls, Style::default().fg(muted())),
         Line::styled(
             "Changes are saved automatically.",
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ),
     ])
 }
@@ -1628,7 +1706,7 @@ fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) 
     let mut lines = vec![
         Line::styled(
             "Unified AI connection",
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            Style::default().fg(accent()).add_modifier(Modifier::BOLD),
         ),
         Line::from(format!("Provider: {}", setup.provider.label())),
     ];
@@ -1641,13 +1719,13 @@ fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) 
         lines.push(Line::from(vec![
             Span::styled(
                 if setup.field == index { "> " } else { "  " },
-                Style::default().fg(SELECTED),
+                Style::default().fg(selected()),
             ),
-            Span::styled(format!("{label:<17}"), Style::default().fg(MUTED)),
+            Span::styled(format!("{label:<17}"), Style::default().fg(muted())),
             Span::styled(
                 value.clone(),
                 if setup.field == index {
-                    Style::default().fg(SELECTED).add_modifier(Modifier::BOLD)
+                    Style::default().fg(selected()).add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 },
@@ -1673,7 +1751,7 @@ fn render_api_provider_setup(frame: &mut Frame<'_>, app: &AppState, area: Rect) 
     }
     lines.push(Line::styled(
         "←/→ mode   Tab/↑/↓ field   Enter next/save   Esc cancel",
-        Style::default().fg(MUTED),
+        Style::default().fg(muted()),
     ));
     frame.render_widget(
         Paragraph::new(lines)
@@ -1742,7 +1820,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
         vec![
             Line::styled(
                 "Risk from capabilities",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Line::from("SAFE none | LOW network, account, or file read"),
             Line::from("HIGH camera capture, file write, or delete"),
@@ -1750,7 +1828,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("Highest capability level becomes the app risk level"),
             Line::styled(
                 "App details list every declared capability.",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Line::from("AI permission: Bypass / Auto / Ask in Settings"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
@@ -1761,7 +1839,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
         vec![
             Line::styled(
                 "Capabilities and derived risk",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Line::from(
                 "SAFE     no declared capability beyond app-owned configuration, cache, and local UI state",
@@ -1777,23 +1855,23 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             ),
             Line::styled(
                 "An app receives the highest level among its capabilities. Details show the complete capability list.",
-                Style::default().fg(MUTED),
+                Style::default().fg(muted()),
             ),
             Line::styled(
                 "Installation policy",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Line::from(
                 "Package-manager installs use a generated catalog plan and verify required executables afterward.",
             ),
             Line::styled(
                 "Script installers require approval for manual and Auto actions; AI Bypass explicitly skips it.",
-                Style::default().fg(MUTED),
+                Style::default().fg(muted()),
             ),
             Line::from(""),
             Line::styled(
                 "Using T4E",
-                Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+                Style::default().fg(accent()).add_modifier(Modifier::BOLD),
             ),
             Line::from("arrows / j k       move selection"),
             Line::from("Enter               enter an app list or run the selected app"),
@@ -1844,7 +1922,7 @@ fn render_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         lines.push(Line::from(format!("Type: {}", confirmation.expected)));
         lines.push(Line::styled(
             format!("> {}_", confirmation.input),
-            Style::default().fg(SELECTED),
+            Style::default().fg(selected()),
         ));
         lines.push(Line::from(""));
     } else {
@@ -1855,7 +1933,7 @@ fn render_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     }
     lines.push(Line::styled(
         "Enter confirm   Esc cancel",
-        Style::default().fg(MUTED),
+        Style::default().fg(muted()),
     ));
     let content = Text::from(lines);
     frame.render_widget(
@@ -1883,7 +1961,7 @@ fn render_launch_options(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let mut lines = vec![
         Line::styled(
             format!("{} launch options", state.tool_name),
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            Style::default().fg(accent()).add_modifier(Modifier::BOLD),
         ),
         Line::from(""),
     ];
@@ -1918,7 +1996,7 @@ fn render_launch_options(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Line::from(""),
         Line::styled(
             "Space enable  Left/Right value  Enter launch  Esc cancel",
-            Style::default().fg(MUTED),
+            Style::default().fg(muted()),
         ),
     ]);
     frame.render_widget(
@@ -1936,20 +2014,20 @@ fn render_launch_argument(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     let popup = centered_rect(84, 9, area);
     frame.render_widget(Clear, popup);
     let value = if state.input.is_empty() {
-        Line::styled(&state.placeholder, Style::default().fg(MUTED))
+        Line::styled(&state.placeholder, Style::default().fg(muted()))
     } else {
         Line::styled(format!("> {}_", state.input), selection_style())
     };
     let content = Text::from(vec![
         Line::styled(
             &state.tool_name,
-            Style::default().fg(ACCENT).add_modifier(Modifier::BOLD),
+            Style::default().fg(accent()).add_modifier(Modifier::BOLD),
         ),
         Line::from(""),
         Line::from(state.label.as_str()),
         value,
         Line::from(""),
-        Line::styled("Enter launch   Esc cancel", Style::default().fg(MUTED)),
+        Line::styled("Enter launch   Esc cancel", Style::default().fg(muted())),
     ]);
     frame.render_widget(
         Paragraph::new(content)
@@ -1979,7 +2057,7 @@ fn render_launch_approval(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Line::from("This app will read live frames from the selected camera."),
         Line::from("Approval lasts for the current T4E session."),
         Line::from(""),
-        Line::styled("Enter allow   Esc cancel", Style::default().fg(MUTED)),
+        Line::styled("Enter allow   Esc cancel", Style::default().fg(muted())),
     ]);
     frame.render_widget(
         Paragraph::new(content)
@@ -2025,7 +2103,7 @@ fn render_link_picker(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     };
     frame.render_widget(
         Paragraph::new("Up/Down select   Enter confirm   Esc cancel")
-            .style(Style::default().fg(MUTED)),
+            .style(Style::default().fg(muted())),
         hint,
     );
 }
@@ -2062,7 +2140,7 @@ fn render_uninstall_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Re
         Line::from(""),
         Line::from(explanation),
         Line::from(""),
-        Line::styled(action, Style::default().fg(MUTED)),
+        Line::styled(action, Style::default().fg(muted())),
     ]);
     frame.render_widget(
         Paragraph::new(content)
@@ -2091,7 +2169,7 @@ fn render_ai_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         Line::from(""),
         Line::styled(
             "Y / Enter  Yes     N / Esc  No",
-            Style::default().fg(SELECTED).add_modifier(Modifier::BOLD),
+            Style::default().fg(selected()).add_modifier(Modifier::BOLD),
         ),
     ]);
     frame.render_widget(
@@ -2133,13 +2211,16 @@ fn centered_rect(width: u16, height: u16, area: Rect) -> Rect {
 }
 
 fn panel(title: &str) -> Block<'_> {
+    let palette = active_palette();
     Block::default()
         .title(format!(" {} ", title))
         .borders(Borders::ALL)
+        .style(Style::default().bg(palette.surface).fg(palette.foreground))
+        .border_style(Style::default().fg(palette.border))
 }
 
 fn selection_style() -> Style {
-    Style::default().fg(SELECTED).add_modifier(Modifier::BOLD)
+    Style::default().fg(selected()).add_modifier(Modifier::BOLD)
 }
 
 fn risk_style(risk: RiskLevel) -> Style {

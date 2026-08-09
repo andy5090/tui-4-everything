@@ -18,9 +18,9 @@ use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
 use crate::mux::tmux::compile_workspace;
 use crate::mux::workspace::{Workspace, WorkspaceRegistry};
 use crate::storage::{
-    AiApprovalMode, ApiProviderProfile, LaunchOptionPreference, PersistentState, ProviderAuthMode,
-    RecentItem, UserSettings, default_api_provider_profiles, load_state, log_dir_for_state,
-    save_state,
+    AiApprovalMode, ApiProviderProfile, AppTheme, LaunchOptionPreference, PersistentState,
+    ProviderAuthMode, RecentItem, UserSettings, default_api_provider_profiles, load_state,
+    log_dir_for_state, save_state,
 };
 use crate::system_info::{SystemOverview, cached_system_overview};
 
@@ -258,6 +258,26 @@ pub struct AiActionConfirmation {
     pub action: AiAction,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum AiWorkflowPhase {
+    #[default]
+    Idle,
+    Request,
+    Review,
+    Run,
+}
+
+impl AiWorkflowPhase {
+    pub fn step(self) -> Option<usize> {
+        match self {
+            Self::Idle => None,
+            Self::Request => Some(0),
+            Self::Review => Some(1),
+            Self::Run => Some(2),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct ApiProviderSetupState {
     pub provider: AiProvider,
@@ -341,6 +361,8 @@ pub struct AppState {
     pending_tool_launch: Option<ToolLaunchRequest>,
     pending_tool_install: Option<String>,
     pending_tool_configuration: Option<String>,
+    pending_pipeline_launch: Option<PipelineLaunchRequest>,
+    pending_pipeline_installs: VecDeque<String>,
     installed_scan_complete: bool,
     approved_camera_tools: BTreeSet<String>,
     return_after_app_close: bool,
@@ -355,6 +377,7 @@ pub struct AppState {
     pub ai_conversation_scroll: usize,
     pub ai_usage: String,
     pub ai_confirmation: Option<AiActionConfirmation>,
+    pub ai_workflow_phase: AiWorkflowPhase,
     ai_launch_approval_mode: Option<AiApprovalMode>,
     pub api_provider_setup: Option<ApiProviderSetupState>,
     effects: VecDeque<AppEffect>,
@@ -441,6 +464,8 @@ impl AppState {
             pending_tool_launch: None,
             pending_tool_install: None,
             pending_tool_configuration: None,
+            pending_pipeline_launch: None,
+            pending_pipeline_installs: VecDeque::new(),
             installed_scan_complete: false,
             approved_camera_tools: BTreeSet::new(),
             return_after_app_close: false,
@@ -455,6 +480,7 @@ impl AppState {
             ai_conversation_scroll: 0,
             ai_usage: "waiting for usage data".to_string(),
             ai_confirmation: None,
+            ai_workflow_phase: AiWorkflowPhase::Idle,
             ai_launch_approval_mode: None,
             api_provider_setup: None,
             effects: VecDeque::new(),
@@ -1054,6 +1080,8 @@ impl AppState {
                 } else if self.pending_tool_configuration.as_deref() == Some(tool_id.as_str()) {
                     self.pending_tool_configuration = None;
                     self.request_tool_configuration(&tool_id);
+                } else if self.pending_pipeline_launch.is_some() {
+                    self.continue_pending_pipeline();
                 }
             }
         } else if state == QueueState::Failed
@@ -1062,6 +1090,8 @@ impl AppState {
             self.pending_tool_launch = None;
             self.pending_tool_install = None;
             self.pending_tool_configuration = None;
+            self.pending_pipeline_launch = None;
+            self.pending_pipeline_installs.clear();
             self.ai_launch_approval_mode = None;
         }
         self.trim_logs();
@@ -1075,6 +1105,8 @@ impl AppState {
             self.pending_tool_launch = None;
             self.pending_tool_install = None;
             self.pending_tool_configuration = None;
+            self.pending_pipeline_launch = None;
+            self.pending_pipeline_installs.clear();
             self.ai_launch_approval_mode = None;
         }
         self.queue_running = false;
@@ -1382,6 +1414,7 @@ impl AppState {
             }
             AiEvent::TurnStarted { provider, id } if provider == self.ai_provider => {
                 self.ai_streaming.clear();
+                self.ai_workflow_phase = AiWorkflowPhase::Request;
                 self.ai_status = format!("{} working {}", provider.label(), short_id(&id));
             }
             AiEvent::Delta { provider, text } if provider == self.ai_provider => {
@@ -1418,6 +1451,7 @@ impl AppState {
                         | "launch_tplay_search"
                 );
                 if provider == self.ai_provider && supported {
+                    self.ai_workflow_phase = AiWorkflowPhase::Review;
                     let Some(target) = resolved_target else {
                         self.ai_status = format!("Rejected unsupported AI action {kind}:{target}");
                         return;
@@ -1556,6 +1590,7 @@ impl AppState {
             KeyCode::Enter => {
                 let prompt = self.ai_input.trim().to_string();
                 if !prompt.is_empty() && self.ai_ready() {
+                    self.ai_workflow_phase = AiWorkflowPhase::Request;
                     self.ai_messages.push(AiMessage {
                         role: "You".to_string(),
                         text: prompt.clone(),
@@ -1596,6 +1631,7 @@ impl AppState {
     }
 
     fn execute_ai_action(&mut self, action: AiAction, approval: &str, mode: AiApprovalMode) {
+        self.ai_workflow_phase = AiWorkflowPhase::Run;
         let target = action.target;
         match action.kind.as_str() {
             "catalog_search" => {
@@ -1626,7 +1662,7 @@ impl AppState {
                     self.ai_status = "Unsupported AI action".to_string();
                     return;
                 };
-                self.effects.push_back(AppEffect::LaunchPipeline(request));
+                self.request_pipeline_launch(request, mode);
             }
             "launch_tplay_search" => {
                 self.ai_launch_approval_mode = Some(mode);
@@ -1672,6 +1708,40 @@ impl AppState {
                 .collect(),
             keep_open: tools.iter().any(|tool| tool.run.keep_open),
         })
+    }
+
+    fn request_pipeline_launch(&mut self, request: PipelineLaunchRequest, mode: AiApprovalMode) {
+        let missing = request
+            .stages
+            .iter()
+            .filter(|stage| !self.installed_tools.contains(&stage.tool_id))
+            .map(|stage| stage.tool_id.clone())
+            .collect::<VecDeque<_>>();
+        if !self.installed_scan_complete || missing.is_empty() {
+            self.effects.push_back(AppEffect::LaunchPipeline(request));
+            return;
+        }
+
+        self.pending_pipeline_launch = Some(request);
+        self.pending_pipeline_installs = missing;
+        self.ai_launch_approval_mode = Some(mode);
+        self.continue_pending_pipeline();
+    }
+
+    fn continue_pending_pipeline(&mut self) {
+        if let Some(tool_id) = self.pending_pipeline_installs.pop_front() {
+            self.pending_tool_launch = None;
+            self.pending_tool_configuration = None;
+            self.pending_tool_install = Some(tool_id.clone());
+            self.begin_pending_install(tool_id);
+            return;
+        }
+
+        self.pending_tool_install = None;
+        self.ai_launch_approval_mode = None;
+        if let Some(request) = self.pending_pipeline_launch.take() {
+            self.effects.push_back(AppEffect::LaunchPipeline(request));
+        }
     }
 
     fn request_tplay_search(&mut self, query: &str) -> bool {
@@ -1824,7 +1894,7 @@ impl AppState {
                 KeyCode::Left | KeyCode::Char('h') => self.adjust_setting(-1),
                 KeyCode::Right | KeyCode::Char('l') | KeyCode::Char(' ') => self.adjust_setting(1),
                 KeyCode::Enter if self.settings_index == 3 => self.begin_api_provider_setup(),
-                KeyCode::Enter if self.settings_index == 5 => self.reset_saved_preferences(),
+                KeyCode::Enter if self.settings_index == 6 => self.reset_saved_preferences(),
                 _ => {}
             },
             Screen::Help => {}
@@ -2054,7 +2124,7 @@ impl AppState {
                 self.workspace_index = index;
             }
             Screen::Agents if index < self.agent_tools().len() => self.agent_index = index,
-            Screen::Settings if index < 6 => self.settings_index = index,
+            Screen::Settings if index < 7 => self.settings_index = index,
             Screen::AppView
             | Screen::Logs
             | Screen::Home
@@ -2190,7 +2260,7 @@ impl AppState {
     }
 
     fn move_setting(&mut self, delta: isize) {
-        self.settings_index = move_index(self.settings_index, 6, delta);
+        self.settings_index = move_index(self.settings_index, 7, delta);
     }
 
     fn queue_selected_tool(&mut self) {
@@ -2908,6 +2978,8 @@ impl AppState {
                 self.pending_tool_launch = None;
                 self.pending_tool_install = None;
                 self.pending_tool_configuration = None;
+                self.pending_pipeline_launch = None;
+                self.pending_pipeline_installs.clear();
                 self.ai_launch_approval_mode = None;
                 self.status = "Installation confirmation cancelled".to_string();
             }
@@ -3040,7 +3112,7 @@ impl AppState {
     }
 
     fn adjust_setting(&mut self, delta: isize) {
-        if self.settings_index > 4 {
+        if self.settings_index > 5 {
             return;
         }
         match self.settings_index {
@@ -3070,6 +3142,14 @@ impl AppState {
                     .position(|mode| *mode == self.settings.ai_approval_mode)
                     .unwrap_or_default();
                 self.settings.ai_approval_mode = MODES[move_index(current, MODES.len(), delta)];
+            }
+            5 => {
+                let current = AppTheme::ALL
+                    .iter()
+                    .position(|theme| *theme == self.settings.theme)
+                    .unwrap_or_default();
+                self.settings.theme =
+                    AppTheme::ALL[move_index(current, AppTheme::ALL.len(), delta)];
             }
             _ => {}
         }

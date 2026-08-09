@@ -47,6 +47,8 @@ pub struct RecentItem {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserSettings {
     pub default_mux: String,
+    #[serde(default)]
+    pub theme: AppTheme,
     #[serde(default = "enabled_by_default")]
     pub mouse_enabled: bool,
     pub install_timeout_sec: u64,
@@ -58,6 +60,27 @@ pub struct UserSettings {
     pub preferred_ai_provider: String,
     #[serde(default = "default_api_provider_profiles")]
     pub api_providers: BTreeMap<String, ApiProviderProfile>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AppTheme {
+    #[default]
+    Default,
+    Amber,
+    GreenScreen,
+}
+
+impl AppTheme {
+    pub const ALL: [Self; 3] = [Self::Default, Self::Amber, Self::GreenScreen];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Default => "Default",
+            Self::Amber => "Amber",
+            Self::GreenScreen => "Green Screen",
+        }
+    }
 }
 
 fn enabled_by_default() -> bool {
@@ -181,6 +204,7 @@ impl Default for UserSettings {
     fn default() -> Self {
         Self {
             default_mux: "tmux".to_string(),
+            theme: AppTheme::Default,
             mouse_enabled: true,
             install_timeout_sec: 600,
             max_install_attempts: 2,

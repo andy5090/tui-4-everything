@@ -9,8 +9,8 @@ use t4e::catalog::models::InstallMethod;
 use t4e::installer::engine::InstallTask;
 use t4e::installer::execution::InstallJob;
 use t4e::storage::{
-    AiApprovalMode, LaunchOptionPreference, PersistentState, ProviderAuthMode, RecentItem,
-    UserSettings, default_api_provider_profiles, load_state, save_state,
+    AiApprovalMode, AppTheme, LaunchOptionPreference, PersistentState, ProviderAuthMode,
+    RecentItem, UserSettings, default_api_provider_profiles, load_state, save_state,
 };
 
 fn temp_file() -> PathBuf {
@@ -54,6 +54,19 @@ fn legacy_ai_approval_modes_migrate_to_permission_modes() {
     assert_eq!(
         UserSettings::default().ai_approval_mode,
         AiApprovalMode::Auto
+    );
+}
+
+#[test]
+fn themes_have_a_stable_default_and_serialized_names() {
+    assert_eq!(UserSettings::default().theme, AppTheme::Default);
+    assert_eq!(
+        serde_json::to_string(&AppTheme::Amber).unwrap(),
+        r#""amber""#
+    );
+    assert_eq!(
+        serde_json::from_str::<AppTheme>(r#""green_screen""#).unwrap(),
+        AppTheme::GreenScreen
     );
 }
 
