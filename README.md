@@ -26,6 +26,9 @@ T4E // TERMINAL APPLICATION ENVIRONMENT
 
 ONE TERMINAL. EVERY TOOL. AI AT THE CONTROLS.
 
+Explore the interactive demos at
+[andy5090.github.io/tui-4-everything](https://andy5090.github.io/tui-4-everything/).
+
 T4E is a curated terminal application manager and AI-controlled terminal
 environment. HOME AI uses either an existing signed-in Codex, Claude, or Gemini
 CLI subscription or an API-key connection for OpenAI, Anthropic, Gemini,

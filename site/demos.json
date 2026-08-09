@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "demos": [
+    {
+      "id": "pipeline",
+      "kicker": "MULTI-APP PIPELINE",
+      "title": "Turn one request into a visual pipeline.",
+      "outcome": "Three validated apps. One managed session.",
+      "requires": "fortune · figlet · lolcat",
+      "policy": "AUTO / VALIDATED",
+      "events": [
+        {
+          "phase": "request",
+          "label": "SYSTEM",
+          "tone": "muted",
+          "lines": ["HOME AI ready / permission: AUTO"]
+        },
+        {
+          "phase": "request",
+          "label": "YOU",
+          "tone": "user",
+          "lines": ["fortune | figlet | lolcat 으로 재미있는 화면 만들어줘"]
+        },
+        {
+          "phase": "review",
+          "label": "AI",
+          "tone": "accent",
+          "lines": ["Proposed bounded action: launch_pipeline", "fortune → figlet → lolcat"]
+        },
+        {
+          "phase": "review",
+          "label": "T4E",
+          "tone": "ok",
+          "lines": ["✓ 3 catalog IDs found", "✓ every stage installed", "✓ no shell operators or arguments"]
+        },
+        {
+          "phase": "run",
+          "label": "RUN",
+          "tone": "warn",
+          "lines": ["Launching managed pipeline…"]
+        },
+        {
+          "phase": "run",
+          "label": "OUTPUT",
+          "tone": "rainbow",
+          "lines": [" _____ _  _   ___   ___  _  _ ", "|_   _| || | / __| / __|| || |", "  | | | __ || (__ | (__ | __ |", "  |_| |_||_| \\___| \\___||_||_|", "FORTUNE FAVORS THE TERMINAL."]
+        }
+      ]
+    },
+    {
+      "id": "tplay",
+      "kicker": "BOUNDED VIDEO SEARCH",
+      "title": "Ask for a mood. Let T4E find the motion.",
+      "outcome": "Search, resolve, and play without a pasted URL.",
+      "requires": "tplay · managed yt-dlp",
+      "policy": "AUTO / URL ALLOWLIST",
+      "events": [
+        {
+          "phase": "request",
+          "label": "YOU",
+          "tone": "user",
+          "lines": ["영상미 있는 유튜브 영상을 찾아서 tplay로 재생해줘"]
+        },
+        {
+          "phase": "request",
+          "label": "AI",
+          "tone": "accent",
+          "lines": ["Proposed bounded action: launch_tplay_search", "query: cinematic jellyfish 4K"]
+        },
+        {
+          "phase": "review",
+          "label": "T4E",
+          "tone": "ok",
+          "lines": ["✓ query bounded to 160 characters", "✓ managed yt-dlp runtime available"]
+        },
+        {
+          "phase": "review",
+          "label": "RESOLVE",
+          "tone": "muted",
+          "lines": ["ytsearch1:cinematic jellyfish 4K", "youtube.com/watch?v=•••••••••••"]
+        },
+        {
+          "phase": "run",
+          "label": "RUN",
+          "tone": "warn",
+          "lines": ["Opening verified YouTube URL in tplay…"]
+        },
+        {
+          "phase": "run",
+          "label": "TPLAY",
+          "tone": "ocean",
+          "lines": ["       .-~~-.", "   .-~  _   ~-.", "  /   _/ \\_    \\", " /_.-~  *  ~-._\\", "    ASCII MOTION / 24 FPS"]
+        }
+      ]
+    },
+    {
+      "id": "permissions",
+      "kicker": "PERMISSION MODES",
+      "title": "Choose how often automation stops for you.",
+      "outcome": "Different interaction. The same bounded action schema.",
+      "requires": "HOME AI provider",
+      "policy": "ASK / AUTO / BYPASS",
+      "events": [
+        {
+          "phase": "request",
+          "label": "YOU",
+          "tone": "user",
+          "lines": ["termleaf 설치하고 바로 실행해줘"]
+        },
+        {
+          "phase": "request",
+          "label": "AI",
+          "tone": "accent",
+          "lines": ["Proposed chain: install_plan → launch_app", "target: termleaf / verified: 0.3.5"]
+        },
+        {
+          "phase": "review",
+          "label": "ASK",
+          "tone": "warn",
+          "lines": ["Pause now: Install termleaf? [Y/N]"]
+        },
+        {
+          "phase": "review",
+          "label": "AUTO",
+          "tone": "ok",
+          "lines": ["Continue validated install; retain high-risk gates"]
+        },
+        {
+          "phase": "review",
+          "label": "BYPASS",
+          "tone": "danger",
+          "lines": ["Continue complete requested chain without approval input"]
+        },
+        {
+          "phase": "run",
+          "label": "BOUNDARY",
+          "tone": "muted",
+          "lines": ["All modes: exact catalog ID · pinned version · audited lifecycle", "No mode grants AI a raw shell."]
+        }
+      ]
+    },
+    {
+      "id": "camera",
+      "kicker": "DEVICE-BOUND APP",
+      "title": "Turn a Termux camera frame into live text.",
+      "outcome": "Device access stays visible; rendering stays terminal-native.",
+      "requires": "Termux:API · Chafa",
+      "policy": "DEVICE GATE / VISIBLE",
+      "events": [
+        {
+          "phase": "request",
+          "label": "YOU",
+          "tone": "user",
+          "lines": ["ASCII Camera를 컬러 24fps로 실행해줘"]
+        },
+        {
+          "phase": "request",
+          "label": "AI",
+          "tone": "accent",
+          "lines": ["Proposed bounded action: launch_app", "ascii-camera / color=true / framerate=24"]
+        },
+        {
+          "phase": "review",
+          "label": "T4E",
+          "tone": "ok",
+          "lines": ["✓ Termux platform detected", "✓ structured launch options accepted"]
+        },
+        {
+          "phase": "review",
+          "label": "DEVICE",
+          "tone": "warn",
+          "lines": ["Camera access is required for this session."]
+        },
+        {
+          "phase": "run",
+          "label": "RUN",
+          "tone": "muted",
+          "lines": ["termux-camera-photo → chafa / 24fps / color"]
+        },
+        {
+          "phase": "run",
+          "label": "CAMERA",
+          "tone": "rainbow",
+          "lines": ["▒▒▓▓████▓▒░░░▒▓██", "░▒▓██  LIVE  ██▓▒░", "▒▓██  ◉    ◉  ██▓▒", "░▒▓██▄  ▄▄  ▄██▓▒░", "SESSION DEVICE BOUND"]
+        }
+      ]
+    }
+  ]
+}

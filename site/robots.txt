@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://andy5090.github.io/tui-4-everything/sitemap.xml

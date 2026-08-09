@@ -6,6 +6,12 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Added
+
+- Add a framework-free T4E brand site with four deterministic product demos,
+  responsive and accessible terminal-native presentation, and automated GitHub
+  Pages deployment.
+
 ## [0.4.0] - 2026-08-09
 
 ### Added

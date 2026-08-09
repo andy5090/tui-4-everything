@@ -1,0 +1,17 @@
+{
+  "name": "T4E — Terminal Application Environment",
+  "short_name": "T4E",
+  "description": "One terminal. Every tool. AI at the controls.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#050708",
+  "theme_color": "#050708",
+  "icons": [
+    {
+      "src": "./assets/t4e-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

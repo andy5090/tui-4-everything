@@ -68,6 +68,7 @@ run_with_policy "cargo fmt" "cargo fmt --all -- --check" "/tmp/t4e-gates-fmt.log
 run_with_policy "cargo clippy" "cargo clippy --all-targets -- -D warnings" "/tmp/t4e-gates-clippy.log"
 run_with_policy "cargo test" "cargo test --all-targets" "/tmp/t4e-gates-test.log"
 run_with_policy "release installer" "tests/install_sh_test.sh" "/tmp/t4e-gates-install-sh.log"
+run_with_policy "static site" "python3 tests/site_static.py && node --check site/app.js" "/tmp/t4e-gates-site.log"
 run_with_policy "registry validation" "cargo run -- validate" "/tmp/t4e-gates-validate.log"
 run_with_policy "workspace compiler" "cargo run -- workspace-plan --workspace-id video-desk --mux tmux" "/tmp/t4e-gates-workspace.log"
 
