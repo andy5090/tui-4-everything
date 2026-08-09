@@ -6,12 +6,36 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-09
+
+### Added
+
+- Add `t4e update`, `t4e update --check`, and version-pinned self-update with
+  platform-aware GitHub release selection, SHA-256 verification, and atomic
+  executable replacement.
+- Let HOME AI launch validated pipelines of two or more catalog applications
+  and autonomously resolve a bounded YouTube search into `tplay` playback.
+- Add Termux as a catalog platform and provide a Termux-native ASCII Camera
+  launcher using Termux:API and Chafa.
+
 ### Changed
 
 - Replace the two-step AI proposal review with `Bypass`, `Auto`, and `Ask`
   permission modes. Auto-approved install plans now start immediately, Ask
   opens confirmation as soon as an action is proposed, and Bypass continues
   validated AI action chains through installer and device approval gates.
+- Start composing in the HOME assistant as soon as text is typed, retain the
+  complete conversation, and support keyboard and mouse-wheel history scrolling.
+- Update the T4E-verified Termleaf release from 0.3.0 to 0.3.5.
+
+### Fixed
+
+- Keep the newest assistant message visible when conversation history exceeds
+  the panel height.
+- Prevent wide-character continuation cells from inserting spaces when Korean
+  text is copied with mouse drag selection.
+- Install an isolated current `yt-dlp` runtime for `tplay` searches so resolved
+  YouTube URLs reach the managed player reliably.
 
 ## [0.3.1] - 2026-08-03
 
