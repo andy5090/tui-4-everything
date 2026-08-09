@@ -6,6 +6,13 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-10
+
+### Added
+
+- Add `btop` to the System application catalog with Homebrew and APT installation
+  support.
+
 ## [0.5.0] - 2026-08-10
 
 ### Added

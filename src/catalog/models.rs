@@ -161,7 +161,7 @@ impl Tool {
 
     pub fn app_category(&self) -> AppCategory {
         match self.id.as_str() {
-            "ascii-camera" | "fastfetch" => AppCategory::System,
+            "ascii-camera" | "btop" | "fastfetch" => AppCategory::System,
             "shellcast" | "spotatui" | "spotify-player" | "ncspot" | "cava" | "termusic"
             | "yewtube" | "youtube-tui" | "tplay" => AppCategory::Media,
             "newsboat" | "lynx" => AppCategory::Internet,

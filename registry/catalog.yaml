@@ -18,7 +18,7 @@ packs:
   - id: viewers-pack
     title: Viewers Pack
     exposure: starter
-    tool_ids: [fastfetch, glow, bat, less, mediainfo]
+    tool_ids: [fastfetch, btop, glow, bat, less, mediainfo]
   - id: files-pack
     title: Files Pack
     exposure: starter
@@ -437,6 +437,26 @@ tools:
         method: fastfetch
         package_hints: ["fastfetch"]
         system_packages: ["curl"]
+  - id: btop
+    name: "btop"
+    description: "Monitor CPU, memory, disks, network activity, and running processes in real time."
+    key_hints: ["q quit", "? help"]
+    category: utility
+    tags: []
+    audience: general
+    capabilities: [SYSTEM]
+    exposure: starter
+    run:
+      cmd: "btop"
+    checks:
+      - which: "btop"
+    installers:
+      - platform: macos
+        method: brew
+        package_hints: ["btop"]
+      - platform: linux
+        method: apt
+        package_hints: ["btop"]
   - id: lynx
     name: "Lynx"
     description: "Browse websites as text with a keyboard-driven terminal interface."

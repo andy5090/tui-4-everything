@@ -181,6 +181,24 @@ fn registry_loads_and_validates() {
             && installer.method == InstallMethod::Apt
             && installer.package_hints == ["lynx"]
     }));
+    let btop = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "btop")
+        .expect("btop exists");
+    assert_eq!(btop.run.cmd, "btop");
+    assert_eq!(btop.app_category(), AppCategory::System);
+    assert_eq!(btop.risk_level(), RiskLevel::Danger);
+    assert!(btop.installers.iter().any(|installer| {
+        installer.platform == Platform::Macos
+            && installer.method == InstallMethod::Brew
+            && installer.package_hints == ["btop"]
+    }));
+    assert!(btop.installers.iter().any(|installer| {
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::Apt
+            && installer.package_hints == ["btop"]
+    }));
     assert!(catalog.tools.iter().all(|tool| tool.id != "neovim"));
     let lazyvim = catalog
         .tools
@@ -336,7 +354,7 @@ fn glow_and_read_only_helpers_belong_to_the_viewers_pack() {
         .expect("viewers pack exists");
     assert_eq!(
         viewers.tool_ids,
-        ["fastfetch", "glow", "bat", "less", "mediainfo"]
+        ["fastfetch", "btop", "glow", "bat", "less", "mediainfo"]
     );
 
     let podcasts = catalog
