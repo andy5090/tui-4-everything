@@ -19,7 +19,7 @@
           "phase": "request",
           "label": "YOU",
           "tone": "user",
-          "lines": ["fortune | figlet | lolcat 으로 재미있는 화면 만들어줘"]
+          "lines": ["Create something fun with fortune | figlet | lolcat."]
         },
         {
           "phase": "review",
@@ -59,7 +59,7 @@
           "phase": "request",
           "label": "YOU",
           "tone": "user",
-          "lines": ["영상미 있는 유튜브 영상을 찾아서 tplay로 재생해줘"]
+          "lines": ["Find a cinematic YouTube video and play it with tplay."]
         },
         {
           "phase": "request",
@@ -105,7 +105,7 @@
           "phase": "request",
           "label": "YOU",
           "tone": "user",
-          "lines": ["termleaf 설치하고 바로 실행해줘"]
+          "lines": ["Install termleaf and launch it right away."]
         },
         {
           "phase": "request",
@@ -151,7 +151,7 @@
           "phase": "request",
           "label": "YOU",
           "tone": "user",
-          "lines": ["ASCII Camera를 컬러 24fps로 실행해줘"]
+          "lines": ["Launch ASCII Camera in color at 24 fps."]
         },
         {
           "phase": "request",

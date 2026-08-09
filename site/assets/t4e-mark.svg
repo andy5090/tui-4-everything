@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
   <title id="title">T4E</title>
-  <rect width="64" height="64" fill="#050708"/>
-  <path fill="#6fffe9" d="M7 12h50v8H36v32h-9V20H7zm34 15h16v8H41zm0 16h16v9H41z"/>
-  <path fill="#ff5f5f" d="M7 43h13v9H7z"/>
+  <rect width="64" height="64" rx="6" fill="#17160d"/>
+  <path fill="#ffc85a" d="M7 12h50v8H36v32h-9V20H7zm34 15h16v8H41zm0 16h16v9H41z"/>
+  <path fill="#c4b88f" d="M7 43h13v9H7z"/>
 </svg>

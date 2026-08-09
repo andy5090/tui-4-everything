@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
@@ -48,7 +49,7 @@ def main() -> None:
     assert "install" in parser.ids, "install section is missing"
 
     for reference in parser.local_references:
-        path = SITE / reference.removeprefix("./").split("#", 1)[0]
+        path = SITE / urlparse(reference).path.removeprefix("./")
         assert path.exists(), f"missing local site asset: {reference}"
 
     payload = json.loads((SITE / "demos.json").read_text(encoding="utf-8"))
@@ -65,6 +66,23 @@ def main() -> None:
         for event in demo["events"]:
             assert event["lines"], f"{demo['id']} contains an empty event"
             assert all(isinstance(line, str) and line for line in event["lines"])
+
+    korean = re.compile(r"[\uac00-\ud7a3]")
+    assert not korean.search(html), "site/index.html must use English source copy"
+    assert not korean.search(
+        (SITE / "demos.json").read_text(encoding="utf-8")
+    ), "site/demos.json must use English source copy"
+
+    logo_match = re.search(
+        r'<pre class="ascii-logo"[^>]*>(.*?)</pre>', html, flags=re.DOTALL
+    )
+    assert logo_match, "complete production ASCII logo is missing"
+    canonical_logo = (ROOT / "assets/branding/t4e-ascii.txt").read_text(
+        encoding="utf-8"
+    )
+    assert logo_match.group(1).strip("\n") == canonical_logo.strip("\n"), (
+        "production ASCII logo must exactly match the canonical source"
+    )
 
     manifest = json.loads((SITE / "site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["start_url"] == "./"

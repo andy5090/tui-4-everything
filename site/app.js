@@ -2,6 +2,7 @@
 
 const ui = {
   missionButtons: [...document.querySelectorAll("[data-demo]")],
+  directoryLinks: [...document.querySelectorAll("[data-select-demo]")],
   kicker: document.querySelector("#demo-kicker"),
   title: document.querySelector("#demo-title"),
   outcome: document.querySelector("#demo-outcome"),
@@ -202,6 +203,14 @@ async function copyText(text) {
 ui.missionButtons.forEach((button) => {
   button.addEventListener("click", () => selectDemo(button.dataset.demo));
   button.addEventListener("keydown", handleMissionKeys);
+});
+
+ui.directoryLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    selectDemo(link.dataset.selectDemo);
+    document.querySelector("#missions")?.scrollIntoView();
+  });
 });
 
 ui.play.addEventListener("click", () => {
