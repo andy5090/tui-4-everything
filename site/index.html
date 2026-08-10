@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="amber">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -29,7 +29,7 @@
     <link rel="alternate" hreflang="x-default" href="https://andy5090.github.io/tui-4-everything/">
     <link rel="icon" href="./assets/t4e-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="./site.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=crt-a-20260810">
+    <link rel="stylesheet" href="./styles.css?v=themes-20260811">
     <title>T4E — AI-Assisted Terminal App Environment</title>
     <script type="application/ld+json">
       {
@@ -59,7 +59,7 @@
           "Bounded AI actions with Request, Review, and Run phases",
           "Explicit risk review with single-key install approval",
           "Managed multi-application pipelines",
-          "Persistent Default, Amber, and Green Screen themes"
+          "Persistent Cyan, Amber, Green Screen, and Terracotta themes"
         ]
       }
     </script>
@@ -77,7 +77,16 @@
           <a href="#install">INSTALL</a>
           <a href="https://github.com/andy5090/tui-4-everything">SOURCE</a>
         </nav>
-        <span>READY · v0.5.3</span>
+        <div class="machine-controls">
+          <div class="theme-switcher" role="group" aria-label="Color theme">
+            <span>THEME</span>
+            <button type="button" data-theme-value="cyan" aria-pressed="false">CYAN</button>
+            <button type="button" data-theme-value="amber" aria-pressed="true">AMBER</button>
+            <button type="button" data-theme-value="green_screen" aria-pressed="false">GREEN</button>
+            <button type="button" data-theme-value="terracotta" aria-pressed="false">TERRA</button>
+          </div>
+          <span>READY · v0.5.3</span>
+        </div>
       </div>
 
       <div class="screen">
@@ -256,6 +265,6 @@
       <small>© <span id="current-year">2026</span> T4E / MIT LICENSE</small>
     </footer>
 
-    <script src="./app.js?v=crt-a-20260810" defer></script>
+    <script src="./app.js?v=themes-20260811" defer></script>
   </body>
 </html>

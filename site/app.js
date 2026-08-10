@@ -16,10 +16,19 @@ const ui = {
   progress: document.querySelector("#demo-progress-bar"),
   copyButton: document.querySelector("[data-copy-target]"),
   copyStatus: document.querySelector("#copy-status"),
+  themeButtons: [...document.querySelectorAll("[data-theme-value]")],
+  themeColor: document.querySelector('meta[name="theme-color"]'),
   year: document.querySelector("#current-year")
 };
 
 const phaseOrder = ["request", "review", "run"];
+const themeStorageKey = "t4e-site-theme";
+const themeColors = {
+  cyan: "#071014",
+  amber: "#17160d",
+  green_screen: "#041208",
+  terracotta: "#1c1110"
+};
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const state = {
   demos: new Map(),
@@ -28,6 +37,32 @@ const state = {
   playing: false,
   timer: null
 };
+
+function savedTheme() {
+  try {
+    return window.localStorage.getItem(themeStorageKey);
+  } catch {
+    return null;
+  }
+}
+
+function applyTheme(requestedTheme, persist = true) {
+  const migratedTheme = requestedTheme === "default" ? "cyan" : requestedTheme;
+  const theme = Object.hasOwn(themeColors, migratedTheme) ? migratedTheme : "amber";
+  document.documentElement.dataset.theme = theme;
+  ui.themeButtons.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.themeValue === theme));
+  });
+  ui.themeColor?.setAttribute("content", themeColors[theme]);
+
+  if (persist) {
+    try {
+      window.localStorage.setItem(themeStorageKey, theme);
+    } catch {
+      // The selected theme still applies when storage is unavailable.
+    }
+  }
+}
 
 function createTerminalLine(event, text, isNewest) {
   const line = document.createElement("div");
@@ -213,6 +248,10 @@ ui.directoryLinks.forEach((link) => {
   });
 });
 
+ui.themeButtons.forEach((button) => {
+  button.addEventListener("click", () => applyTheme(button.dataset.themeValue));
+});
+
 ui.play.addEventListener("click", () => {
   if (!state.active) return;
   if (state.eventIndex >= state.active.events.length - 1) state.eventIndex = 0;
@@ -263,5 +302,6 @@ reducedMotion.addEventListener("change", () => {
   if (state.active) selectDemo(state.active.id, { autoplay: false });
 });
 
+applyTheme(savedTheme(), false);
 ui.year.textContent = String(new Date().getFullYear());
 loadDemos();

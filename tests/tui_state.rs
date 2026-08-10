@@ -2076,6 +2076,12 @@ fn settings_controls_update_execution_policy() {
     app.handle_key(key(KeyCode::Down));
     app.handle_key(key(KeyCode::Right));
     assert_eq!(app.settings.theme, AppTheme::Amber);
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(app.settings.theme, AppTheme::GreenScreen);
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(app.settings.theme, AppTheme::Terracotta);
+    app.handle_key(key(KeyCode::Right));
+    assert_eq!(app.settings.theme, AppTheme::Cyan);
 }
 
 #[test]
@@ -2191,7 +2197,7 @@ fn amber_theme_applies_a_full_app_palette_without_changing_the_default() {
         })
     );
 
-    assert_eq!(UserSettings::default().theme, AppTheme::Default);
+    assert_eq!(UserSettings::default().theme, AppTheme::Cyan);
 }
 
 #[test]
@@ -2219,7 +2225,7 @@ fn amber_theme_applies_to_the_top_navigation_tabs() {
 }
 
 #[test]
-fn default_theme_preserves_gray_inactive_navigation_tabs() {
+fn cyan_theme_applies_the_web_cyan_palette_to_navigation_tabs() {
     let mut app = app();
     let backend = TestBackend::new(100, 30);
     let mut terminal = Terminal::new(backend).expect("test terminal");
@@ -2232,7 +2238,12 @@ fn default_theme_preserves_gray_inactive_navigation_tabs() {
         .collect::<String>();
     let activity_x = row.find("Activity").expect("Activity tab") as u16;
     let activity = buffer.cell((activity_x, 1)).expect("Activity tab cell");
-    assert_eq!(activity.fg, Color::Gray);
+    assert_eq!(activity.bg, Color::Rgb(11, 25, 30));
+    assert_eq!(activity.fg, Color::Rgb(154, 220, 227));
+
+    let border = buffer.cell((0, 0)).expect("navigation border");
+    assert_eq!(border.bg, Color::Rgb(11, 25, 30));
+    assert_eq!(border.fg, Color::Rgb(52, 70, 74));
 }
 
 #[test]

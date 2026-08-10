@@ -1618,7 +1618,7 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             "Theme",
             app.settings.theme.label().to_string(),
             "Selects the T4E interface palette independently from terminal apps.",
-            "Default preserves the existing T4E colors. Amber and Green Screen provide complete phosphor palettes without changing app behavior.",
+            "Cyan matches the T4E website palette. Amber, Green Screen, and Terracotta provide alternate complete palettes without changing app behavior.",
             "Left/Right select theme",
         ),
         _ => (
@@ -2292,9 +2292,9 @@ mod tests {
     fn activity_highlighting_separates_timestamp_stream_event_and_failure() {
         let output =
             activity_line("[2026-07-26 12:34:56 +09:00] yazi [progress]: Compiling dependency");
-        assert_eq!(output.spans[1].style.fg, Some(Color::DarkGray));
+        assert_eq!(output.spans[1].style.fg, Some(Color::Rgb(166, 180, 183)));
         assert_eq!(output.spans[2].content, "yazi");
-        assert_eq!(output.spans[2].style.fg, Some(Color::Cyan));
+        assert_eq!(output.spans[2].style.fg, Some(Color::Rgb(93, 225, 242)));
         assert_eq!(output.spans[4].content, "[progress]");
         assert_eq!(output.spans[4].style.fg, Some(Color::Yellow));
 

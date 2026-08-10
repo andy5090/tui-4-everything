@@ -21,6 +21,7 @@ class SiteParser(HTMLParser):
         self.local_references: list[str] = []
         self.demo_ids: list[str] = []
         self.catalog_ids: list[str] = []
+        self.theme_values: list[str] = []
         self.inline_handlers: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -31,6 +32,8 @@ class SiteParser(HTMLParser):
             self.demo_ids.append(demo_id)
         if catalog_ids := values.get("data-catalog-ids"):
             self.catalog_ids.extend(catalog_ids.split())
+        if theme_value := values.get("data-theme-value"):
+            self.theme_values.append(theme_value)
         for name, value in attrs:
             if name.startswith("on"):
                 self.inline_handlers.append(name)
@@ -50,6 +53,12 @@ def main() -> None:
     assert "main" in parser.ids, "skip-link target is missing"
     assert "missions" in parser.ids, "demo section is missing"
     assert "install" in parser.ids, "install section is missing"
+    assert parser.theme_values == [
+        "cyan",
+        "amber",
+        "green_screen",
+        "terracotta",
+    ], "site theme switch must mirror every T4E theme"
 
     for reference in parser.local_references:
         path = SITE / urlparse(reference).path.removeprefix("./")
@@ -124,6 +133,13 @@ def main() -> None:
     assert structured_data["softwareVersion"] == "0.5.3"
     assert structured_data["releaseNotes"].endswith("/releases/tag/v0.5.3")
     assert structured_data["featureList"], "structured feature list must not be empty"
+
+    styles = (SITE / "styles.css").read_text(encoding="utf-8")
+    script = (SITE / "app.js").read_text(encoding="utf-8")
+    for theme in parser.theme_values:
+        assert f'[data-theme="{theme}"]' in styles, f"missing {theme} site palette"
+    assert "localStorage" in script, "site theme choice must persist between visits"
+    assert "aria-pressed" in script, "site theme switch state must be announced"
 
     manifest = json.loads((SITE / "site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["start_url"] == "./"

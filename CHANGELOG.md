@@ -6,6 +6,15 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Added
+
+- Add a persisted `Terracotta` application palette alongside Cyan, Amber,
+  and Green Screen.
+- Apply the website's Cyan palette to T4E itself, replacing the previous
+  terminal-dependent Default colors while migrating saved `default` settings.
+- Add a matching four-palette theme switch to the T4E website, with the chosen
+  theme retained between visits.
+
 ## [0.5.3] - 2026-08-11
 
 ### Fixed

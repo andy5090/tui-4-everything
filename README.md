@@ -246,9 +246,9 @@ Important actions are intentionally explicit:
   managed output filter. Figlet prompts for a message before showing its font,
   alignment, width, and color-effect options.
 - Apps with a required positional value, such as tplay, open an input dialog.
-- Settings includes a persistent Theme selector. `Default` preserves the
-  existing T4E palette, while `Amber` and `Green Screen` provide complete
-  phosphor palettes without changing application behavior. `Reset saved
+- Settings includes a persistent Theme selector. `Cyan` matches the website's
+  primary cool-phosphor palette, while `Amber`, `Green Screen`, and `Terracotta`
+  provide complete alternatives without changing application behavior. `Reset saved
   preferences` restores runtime policy defaults and clears remembered app
   launch options.
   The value is shell-quoted before launch rather than interpreted as a command.
