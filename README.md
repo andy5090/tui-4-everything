@@ -286,9 +286,11 @@ Important actions are intentionally explicit:
   `UPDATE`; `u` queues the exact verified version. Package-manager `latest`
   channels are intentionally not presented as verified updates.
 
-Script installers and DANGER apps retain exact typed confirmation for manual
-and Auto actions; Bypass explicitly suppresses those prompts for AI-requested
-chains. Codex app-server approvals are denied, Claude runs with tools disabled,
+Script installers and DANGER apps retain an explicit review for manual and Auto
+actions, showing the risk, capabilities, and exact command before a single Enter
+approval; T4E never asks the user to retype a command or confirmation phrase.
+Bypass explicitly suppresses those prompts for AI-requested chains. Codex
+app-server approvals are denied, Claude runs with tools disabled,
 Gemini uses plan mode, and API providers receive only the bounded intent prompt;
 T4E remains authoritative for installation, verified updates, and process
 lifecycle.

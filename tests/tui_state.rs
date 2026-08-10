@@ -2862,14 +2862,14 @@ fn confirm_all_uses_one_key_approval_for_safe_tools() {
     app.handle_key(key(KeyCode::Char('x')));
 
     let confirmation = app.confirmation.as_ref().expect("confirmation shown");
-    assert!(!confirmation.typed);
+    assert_eq!(confirmation.tool_id, "ripgrep");
     assert!(app.take_effect().is_none());
     app.handle_key(key(KeyCode::Enter));
     assert!(matches!(app.take_effect(), Some(AppEffect::Execute(_))));
 }
 
 #[test]
-fn danger_tool_requires_typed_confirmation() {
+fn danger_tool_warns_clearly_and_uses_single_enter_approval() {
     let mut app = app();
     let platform = if cfg!(target_os = "macos") {
         Platform::Macos
@@ -2880,27 +2880,36 @@ fn danger_tool_requires_typed_confirmation() {
         .catalog
         .tools
         .iter()
-        .find(|tool| tool.id == "claude-code")
-        .expect("agent exists");
+        .find(|tool| tool.id == "btop")
+        .expect("btop exists");
     let installer = tool
         .installers
         .iter()
         .find(|installer| installer.platform == platform)
         .expect("platform installer");
     let task = build_install_task(tool, installer, &InstallPolicy::default()).expect("task builds");
-    app.queue.push(InstallJob::new(task, "agent-test"));
+    app.queue.push(InstallJob::new(task, "danger-test"));
     app.handle_key(key(KeyCode::Char('3')));
     app.handle_key(key(KeyCode::Char('x')));
-    assert!(app.confirmation.as_ref().is_some_and(|value| value.typed));
+    assert!(app.confirmation.is_some());
     assert!(app.take_effect().is_none());
 
-    app.handle_key(key(KeyCode::F(1)));
-    assert_eq!(app.screen, Screen::Install);
-    assert!(app.confirmation.is_some());
+    let backend = TestBackend::new(120, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("confirmation renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(rendered.contains("DANGER"));
+    assert!(rendered.contains("SYSTEM"));
+    assert!(rendered.contains("Enter confirm"));
 
-    for ch in "INSTALL claude-code".chars() {
-        app.handle_key(key(KeyCode::Char(ch)));
-    }
     app.handle_key(key(KeyCode::Enter));
 
     assert!(app.confirmation.is_none());

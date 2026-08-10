@@ -1588,7 +1588,7 @@ fn setting_detail(app: &AppState) -> Text<'static> {
             }
             .to_string(),
             "Requests approval before every package-manager installation.",
-            "Script and DANGER installs still require typed approval even when this setting is off.",
+            "Script and DANGER installs always show a detailed review; Enter approves without retyping commands.",
             "Left/Right or Space toggle",
         ),
         3 => (
@@ -1908,33 +1908,41 @@ fn render_confirmation(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
     };
     let popup = centered_rect(76, 14, area);
     frame.render_widget(Clear, popup);
-    let mut lines = vec![
+    let tool = app
+        .catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == confirmation.tool_id);
+    let risk = tool.map_or("UNKNOWN", |tool| tool.risk_level().label());
+    let capabilities = tool.map_or_else(
+        || "UNKNOWN".to_string(),
+        |tool| {
+            if tool.capabilities.is_empty() {
+                "NONE".to_string()
+            } else {
+                tool.capabilities
+                    .iter()
+                    .map(|capability| capability.label())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
+        },
+    );
+    let lines = vec![
         Line::styled(
             "Explicit installation approval required",
             Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
         Line::from(""),
         Line::from(format!("tool: {}", confirmation.tool_id)),
+        Line::from(format!("risk: {risk}")),
+        Line::from(format!("capabilities: {capabilities}")),
         Line::from(format!("command: {}", confirmation.command)),
         Line::from(""),
+        Line::from("Review the details above. T4E never asks you to retype the command."),
+        Line::from(""),
+        Line::styled("Enter confirm   Esc cancel", Style::default().fg(muted())),
     ];
-    if confirmation.typed {
-        lines.push(Line::from(format!("Type: {}", confirmation.expected)));
-        lines.push(Line::styled(
-            format!("> {}_", confirmation.input),
-            Style::default().fg(selected()),
-        ));
-        lines.push(Line::from(""));
-    } else {
-        lines.push(Line::from(
-            "This install does not require a typed confirmation phrase.",
-        ));
-        lines.push(Line::from(""));
-    }
-    lines.push(Line::styled(
-        "Enter confirm   Esc cancel",
-        Style::default().fg(muted()),
-    ));
     let content = Text::from(lines);
     frame.render_widget(
         Paragraph::new(content)

@@ -94,9 +94,6 @@ pub enum ToolUpdateState {
 pub struct InstallConfirmation {
     pub tool_id: String,
     pub command: String,
-    pub typed: bool,
-    pub expected: String,
-    pub input: String,
 }
 
 #[derive(Debug, Clone)]
@@ -2875,23 +2872,12 @@ impl AppState {
             job.task.requires_confirmation || self.settings.confirm_all_installs;
         if !bypass_confirmation && would_require_confirmation {
             let tool_id = job.item.tool_id.clone();
-            let typed = job.task.requires_confirmation;
-            let expected = job.task.expected_version.as_ref().map_or_else(
-                || format!("INSTALL {tool_id}"),
-                |version| format!("UPDATE {tool_id} {version}"),
-            );
             self.confirmation = Some(InstallConfirmation {
                 command: job.task.command.clone(),
-                expected,
-                input: String::new(),
-                typed,
                 tool_id,
             });
-            self.status = if typed {
-                "Type the confirmation phrase exactly".to_string()
-            } else {
-                "Press Enter to approve this installation".to_string()
-            };
+            self.status =
+                "Review the installation details, then press Enter to approve".to_string();
         } else {
             if bypass_confirmation && would_require_confirmation {
                 self.logs.push(timestamp_log(format!(
@@ -2983,37 +2969,17 @@ impl AppState {
                 self.ai_launch_approval_mode = None;
                 self.status = "Installation confirmation cancelled".to_string();
             }
-            KeyCode::Backspace => {
-                if let Some(confirmation) = &mut self.confirmation
-                    && confirmation.typed
-                {
-                    confirmation.input.pop();
-                }
-            }
             KeyCode::Enter => {
                 let Some(confirmation) = self.confirmation.take() else {
                     return;
                 };
-                if !confirmation.typed || confirmation.input == confirmation.expected {
-                    if let Some(job) = self
-                        .queue
-                        .iter()
-                        .find(|job| job.item.tool_id == confirmation.tool_id)
-                    {
-                        self.effects
-                            .push_back(AppEffect::Execute(Box::new(job.clone())));
-                    }
-                } else {
-                    self.queue_running = false;
-                    self.ai_launch_approval_mode = None;
-                    self.status = "Confirmation phrase did not match".to_string();
-                }
-            }
-            KeyCode::Char(ch) => {
-                if let Some(confirmation) = &mut self.confirmation
-                    && confirmation.typed
+                if let Some(job) = self
+                    .queue
+                    .iter()
+                    .find(|job| job.item.tool_id == confirmation.tool_id)
                 {
-                    confirmation.input.push(ch);
+                    self.effects
+                        .push_back(AppEffect::Execute(Box::new(job.clone())));
                 }
             }
             _ => {}
