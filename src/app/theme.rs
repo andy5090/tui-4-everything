@@ -19,14 +19,14 @@ pub struct ThemePalette {
 pub const fn palette_for(theme: AppTheme) -> ThemePalette {
     match theme {
         AppTheme::Future => ThemePalette {
-            background: Color::Rgb(5, 8, 22),
-            surface: Color::Rgb(11, 20, 48),
-            foreground: Color::Rgb(230, 247, 255),
-            accent: Color::Rgb(34, 211, 238),
-            muted: Color::Rgb(152, 170, 198),
-            selected: Color::Rgb(139, 92, 246),
-            border: Color::Rgb(42, 71, 120),
-            tab_foreground: Color::Rgb(158, 239, 255),
+            background: Color::Rgb(7, 16, 20),
+            surface: Color::Rgb(11, 25, 30),
+            foreground: Color::Rgb(228, 238, 240),
+            accent: Color::Rgb(93, 225, 242),
+            muted: Color::Rgb(166, 180, 183),
+            selected: Color::Rgb(255, 122, 61),
+            border: Color::Rgb(52, 70, 74),
+            tab_foreground: Color::Rgb(154, 220, 227),
         },
         AppTheme::Amber => ThemePalette {
             background: Color::Rgb(18, 11, 0),
@@ -84,14 +84,14 @@ mod tests {
         assert_eq!(
             palette_for(AppTheme::Future),
             ThemePalette {
-                background: Color::Rgb(5, 8, 22),
-                surface: Color::Rgb(11, 20, 48),
-                foreground: Color::Rgb(230, 247, 255),
-                accent: Color::Rgb(34, 211, 238),
-                muted: Color::Rgb(152, 170, 198),
-                selected: Color::Rgb(139, 92, 246),
-                border: Color::Rgb(42, 71, 120),
-                tab_foreground: Color::Rgb(158, 239, 255),
+                background: Color::Rgb(7, 16, 20),
+                surface: Color::Rgb(11, 25, 30),
+                foreground: Color::Rgb(228, 238, 240),
+                accent: Color::Rgb(93, 225, 242),
+                muted: Color::Rgb(166, 180, 183),
+                selected: Color::Rgb(255, 122, 61),
+                border: Color::Rgb(52, 70, 74),
+                tab_foreground: Color::Rgb(154, 220, 227),
             }
         );
     }

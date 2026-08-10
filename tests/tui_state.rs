@@ -2239,12 +2239,12 @@ fn future_theme_applies_the_web_future_palette_to_navigation_tabs() {
         .collect::<String>();
     let activity_x = row.find("Activity").expect("Activity tab") as u16;
     let activity = buffer.cell((activity_x, 1)).expect("Activity tab cell");
-    assert_eq!(activity.bg, Color::Rgb(11, 20, 48));
-    assert_eq!(activity.fg, Color::Rgb(158, 239, 255));
+    assert_eq!(activity.bg, Color::Rgb(11, 25, 30));
+    assert_eq!(activity.fg, Color::Rgb(154, 220, 227));
 
     let border = buffer.cell((0, 0)).expect("navigation border");
-    assert_eq!(border.bg, Color::Rgb(11, 20, 48));
-    assert_eq!(border.fg, Color::Rgb(42, 71, 120));
+    assert_eq!(border.bg, Color::Rgb(11, 25, 30));
+    assert_eq!(border.fg, Color::Rgb(52, 70, 74));
 }
 
 #[test]

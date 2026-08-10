@@ -246,9 +246,9 @@ Important actions are intentionally explicit:
   managed output filter. Figlet prompts for a message before showing its font,
   alignment, width, and color-effect options.
 - Apps with a required positional value, such as tplay, open an input dialog.
-- Settings includes a persistent Theme selector. `Future` matches the website's
-  electric sci-fi palette, while `Amber`, `Retro Green`, and `Terracotta` provide
-  complete alternatives without changing application behavior. `Reset saved
+- Settings includes a persistent Theme selector. `Future` retains T4E's cyan
+  phosphor core with a Tron-inspired electric-orange signal, while `Amber`,
+  `Retro Green`, and `Terracotta` provide complete alternatives. `Reset saved
   preferences` restores runtime policy defaults and clears remembered app
   launch options.
   The value is shell-quoted before launch rather than interpreted as a command.
