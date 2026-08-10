@@ -228,6 +228,10 @@ def main() -> None:
     manifest = json.loads((SITE / "site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["start_url"] == "./"
     assert (SITE / ".nojekyll").exists()
+
+    ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+    for generated_path in [".omc/", "shellcast-debug.log", "site/design-demos/"]:
+        assert generated_path in ignored, f"generated path must be ignored: {generated_path}"
     print(f"static site checks passed ({len(demos)} demos, {len(parser.ids)} HTML IDs)")
 
 

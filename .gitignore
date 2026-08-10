@@ -1,4 +1,7 @@
 .omx/
+.omc/
 target/
 artifacts/
 .DS_Store
+shellcast-debug.log
+site/design-demos/
