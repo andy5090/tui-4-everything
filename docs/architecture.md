@@ -4,8 +4,10 @@
 
 An authenticated CLI or API provider interprets intent and proposes one bounded
 action. The t4e state machine
-validates IDs against the Registry, presents typed confirmation for side
-effects, and then invokes the existing install, verified-update, or app runtime.
+validates IDs against the Registry, presents risk, capabilities, and the exact
+command for side effects, accepts a single Enter approval, and then invokes the
+existing install, verified-update, or app runtime. T4E never asks the user to
+retype a command or confirmation phrase.
 Providers never receive direct shell or tmux authority. Codex app-server
 requests for command or patch approval are denied by the client.
 

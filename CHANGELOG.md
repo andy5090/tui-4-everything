@@ -6,6 +6,13 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-10
+
+### Fixed
+
+- Replace typed install confirmation phrases with a single Enter approval while
+  keeping DANGER risk, capabilities, and the exact command visible in review.
+
 ## [0.5.1] - 2026-08-10
 
 ### Added

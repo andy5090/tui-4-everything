@@ -189,6 +189,7 @@ fn registry_loads_and_validates() {
     assert_eq!(btop.run.cmd, "btop");
     assert_eq!(btop.app_category(), AppCategory::System);
     assert_eq!(btop.risk_level(), RiskLevel::Danger);
+    assert_eq!(btop.capabilities, [Capability::System]);
     assert!(btop.installers.iter().any(|installer| {
         installer.platform == Platform::Macos
             && installer.method == InstallMethod::Brew
