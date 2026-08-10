@@ -79,6 +79,9 @@ def main() -> None:
     )
     for label in ["HOME", "PROGRAMS", "POLICY", "INSTALL", "SOURCE"]:
         assert f"<span>{label}</span>" in html, f"machine key is missing {label}"
+    assert "SCROLL / SWIPE TO EXPLORE" in html, (
+        "the first HOME screen must explain wheel and touch navigation"
+    )
     assert parser.screen_panels == [
         "home",
         "proof",
@@ -188,6 +191,16 @@ def main() -> None:
         "@media (prefers-reduced-motion: reduce)",
     ]:
         assert crt_contract in styles, f"CRT presentation is missing {crt_contract}"
+    demos_panel = re.search(r"#missions\s*\{(.*?)\}", styles, flags=re.DOTALL)
+    assert demos_panel and "display: block" in demos_panel.group(1), (
+        "DEMOS must use its natural height so overflowing content can scroll"
+    )
+    demos_console = re.search(
+        r"#missions \.mission-console\s*\{(.*?)\}", styles, flags=re.DOTALL
+    )
+    assert demos_console and "overflow: visible" in demos_console.group(1), (
+        "DEMOS content must not be clipped inside the scrollable CRT panel"
+    )
     for switch_contract in [
         ".theme-track::before",
         '--theme-index: 0;',

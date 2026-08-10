@@ -407,6 +407,28 @@ button {
   align-items: center;
 }
 
+.screen-scroll-hint {
+  position: absolute;
+  right: 0;
+  bottom: 0.1rem;
+  left: 0;
+  display: flex;
+  gap: 0.55rem;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  color: var(--dim);
+  font: 700 9px var(--mono);
+  letter-spacing: 0.09em;
+  pointer-events: none;
+}
+
+.screen-scroll-hint i {
+  color: var(--phosphor);
+  font-style: normal;
+  animation: scroll-hint 1.8s ease-in-out infinite;
+}
+
 .prompt-line {
   margin: 0 0 1rem;
   color: var(--dim);
@@ -1118,13 +1140,12 @@ main {
 }
 
 #missions {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  display: block;
 }
 
 #missions .mission-console {
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 #missions .mission-picker {
@@ -1311,6 +1332,13 @@ footer small {
   }
 }
 
+@keyframes scroll-hint {
+  50% {
+    transform: translateY(3px);
+    opacity: 0.55;
+  }
+}
+
 @media (max-width: 900px) {
   .session,
   .proof-section,
@@ -1411,6 +1439,11 @@ footer small {
 
   .screen-deck {
     padding: 1rem;
+  }
+
+  .screen-scroll-hint {
+    bottom: 0;
+    font-size: 7px;
   }
 
   .screen::after {
@@ -1725,6 +1758,10 @@ footer small {
   .screen::before {
     display: none;
     animation: none !important;
+  }
+
+  .screen-scroll-hint i {
+    animation: none;
   }
 
   .screen::after {

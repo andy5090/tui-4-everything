@@ -28,6 +28,8 @@ and date are assigned.
 - Move the website content into a no-scroll CRT screen deck so buttons select
   HOME, PROGRAMS, POLICY, and INSTALL while wheel and swipe gestures advance
   through the complete presentation.
+- Add a HOME navigation cue and let overflowing DEMOS content scroll inside the
+  CRT before wheel input advances to the next screen.
 
 ## [0.5.3] - 2026-08-11
 
