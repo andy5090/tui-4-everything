@@ -6,6 +6,11 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Changed
+
+- Restore the DEMOS selector as a vertical stack and keep the adjacent
+  REQUEST / REVIEW / RUN process view free of nested scrollbars.
+
 ## [0.6.0] - 2026-08-11
 
 ### Added

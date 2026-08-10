@@ -1149,12 +1149,14 @@ main {
 }
 
 #missions .mission-picker {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
 }
 
 #missions .mission-button {
   padding: 0.65rem;
+  border-right: 0;
 }
 
 #missions .demo-context {
@@ -1176,7 +1178,8 @@ main {
 }
 
 #missions .terminal-scroll {
-  max-height: 78px;
+  max-height: none;
+  overflow: visible;
 }
 
 #missions .demo-controls,
@@ -1645,8 +1648,7 @@ footer small {
   }
 
   #missions .mission-picker {
-    grid-template-columns: repeat(4, 1fr);
-    padding: 0.35rem;
+    padding: 0.5rem;
   }
 
   #missions .mission-console {
@@ -1659,39 +1661,18 @@ footer small {
 
   #missions .mission-button {
     min-width: 0;
-    padding: 0.45rem 0.2rem;
-    border-right: 1px solid var(--case-dark);
-    font-size: 7px;
-    text-align: center;
-  }
-
-  #missions .mission-button > span:nth-child(2),
-  #missions .mission-button i {
-    display: none;
-  }
-
-  #missions .mission-file {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    padding: 0.65rem;
+    border-right: 0;
+    text-align: left;
   }
 
   #missions .demo-context {
     padding: 0.55rem 0.7rem;
   }
 
-  #missions .demo-outcome,
-  #missions .demo-meta {
-    display: none;
-  }
-
   #missions .terminal {
     min-height: 78px;
     margin: 0.5rem 0.7rem;
-  }
-
-  #missions .terminal-scroll {
-    max-height: 72px;
   }
 
   #boundaries .mode-grid {

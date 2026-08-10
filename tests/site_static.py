@@ -201,6 +201,19 @@ def main() -> None:
     assert demos_console and "overflow: visible" in demos_console.group(1), (
         "DEMOS content must not be clipped inside the scrollable CRT panel"
     )
+    demos_picker = re.search(
+        r"#missions \.mission-picker\s*\{(.*?)\}", styles, flags=re.DOTALL
+    )
+    assert demos_picker and "flex-direction: column" in demos_picker.group(1), (
+        "demo choices must remain a vertical stack beside the process view"
+    )
+    demos_terminal = re.search(
+        r"#missions \.terminal-scroll\s*\{(.*?)\}", styles, flags=re.DOTALL
+    )
+    assert demos_terminal and all(
+        token in demos_terminal.group(1)
+        for token in ["max-height: none", "overflow: visible"]
+    ), "the demo process view must expand without its own scrollbar"
     for switch_contract in [
         ".theme-track::before",
         '--theme-index: 0;',
