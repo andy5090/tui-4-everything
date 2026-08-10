@@ -4,8 +4,8 @@
   "description": "Discover, install, update, and run curated terminal apps with bounded AI actions.",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#13110b",
-  "theme_color": "#1b180e",
+  "background_color": "#0a0701",
+  "theme_color": "#120b00",
   "icons": [
     {
       "src": "./assets/t4e-mark.svg",

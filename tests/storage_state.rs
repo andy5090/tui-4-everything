@@ -59,11 +59,18 @@ fn legacy_ai_approval_modes_migrate_to_permission_modes() {
 
 #[test]
 fn themes_have_a_stable_default_and_serialized_names() {
-    assert_eq!(UserSettings::default().theme, AppTheme::Cyan);
-    assert_eq!(serde_json::to_string(&AppTheme::Cyan).unwrap(), r#""cyan""#);
+    assert_eq!(UserSettings::default().theme, AppTheme::Future);
+    assert_eq!(
+        serde_json::to_string(&AppTheme::Future).unwrap(),
+        r#""future""#
+    );
     assert_eq!(
         serde_json::from_str::<AppTheme>(r#""default""#).unwrap(),
-        AppTheme::Cyan
+        AppTheme::Future
+    );
+    assert_eq!(
+        serde_json::from_str::<AppTheme>(r#""cyan""#).unwrap(),
+        AppTheme::Future
     );
     assert_eq!(
         serde_json::to_string(&AppTheme::Amber).unwrap(),
@@ -73,6 +80,7 @@ fn themes_have_a_stable_default_and_serialized_names() {
         serde_json::from_str::<AppTheme>(r#""green_screen""#).unwrap(),
         AppTheme::GreenScreen
     );
+    assert_eq!(AppTheme::GreenScreen.label(), "Retro Green");
     assert_eq!(
         serde_json::to_string(&AppTheme::Terracotta).unwrap(),
         r#""terracotta""#

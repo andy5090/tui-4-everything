@@ -24,10 +24,10 @@ const ui = {
 const phaseOrder = ["request", "review", "run"];
 const themeStorageKey = "t4e-site-theme";
 const themeColors = {
-  cyan: "#071014",
-  amber: "#17160d",
-  green_screen: "#041208",
-  terracotta: "#1c1110"
+  future: "#050816",
+  amber: "#120b00",
+  green_screen: "#020b04",
+  terracotta: "#141413"
 };
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const state = {
@@ -47,7 +47,9 @@ function savedTheme() {
 }
 
 function applyTheme(requestedTheme, persist = true) {
-  const migratedTheme = requestedTheme === "default" ? "cyan" : requestedTheme;
+  const migratedTheme = ["default", "cyan"].includes(requestedTheme)
+    ? "future"
+    : requestedTheme;
   const theme = Object.hasOwn(themeColors, migratedTheme) ? migratedTheme : "amber";
   document.documentElement.dataset.theme = theme;
   ui.themeButtons.forEach((button) => {

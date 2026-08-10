@@ -2081,7 +2081,7 @@ fn settings_controls_update_execution_policy() {
     app.handle_key(key(KeyCode::Right));
     assert_eq!(app.settings.theme, AppTheme::Terracotta);
     app.handle_key(key(KeyCode::Right));
-    assert_eq!(app.settings.theme, AppTheme::Cyan);
+    assert_eq!(app.settings.theme, AppTheme::Future);
 }
 
 #[test]
@@ -2192,12 +2192,13 @@ fn amber_theme_applies_a_full_app_palette_without_changing_the_default() {
         .expect("amber theme renders");
     let buffer = terminal.backend().buffer();
     assert!(
-        buffer.content().iter().any(|cell| {
-            cell.fg == Color::Rgb(255, 200, 90) && cell.bg == Color::Rgb(32, 29, 15)
-        })
+        buffer
+            .content()
+            .iter()
+            .any(|cell| { cell.fg == Color::Rgb(255, 176, 0) && cell.bg == Color::Rgb(33, 21, 0) })
     );
 
-    assert_eq!(UserSettings::default().theme, AppTheme::Cyan);
+    assert_eq!(UserSettings::default().theme, AppTheme::Future);
 }
 
 #[test]
@@ -2212,20 +2213,20 @@ fn amber_theme_applies_to_the_top_navigation_tabs() {
     let buffer = terminal.backend().buffer();
 
     let border = buffer.cell((0, 0)).expect("navigation border");
-    assert_eq!(border.bg, Color::Rgb(32, 29, 15));
-    assert_eq!(border.fg, Color::Rgb(117, 106, 73));
+    assert_eq!(border.bg, Color::Rgb(33, 21, 0));
+    assert_eq!(border.fg, Color::Rgb(116, 80, 0));
 
     let row = (0..100)
         .map(|x| buffer.cell((x, 1)).expect("navigation row cell").symbol())
         .collect::<String>();
     let activity_x = row.find("Activity").expect("Activity tab") as u16;
     let activity = buffer.cell((activity_x, 1)).expect("Activity tab cell");
-    assert_eq!(activity.bg, Color::Rgb(32, 29, 15));
-    assert_eq!(activity.fg, Color::Rgb(243, 234, 208));
+    assert_eq!(activity.bg, Color::Rgb(33, 21, 0));
+    assert_eq!(activity.fg, Color::Rgb(255, 210, 122));
 }
 
 #[test]
-fn cyan_theme_applies_the_web_cyan_palette_to_navigation_tabs() {
+fn future_theme_applies_the_web_future_palette_to_navigation_tabs() {
     let mut app = app();
     let backend = TestBackend::new(100, 30);
     let mut terminal = Terminal::new(backend).expect("test terminal");
@@ -2238,12 +2239,12 @@ fn cyan_theme_applies_the_web_cyan_palette_to_navigation_tabs() {
         .collect::<String>();
     let activity_x = row.find("Activity").expect("Activity tab") as u16;
     let activity = buffer.cell((activity_x, 1)).expect("Activity tab cell");
-    assert_eq!(activity.bg, Color::Rgb(11, 25, 30));
-    assert_eq!(activity.fg, Color::Rgb(154, 220, 227));
+    assert_eq!(activity.bg, Color::Rgb(11, 20, 48));
+    assert_eq!(activity.fg, Color::Rgb(158, 239, 255));
 
     let border = buffer.cell((0, 0)).expect("navigation border");
-    assert_eq!(border.bg, Color::Rgb(11, 25, 30));
-    assert_eq!(border.fg, Color::Rgb(52, 70, 74));
+    assert_eq!(border.bg, Color::Rgb(11, 20, 48));
+    assert_eq!(border.fg, Color::Rgb(42, 71, 120));
 }
 
 #[test]
@@ -2277,16 +2278,16 @@ fn amber_theme_applies_to_the_running_app_tabs() {
     let buffer = terminal.backend().buffer();
 
     let border = buffer.cell((0, 0)).expect("app tabs border");
-    assert_eq!(border.bg, Color::Rgb(32, 29, 15));
-    assert_eq!(border.fg, Color::Rgb(117, 106, 73));
+    assert_eq!(border.bg, Color::Rgb(33, 21, 0));
+    assert_eq!(border.fg, Color::Rgb(116, 80, 0));
 
     let row = (0..100)
         .map(|x| buffer.cell((x, 1)).expect("app tabs row cell").symbol())
         .collect::<String>();
     let files_x = row.find("files").expect("files tab") as u16;
     let files = buffer.cell((files_x, 1)).expect("files tab cell");
-    assert_eq!(files.bg, Color::Rgb(32, 29, 15));
-    assert_eq!(files.fg, Color::Rgb(243, 234, 208));
+    assert_eq!(files.bg, Color::Rgb(33, 21, 0));
+    assert_eq!(files.fg, Color::Rgb(255, 210, 122));
 }
 
 #[test]

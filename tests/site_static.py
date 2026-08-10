@@ -54,11 +54,12 @@ def main() -> None:
     assert "missions" in parser.ids, "demo section is missing"
     assert "install" in parser.ids, "install section is missing"
     assert parser.theme_values == [
-        "cyan",
+        "future",
         "amber",
         "green_screen",
         "terracotta",
     ], "site theme switch must mirror every T4E theme"
+    assert ">RETRO<" in html, "Green Screen must use its Retro Green display name"
 
     for reference in parser.local_references:
         path = SITE / urlparse(reference).path.removeprefix("./")

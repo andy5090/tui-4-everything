@@ -66,21 +66,26 @@ pub struct UserSettings {
 #[serde(rename_all = "snake_case")]
 pub enum AppTheme {
     #[default]
-    #[serde(alias = "default")]
-    Cyan,
+    #[serde(alias = "default", alias = "cyan")]
+    Future,
     Amber,
     GreenScreen,
     Terracotta,
 }
 
 impl AppTheme {
-    pub const ALL: [Self; 4] = [Self::Cyan, Self::Amber, Self::GreenScreen, Self::Terracotta];
+    pub const ALL: [Self; 4] = [
+        Self::Future,
+        Self::Amber,
+        Self::GreenScreen,
+        Self::Terracotta,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Cyan => "Cyan",
+            Self::Future => "Future",
             Self::Amber => "Amber",
-            Self::GreenScreen => "Green Screen",
+            Self::GreenScreen => "Retro Green",
             Self::Terracotta => "Terracotta",
         }
     }
@@ -207,7 +212,7 @@ impl Default for UserSettings {
     fn default() -> Self {
         Self {
             default_mux: "tmux".to_string(),
-            theme: AppTheme::Cyan,
+            theme: AppTheme::Future,
             mouse_enabled: true,
             install_timeout_sec: 600,
             max_install_attempts: 2,
