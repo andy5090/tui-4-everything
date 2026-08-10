@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "t4e"
-version = "0.5.3"
+version = "0.6.0"
 dependencies = [
  "ansi-to-tui",
  "anyhow",

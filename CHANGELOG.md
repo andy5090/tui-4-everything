@@ -6,6 +6,8 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-11
+
 ### Added
 
 - Add a persisted `Terracotta` application palette alongside Future, Amber,
@@ -13,8 +15,19 @@ and date are assigned.
 - Apply the website's Future palette to T4E itself, replacing the previous
   terminal-dependent Default colors while migrating saved `default` and `cyan`
   settings.
+- Refine Future around the original Cyan palette with a Tron-inspired electric
+  orange selection signal instead of replacing its established color identity.
 - Add a matching four-palette theme switch to the T4E website, with the chosen
   theme retained between visits.
+- Give the website hero a more dimensional CRT enclosure, curved-glass
+  reflections, and a subtle GPU-composited, motion-safe scan beam.
+- Turn the website's physical key row into synchronized section shortcuts with
+  pressed and current-location states.
+- Restyle the website theme picker as a four-position retro hardware slider
+  while preserving its accessible button controls.
+- Move the website content into a no-scroll CRT screen deck so buttons select
+  HOME, PROGRAMS, POLICY, and INSTALL while wheel and swipe gestures advance
+  through the complete presentation.
 
 ## [0.5.3] - 2026-08-11
 
