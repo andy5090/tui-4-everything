@@ -300,15 +300,13 @@ fn render_header(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
                         ),
                         Span::raw(format!(" · {section} ")),
                     ]))
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .style(tab_style())
+                    .border_style(tab_border_style()),
             )
             .select(app.navigation_tab_index())
-            .style(Style::default().fg(Color::Gray))
-            .highlight_style(
-                Style::default()
-                    .fg(selected())
-                    .add_modifier(Modifier::BOLD | Modifier::REVERSED),
-            )
+            .style(tab_style())
+            .highlight_style(selected_tab_style())
             .padding("", "")
             .divider(" | "),
         area,
@@ -1193,11 +1191,13 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
                         view.workspace_title,
                         if app.mouse_enabled { "MOUSE" } else { "SELECT" }
                     ))
-                    .borders(Borders::ALL),
+                    .borders(Borders::ALL)
+                    .style(tab_style())
+                    .border_style(tab_border_style()),
             )
             .select(view.selected)
-            .style(Style::default().fg(Color::Gray))
-            .highlight_style(Style::default().fg(accent()).add_modifier(Modifier::BOLD))
+            .style(tab_style())
+            .highlight_style(selected_tab_style())
             .divider(" | "),
         sections[0],
     );
@@ -2225,6 +2225,25 @@ fn panel(title: &str) -> Block<'_> {
         .borders(Borders::ALL)
         .style(Style::default().bg(palette.surface).fg(palette.foreground))
         .border_style(Style::default().fg(palette.border))
+}
+
+fn tab_style() -> Style {
+    let palette = active_palette();
+    Style::default()
+        .bg(palette.surface)
+        .fg(palette.tab_foreground)
+}
+
+fn tab_border_style() -> Style {
+    Style::default().fg(active_palette().border)
+}
+
+fn selected_tab_style() -> Style {
+    let palette = active_palette();
+    Style::default()
+        .bg(palette.selected)
+        .fg(palette.background)
+        .add_modifier(Modifier::BOLD)
 }
 
 fn selection_style() -> Style {

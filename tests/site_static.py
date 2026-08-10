@@ -121,8 +121,8 @@ def main() -> None:
     assert structured_data_match, "SoftwareApplication structured data is missing"
     structured_data = json.loads(structured_data_match.group(1))
     assert structured_data["@type"] == "SoftwareApplication"
-    assert structured_data["softwareVersion"] == "0.5.2"
-    assert structured_data["releaseNotes"].endswith("/releases/tag/v0.5.2")
+    assert structured_data["softwareVersion"] == "0.5.3"
+    assert structured_data["releaseNotes"].endswith("/releases/tag/v0.5.3")
     assert structured_data["featureList"], "structured feature list must not be empty"
 
     manifest = json.loads((SITE / "site.webmanifest").read_text(encoding="utf-8"))

@@ -2195,6 +2195,90 @@ fn amber_theme_applies_a_full_app_palette_without_changing_the_default() {
 }
 
 #[test]
+fn amber_theme_applies_to_the_top_navigation_tabs() {
+    let mut app = app();
+    app.settings.theme = AppTheme::Amber;
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("amber navigation renders");
+    let buffer = terminal.backend().buffer();
+
+    let border = buffer.cell((0, 0)).expect("navigation border");
+    assert_eq!(border.bg, Color::Rgb(32, 29, 15));
+    assert_eq!(border.fg, Color::Rgb(117, 106, 73));
+
+    let row = (0..100)
+        .map(|x| buffer.cell((x, 1)).expect("navigation row cell").symbol())
+        .collect::<String>();
+    let activity_x = row.find("Activity").expect("Activity tab") as u16;
+    let activity = buffer.cell((activity_x, 1)).expect("Activity tab cell");
+    assert_eq!(activity.bg, Color::Rgb(32, 29, 15));
+    assert_eq!(activity.fg, Color::Rgb(243, 234, 208));
+}
+
+#[test]
+fn default_theme_preserves_gray_inactive_navigation_tabs() {
+    let mut app = app();
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("default navigation renders");
+    let buffer = terminal.backend().buffer();
+    let row = (0..100)
+        .map(|x| buffer.cell((x, 1)).expect("navigation row cell").symbol())
+        .collect::<String>();
+    let activity_x = row.find("Activity").expect("Activity tab") as u16;
+    let activity = buffer.cell((activity_x, 1)).expect("Activity tab cell");
+    assert_eq!(activity.fg, Color::Gray);
+}
+
+#[test]
+fn amber_theme_applies_to_the_running_app_tabs() {
+    let mut app = app();
+    app.settings.theme = AppTheme::Amber;
+    app.open_app_view(
+        "t4e-themed-apps".to_string(),
+        vec![
+            ManagedApp {
+                pane_id: "%theme-1".to_string(),
+                window_index: 0,
+                window_name: "video".to_string(),
+                pane_index: 0,
+                process: "mpv".to_string(),
+            },
+            ManagedApp {
+                pane_id: "%theme-2".to_string(),
+                window_index: 1,
+                window_name: "files".to_string(),
+                pane_index: 0,
+                process: "yazi".to_string(),
+            },
+        ],
+    );
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("amber app tabs render");
+    let buffer = terminal.backend().buffer();
+
+    let border = buffer.cell((0, 0)).expect("app tabs border");
+    assert_eq!(border.bg, Color::Rgb(32, 29, 15));
+    assert_eq!(border.fg, Color::Rgb(117, 106, 73));
+
+    let row = (0..100)
+        .map(|x| buffer.cell((x, 1)).expect("app tabs row cell").symbol())
+        .collect::<String>();
+    let files_x = row.find("files").expect("files tab") as u16;
+    let files = buffer.cell((files_x, 1)).expect("files tab cell");
+    assert_eq!(files.bg, Color::Rgb(32, 29, 15));
+    assert_eq!(files.fg, Color::Rgb(243, 234, 208));
+}
+
+#[test]
 fn api_provider_setup_keeps_keys_out_of_persistent_settings() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('7')));

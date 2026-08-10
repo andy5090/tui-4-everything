@@ -6,6 +6,13 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-08-11
+
+### Fixed
+
+- Apply the active theme palette to HOME navigation and running-app tabs while
+  preserving the Default theme's established inactive-tab appearance.
+
 ## [0.5.2] - 2026-08-10
 
 ### Fixed

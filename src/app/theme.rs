@@ -13,6 +13,7 @@ pub struct ThemePalette {
     pub muted: Color,
     pub selected: Color,
     pub border: Color,
+    pub tab_foreground: Color,
 }
 
 pub const fn palette_for(theme: AppTheme) -> ThemePalette {
@@ -25,6 +26,7 @@ pub const fn palette_for(theme: AppTheme) -> ThemePalette {
             muted: Color::DarkGray,
             selected: Color::Yellow,
             border: Color::Reset,
+            tab_foreground: Color::Gray,
         },
         AppTheme::Amber => ThemePalette {
             background: Color::Rgb(23, 22, 13),
@@ -34,6 +36,7 @@ pub const fn palette_for(theme: AppTheme) -> ThemePalette {
             muted: Color::Rgb(168, 124, 47),
             selected: Color::Rgb(255, 200, 90),
             border: Color::Rgb(117, 106, 73),
+            tab_foreground: Color::Rgb(243, 234, 208),
         },
         AppTheme::GreenScreen => ThemePalette {
             background: Color::Rgb(4, 18, 8),
@@ -43,6 +46,7 @@ pub const fn palette_for(theme: AppTheme) -> ThemePalette {
             muted: Color::Rgb(63, 132, 76),
             selected: Color::Rgb(163, 255, 169),
             border: Color::Rgb(55, 112, 65),
+            tab_foreground: Color::Rgb(202, 244, 207),
         },
     }
 }
@@ -77,6 +81,7 @@ mod tests {
                 muted: Color::DarkGray,
                 selected: Color::Yellow,
                 border: Color::Reset,
+                tab_foreground: Color::Gray,
             }
         );
     }
