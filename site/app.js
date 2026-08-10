@@ -17,14 +17,27 @@ const ui = {
   copyButton: document.querySelector("[data-copy-target]"),
   copyStatus: document.querySelector("#copy-status"),
   themeButtons: [...document.querySelectorAll("[data-theme-value]")],
+  machineKeys: [...document.querySelectorAll("[data-machine-target]")],
+  screenDeck: document.querySelector("#screen-deck"),
+  screenPanels: [...document.querySelectorAll("[data-screen-panel]")],
+  screenLinks: [...document.querySelectorAll("[data-screen-link]")],
   themeColor: document.querySelector('meta[name="theme-color"]'),
   year: document.querySelector("#current-year")
 };
 
 const phaseOrder = ["request", "review", "run"];
+const screenOrder = ["home", "proof", "programs", "catalog", "policy", "install"];
+const screenHashes = {
+  home: "#screen-home",
+  proof: "#screen-proof",
+  programs: "#screen-programs",
+  catalog: "#screen-catalog",
+  policy: "#screen-policy",
+  install: "#screen-install"
+};
 const themeStorageKey = "t4e-site-theme";
 const themeColors = {
-  future: "#050816",
+  future: "#071014",
   amber: "#120b00",
   green_screen: "#020b04",
   terracotta: "#141413"
@@ -35,8 +48,13 @@ const state = {
   active: null,
   eventIndex: 0,
   playing: false,
-  timer: null
+  timer: null,
+  screen: "home"
 };
+let wheelDelta = 0;
+let wheelResetTimer = null;
+let wheelLockedUntil = 0;
+let touchStartY = null;
 
 function savedTheme() {
   try {
@@ -64,6 +82,102 @@ function applyTheme(requestedTheme, persist = true) {
       // The selected theme still applies when storage is unavailable.
     }
   }
+}
+
+function setCurrentNavigation(screen) {
+  const activePanel = ui.screenPanels.find((panel) => panel.dataset.screenPanel === screen);
+  const activeGroup = activePanel?.dataset.screenGroup || screen;
+  ui.machineKeys.forEach((link) => {
+    const isCurrent = link.dataset.machineTarget === activeGroup;
+    link.classList.toggle("is-selected", isCurrent);
+    if (isCurrent) {
+      link.setAttribute("aria-current", "location");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
+}
+
+function screenFromLocation() {
+  if (/^#demo=/.test(window.location.hash) || ["#missions", "#screen-programs"].includes(window.location.hash)) {
+    return "programs";
+  }
+  if (["#home-proof", "#screen-proof"].includes(window.location.hash)) return "proof";
+  if (["#catalog", "#screen-catalog"].includes(window.location.hash)) return "catalog";
+  if (["#boundaries", "#screen-policy"].includes(window.location.hash)) return "policy";
+  if (["#install", "#screen-install"].includes(window.location.hash)) return "install";
+  return "home";
+}
+
+function showScreen(requestedScreen, options = {}) {
+  const available = new Set(ui.screenPanels.map((panel) => panel.dataset.screenPanel));
+  const screen = available.has(requestedScreen) ? requestedScreen : "home";
+  const previousIndex = screenOrder.indexOf(state.screen);
+  const nextIndex = screenOrder.indexOf(screen);
+  const direction = options.direction || (nextIndex < previousIndex ? -1 : 1);
+  state.screen = screen;
+
+  ui.screenPanels.forEach((panel) => {
+    const isActive = panel.dataset.screenPanel === screen;
+    panel.hidden = !isActive;
+    panel.classList.remove("is-screen-active");
+    panel.classList.toggle("is-screen-backward", isActive && direction < 0);
+    if (isActive && options.animate !== false) {
+      void panel.offsetWidth;
+      panel.classList.add("is-screen-active");
+    }
+  });
+
+  ui.screenDeck.scrollTop = 0;
+  setCurrentNavigation(screen);
+  if (options.hash) window.history.replaceState(null, "", options.hash);
+  window.requestAnimationFrame(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+  });
+}
+
+function stepScreen(direction) {
+  const currentIndex = screenOrder.indexOf(state.screen);
+  const nextIndex = Math.max(0, Math.min(screenOrder.length - 1, currentIndex + direction));
+  if (nextIndex === currentIndex) return;
+  const nextScreen = screenOrder[nextIndex];
+  showScreen(nextScreen, { direction, hash: screenHashes[nextScreen] });
+}
+
+function canScrollWithin(target, direction) {
+  let element = target instanceof Element ? target : target?.parentElement;
+  while (element && element !== ui.screenDeck) {
+    const overflowY = window.getComputedStyle(element).overflowY;
+    const isScrollable = /^(auto|scroll)$/.test(overflowY)
+      && element.scrollHeight > element.clientHeight + 1;
+    if (isScrollable) {
+      const atStart = element.scrollTop <= 1;
+      const atEnd = element.scrollTop + element.clientHeight >= element.scrollHeight - 1;
+      if ((direction < 0 && !atStart) || (direction > 0 && !atEnd)) return true;
+    }
+    element = element.parentElement;
+  }
+  return false;
+}
+
+function handleScreenWheel(event) {
+  const multiplier = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16 : 1;
+  const delta = event.deltaY * multiplier;
+  const direction = delta > 0 ? 1 : -1;
+  if (canScrollWithin(event.target, direction)) {
+    wheelDelta = 0;
+    return;
+  }
+  event.preventDefault();
+  if (performance.now() < wheelLockedUntil) return;
+  wheelDelta += delta;
+  window.clearTimeout(wheelResetTimer);
+  wheelResetTimer = window.setTimeout(() => { wheelDelta = 0; }, 140);
+  if (Math.abs(wheelDelta) < 42) return;
+  const stepDirection = wheelDelta > 0 ? 1 : -1;
+  wheelDelta = 0;
+  wheelLockedUntil = performance.now() + 420;
+  stepScreen(stepDirection);
 }
 
 function createTerminalLine(event, text, isNewest) {
@@ -245,13 +359,54 @@ ui.missionButtons.forEach((button) => {
 ui.directoryLinks.forEach((link) => {
   link.addEventListener("click", (event) => {
     event.preventDefault();
+    showScreen("programs", { hash: `#demo=${link.dataset.selectDemo}` });
     selectDemo(link.dataset.selectDemo);
-    document.querySelector("#missions")?.scrollIntoView();
   });
 });
 
 ui.themeButtons.forEach((button) => {
   button.addEventListener("click", () => applyTheme(button.dataset.themeValue));
+});
+
+ui.machineKeys.forEach((key) => {
+  key.addEventListener("click", (event) => {
+    key.classList.add("is-pressed");
+    window.setTimeout(() => key.classList.remove("is-pressed"), 150);
+    if (key.dataset.machineTarget === "source") return;
+    event.preventDefault();
+    showScreen(key.dataset.machineTarget, { hash: key.getAttribute("href") });
+  });
+});
+
+ui.screenLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    showScreen(link.dataset.screenLink, { hash: link.getAttribute("href") });
+  });
+});
+
+ui.screenDeck.addEventListener("wheel", handleScreenWheel, { passive: false });
+ui.screenDeck.addEventListener("touchstart", (event) => {
+  touchStartY = event.changedTouches[0]?.clientY ?? null;
+}, { passive: true });
+ui.screenDeck.addEventListener("touchend", (event) => {
+  if (touchStartY === null) return;
+  const endY = event.changedTouches[0]?.clientY ?? touchStartY;
+  const distance = touchStartY - endY;
+  touchStartY = null;
+  if (Math.abs(distance) < 48) return;
+  const direction = distance > 0 ? 1 : -1;
+  if (!canScrollWithin(event.target, direction)) stepScreen(direction);
+}, { passive: true });
+ui.screenDeck.addEventListener("keydown", (event) => {
+  if (event.target !== ui.screenDeck) return;
+  if (["ArrowDown", "PageDown"].includes(event.key)) {
+    event.preventDefault();
+    stepScreen(1);
+  } else if (["ArrowUp", "PageUp"].includes(event.key)) {
+    event.preventDefault();
+    stepScreen(-1);
+  }
 });
 
 ui.play.addEventListener("click", () => {
@@ -295,8 +450,13 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
+window.addEventListener("load", () => {
+  window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+}, { once: true });
+
 window.addEventListener("hashchange", () => {
   const id = requestedDemoId();
+  showScreen(screenFromLocation());
   if (id && state.demos.has(id) && state.active?.id !== id) selectDemo(id);
 });
 
@@ -305,5 +465,6 @@ reducedMotion.addEventListener("change", () => {
 });
 
 applyTheme(savedTheme(), false);
+showScreen(screenFromLocation(), { animate: false });
 ui.year.textContent = String(new Date().getFullYear());
 loadDemos();

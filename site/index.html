@@ -29,7 +29,7 @@
     <link rel="alternate" hreflang="x-default" href="https://andy5090.github.io/tui-4-everything/">
     <link rel="icon" href="./assets/t4e-mark.svg" type="image/svg+xml">
     <link rel="manifest" href="./site.webmanifest">
-    <link rel="stylesheet" href="./styles.css?v=palettes-20260811">
+    <link rel="stylesheet" href="./styles.css?v=0.6.0">
     <title>T4E — AI-Assisted Terminal App Environment</title>
     <script type="application/ld+json">
       {
@@ -40,7 +40,7 @@
         "url": "https://andy5090.github.io/tui-4-everything/",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "Linux, macOS, Android (Termux)",
-        "softwareVersion": "0.5.3",
+        "softwareVersion": "0.6.0",
         "dateModified": "2026-08-11",
         "isAccessibleForFree": true,
         "offers": {
@@ -51,7 +51,7 @@
         "license": "https://github.com/andy5090/tui-4-everything/blob/main/LICENSE",
         "codeRepository": "https://github.com/andy5090/tui-4-everything",
         "downloadUrl": "https://github.com/andy5090/tui-4-everything/releases/latest",
-        "releaseNotes": "https://github.com/andy5090/tui-4-everything/releases/tag/v0.5.3",
+        "releaseNotes": "https://github.com/andy5090/tui-4-everything/releases/tag/v0.6.0",
         "screenshot": "https://andy5090.github.io/tui-4-everything/assets/t4e-home.png",
         "featureList": [
           "Curated terminal application catalog",
@@ -70,27 +70,23 @@
     <header class="machine" id="top">
       <div class="machine-meta">
         <a class="machine-brand" href="#top">T4E PERSONAL TERMINAL</a>
-        <nav aria-label="Primary navigation">
-          <a href="#home-proof">HOME</a>
-          <a href="#missions">PROGRAMS</a>
-          <a href="#boundaries">POLICY</a>
-          <a href="#install">INSTALL</a>
-          <a href="https://github.com/andy5090/tui-4-everything">SOURCE</a>
-        </nav>
         <div class="machine-controls">
           <div class="theme-switcher" role="group" aria-label="Color theme">
             <span>THEME</span>
-            <button type="button" data-theme-value="future" aria-pressed="false">FUTURE</button>
-            <button type="button" data-theme-value="amber" aria-pressed="true">AMBER</button>
-            <button type="button" data-theme-value="green_screen" aria-pressed="false">RETRO</button>
-            <button type="button" data-theme-value="terracotta" aria-pressed="false">TERRA</button>
+            <div class="theme-track">
+              <button type="button" data-theme-value="future" aria-pressed="false">FUTURE</button>
+              <button type="button" data-theme-value="amber" aria-pressed="true">AMBER</button>
+              <button type="button" data-theme-value="green_screen" aria-pressed="false">RETRO</button>
+              <button type="button" data-theme-value="terracotta" aria-pressed="false">TERRA</button>
+            </div>
           </div>
-          <span>READY · v0.5.3</span>
+          <span>READY · v0.6.0</span>
         </div>
       </div>
 
       <div class="screen">
-        <div class="session">
+        <div class="screen-deck" id="screen-deck" role="region" aria-label="T4E display">
+        <div class="session" id="home" data-screen-panel="home" data-screen-group="home">
           <div class="hero-copy">
             <p class="prompt-line">T4E&gt; <b>ABOUT --FULL-MARK</b></p>
             <pre class="ascii-logo" aria-label="Complete T4E ASCII logo">                                         ++++++-
@@ -115,9 +111,9 @@
             <h1>A whole terminal world, ready to explore.</h1>
             <p class="hero-lede">Find an app, inspect its boundaries, install a verified release, and run it in a managed session. Ask AI to connect the steps without handing it a raw shell.</p>
             <div class="hero-actions">
-              <a class="button button-primary" href="#missions">RUN DEMOS</a>
-              <a class="button" href="#home-proof">VIEW HOME</a>
-              <a class="button" href="#install">INSTALL T4E</a>
+              <a class="button button-primary" href="#screen-programs" data-screen-link="programs">RUN DEMOS</a>
+              <a class="button" href="#screen-proof" data-screen-link="proof">VIEW HOME</a>
+              <a class="button" href="#screen-install" data-screen-link="install">INSTALL T4E</a>
             </div>
           </div>
 
@@ -130,15 +126,9 @@
             <p class="directory-status">4 FILES · STRUCTURED ACTIONS · NO RAW SHELL</p>
           </aside>
         </div>
-      </div>
-
-      <div class="keyboard" aria-hidden="true">
-        <span class="key">ESC</span><span class="key">FIND</span><span class="key">REVIEW</span><span class="key">RUN</span><span class="key">HOME</span>
-      </div>
-    </header>
 
     <main id="main">
-      <section class="proof-section" id="home-proof" aria-labelledby="proof-title">
+      <section class="proof-section" id="home-proof" data-screen-panel="proof" data-screen-group="home" aria-labelledby="proof-title">
         <div class="proof-copy">
           <p class="section-path">T4E / HOME</p>
           <h2 id="proof-title">The product is the proof.</h2>
@@ -154,7 +144,7 @@
         </figure>
       </section>
 
-      <section class="mission-section" id="missions" aria-labelledby="missions-title">
+      <section class="mission-section" id="missions" data-screen-panel="programs" data-screen-group="programs" aria-labelledby="missions-title">
         <div class="section-heading">
           <p class="section-path">T4E / PROGRAMS / DEMOS</p>
           <div>
@@ -222,7 +212,7 @@
         </div>
       </section>
 
-      <section class="boundary-section" id="boundaries" aria-labelledby="boundary-title">
+      <section class="boundary-section" id="boundaries" data-screen-panel="policy" data-screen-group="policy" aria-labelledby="boundary-title">
         <div class="section-heading">
           <p class="section-path">T4E / SETTINGS / APPROVAL</p>
           <div><h2 id="boundary-title">You choose when T4E pauses.</h2><p>AI stays inside structured catalog actions. Permission mode controls when a valid action needs your input.</p></div>
@@ -235,7 +225,7 @@
         <div class="trust-strip"><strong>NOT A RAW SHELL</strong><p>AI returns bounded actions; T4E validates catalog IDs, arguments, permissions, and process lifecycle.</p><ul><li>VERIFIED VERSIONS</li><li>STRUCTURED ARGUMENTS</li><li>VISIBLE AUDIT LOG</li><li>KEYS NEVER PERSISTED</li></ul></div>
       </section>
 
-      <section class="catalog-section" aria-labelledby="catalog-title">
+      <section class="catalog-section" id="catalog" data-screen-panel="catalog" data-screen-group="programs" aria-labelledby="catalog-title">
         <div class="catalog-copy"><p class="section-path">T4E / CATALOG</p><h2 id="catalog-title">Your terminal, expanded.</h2><p>Media, files, editors, system tools, AI, and pure terminal fun—installed and launched from one HOME.</p><a class="text-link" href="https://github.com/andy5090/tui-4-everything/blob/main/registry/catalog.yaml">OPEN CATALOG ↗</a></div>
         <div class="catalog-list" aria-label="Example T4E applications">
           <div data-catalog-ids="tplay"><code>TPLAY</code><span>Media</span><p>ASCII video playback</p></div>
@@ -247,7 +237,7 @@
         </div>
       </section>
 
-      <section class="install-section" id="install" aria-labelledby="install-title">
+      <section class="install-section" id="install" data-screen-panel="install" data-screen-group="install" aria-labelledby="install-title">
         <div><p class="section-path">T4E / INSTALL</p><h2 id="install-title">Boot T4E.</h2><p>The first installer detects your platform and verifies the release checksum. After that, update in place with <code>t4e update</code>.</p><p class="install-platforms">LINUX x86_64 · i686 · ARM64<br>macOS APPLE SILICON</p></div>
         <div class="install-terminal">
           <div class="install-bar"><span>INSTALL.T4E</span><span>CHECKSUM VERIFIED</span></div>
@@ -257,6 +247,17 @@
         </div>
       </section>
     </main>
+        </div>
+      </div>
+
+      <nav class="keyboard" aria-label="Primary navigation">
+        <a class="key is-selected" href="#screen-home" data-machine-target="home" aria-current="location"><span>HOME</span></a>
+        <a class="key" href="#screen-programs" data-machine-target="programs"><span>PROGRAMS</span></a>
+        <a class="key" href="#screen-policy" data-machine-target="policy"><span>POLICY</span></a>
+        <a class="key" href="#screen-install" data-machine-target="install"><span>INSTALL</span></a>
+        <a class="key" href="https://github.com/andy5090/tui-4-everything" data-machine-target="source" aria-label="Source code on GitHub"><span>SOURCE</span></a>
+      </nav>
+    </header>
 
     <footer>
       <div><strong>T4E</strong><span>TERMINAL APPLICATION ENVIRONMENT</span></div>
@@ -265,6 +266,6 @@
       <small>© <span id="current-year">2026</span> T4E / MIT LICENSE</small>
     </footer>
 
-    <script src="./app.js?v=palettes-20260811" defer></script>
+    <script src="./app.js?v=0.6.0" defer></script>
   </body>
 </html>

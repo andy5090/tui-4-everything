@@ -22,6 +22,8 @@ class SiteParser(HTMLParser):
         self.demo_ids: list[str] = []
         self.catalog_ids: list[str] = []
         self.theme_values: list[str] = []
+        self.machine_targets: list[str] = []
+        self.screen_panels: list[str] = []
         self.inline_handlers: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -34,6 +36,10 @@ class SiteParser(HTMLParser):
             self.catalog_ids.extend(catalog_ids.split())
         if theme_value := values.get("data-theme-value"):
             self.theme_values.append(theme_value)
+        if machine_target := values.get("data-machine-target"):
+            self.machine_targets.append(machine_target)
+        if screen_panel := values.get("data-screen-panel"):
+            self.screen_panels.append(screen_panel)
         for name, value in attrs:
             if name.startswith("on"):
                 self.inline_handlers.append(name)
@@ -60,6 +66,29 @@ def main() -> None:
         "terracotta",
     ], "site theme switch must mirror every T4E theme"
     assert ">RETRO<" in html, "Green Screen must use its Retro Green display name"
+    assert parser.machine_targets == [
+        "home",
+        "programs",
+        "policy",
+        "install",
+        "source",
+    ], "the physical key row must provide working section shortcuts"
+    machine_meta = re.search(r'<div class="machine-meta">(.*?)</div>\s*</div>', html, re.DOTALL)
+    assert machine_meta and "<nav" not in machine_meta.group(1), (
+        "the physical key row replaces the duplicate top navigation"
+    )
+    for label in ["HOME", "PROGRAMS", "POLICY", "INSTALL", "SOURCE"]:
+        assert f"<span>{label}</span>" in html, f"machine key is missing {label}"
+    assert parser.screen_panels == [
+        "home",
+        "proof",
+        "programs",
+        "policy",
+        "catalog",
+        "install",
+    ], "CRT content must be split into discrete no-scroll screens"
+    assert html.index('<div class="screen-deck"') < html.index('<main id="main">')
+    assert html.index('<main id="main">') < html.index('<nav class="keyboard"')
 
     for reference in parser.local_references:
         path = SITE / urlparse(reference).path.removeprefix("./")
@@ -131,16 +160,57 @@ def main() -> None:
     assert structured_data_match, "SoftwareApplication structured data is missing"
     structured_data = json.loads(structured_data_match.group(1))
     assert structured_data["@type"] == "SoftwareApplication"
-    assert structured_data["softwareVersion"] == "0.5.3"
-    assert structured_data["releaseNotes"].endswith("/releases/tag/v0.5.3")
+    assert structured_data["softwareVersion"] == "0.6.0"
+    assert structured_data["releaseNotes"].endswith("/releases/tag/v0.6.0")
     assert structured_data["featureList"], "structured feature list must not be empty"
 
     styles = (SITE / "styles.css").read_text(encoding="utf-8")
     script = (SITE / "app.js").read_text(encoding="utf-8")
     for theme in parser.theme_values:
         assert f'[data-theme="{theme}"]' in styles, f"missing {theme} site palette"
+    future_palette = re.search(
+        r'\[data-theme="future"\]\s*\{(.*?)\}', styles, flags=re.DOTALL
+    )
+    assert future_palette, "Future site palette is missing"
+    for token in [
+        "--screen: #071014;",
+        "--phosphor: #5de1f2;",
+        "--selected: #ff7a3d;",
+    ]:
+        assert token in future_palette.group(1), f"Future palette must retain {token}"
+    for crt_contract in [
+        ".screen::before",
+        ".screen-deck",
+        "overflow-y: auto",
+        "@keyframes screen-enter",
+        "animation: crt-scan",
+        "@keyframes crt-scan",
+        "@media (prefers-reduced-motion: reduce)",
+    ]:
+        assert crt_contract in styles, f"CRT presentation is missing {crt_contract}"
+    for switch_contract in [
+        ".theme-track::before",
+        '--theme-index: 0;',
+        '--theme-index: 3;',
+    ]:
+        assert switch_contract in styles, f"theme slider is missing {switch_contract}"
+    footer_styles = re.findall(r"footer\s*\{(.*?)\}", styles, flags=re.DOTALL)
+    assert any("display: flex" in block for block in footer_styles), (
+        "the compact footer must remain visible below the CRT"
+    )
     assert "localStorage" in script, "site theme choice must persist between visits"
     assert "aria-pressed" in script, "site theme switch state must be announced"
+    assert "aria-current" in script, "active machine navigation must be announced"
+    assert "is-pressed" in script, "machine keys must expose a pressed interaction"
+    assert "function showScreen" in script, "machine keys must switch CRT screens"
+    assert "function stepScreen" in script, "wheel input must advance CRT screens"
+    assert "function canScrollWithin" in script, (
+        "overflowing CRT content must scroll before the screen advances"
+    )
+    assert 'ui.screenDeck.addEventListener("wheel"' in script, (
+        "CRT wheel input must switch screens"
+    )
+    assert '"[data-screen-panel]"' in script, "CRT panels must be bounded groups"
 
     manifest = json.loads((SITE / "site.webmanifest").read_text(encoding="utf-8"))
     assert manifest["start_url"] == "./"
