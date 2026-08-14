@@ -387,6 +387,8 @@ pub enum InstallMethod {
     Dnf,
     #[serde(rename = "pacman")]
     Pacman,
+    #[serde(rename = "xbps")]
+    Xbps,
     #[serde(rename = "snap")]
     Snap,
     #[serde(rename = "snap_classic")]
@@ -428,6 +430,7 @@ impl InstallMethod {
             Self::Apt => "apt",
             Self::Dnf => "dnf",
             Self::Pacman => "pacman",
+            Self::Xbps => "xbps",
             Self::Snap => "snap",
             Self::SnapClassic => "snap_classic",
             Self::Pipx => "pipx",

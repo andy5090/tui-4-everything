@@ -178,6 +178,10 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         ),
         InstallMethod::Dnf => format!("sudo -n dnf install -y {}", hint),
         InstallMethod::Pacman => format!("sudo -n pacman -S --noconfirm {}", hint),
+        InstallMethod::Xbps => format!(
+            "sudo -n xbps-install -Sy {}",
+            installer.package_hints.join(" ")
+        ),
         InstallMethod::Snap => format!("sudo -n snap install {}", hint),
         InstallMethod::SnapClassic => format!("sudo -n snap install --classic {}", hint),
         InstallMethod::Pipx => format!(

@@ -15,6 +15,7 @@ use t4e::catalog::models::{AppCategory, InstallMethod, OutputFilter, Platform};
 use t4e::codex::service::CodexEvent;
 use t4e::installer::checks::CheckResult;
 use t4e::installer::engine::{InstallPolicy, build_install_task};
+use t4e::installer::environment::InstallEnvironment;
 use t4e::installer::execution::{InstallAttempt, InstallJob};
 use t4e::installer::queue::QueueState;
 use t4e::mux::runtime::ManagedApp;
@@ -24,7 +25,33 @@ fn app() -> AppState {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
     let workspaces =
         load_workspaces(Path::new("registry/workspaces.yaml")).expect("workspaces load");
-    AppState::new(catalog, workspaces)
+    AppState::new_with_install_environment(
+        catalog,
+        workspaces,
+        InstallEnvironment::with_commands(
+            Platform::current(),
+            "x86_64",
+            [
+                "awk",
+                "apt-get",
+                "brew",
+                "cargo",
+                "curl",
+                "dnf",
+                "go",
+                "ldd",
+                "npm",
+                "pacman",
+                "pipx",
+                "pkg",
+                "sha256sum",
+                "snap",
+                "tar",
+                "uname",
+                "xbps-install",
+            ],
+        ),
+    )
 }
 
 fn temp_state_file() -> std::path::PathBuf {
@@ -3064,7 +3091,19 @@ fn stale_saved_install_plan_is_refreshed_from_the_current_registry() {
     )
     .expect("state saves");
 
-    let app = AppState::persistent(catalog, workspaces, path.clone()).expect("state loads");
+    let app = AppState::persistent_with_install_environment(
+        catalog,
+        workspaces,
+        path.clone(),
+        InstallEnvironment::with_commands(
+            Platform::current(),
+            std::env::consts::ARCH,
+            [
+                "apt-get", "brew", "cargo", "curl", "npm", "pipx", "pkg", "snap",
+            ],
+        ),
+    )
+    .expect("state loads");
     let refreshed = &app.queue[0];
     let expected_method = if cfg!(target_os = "macos") {
         InstallMethod::Brew

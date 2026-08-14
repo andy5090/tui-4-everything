@@ -541,9 +541,13 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 app.catalog
                     .tools
                     .iter()
-                    .filter(|tool| tool.is_launchable_app())
+                    .filter(|tool| tool.is_launchable_app() && app.is_tool_available(tool))
                     .count(),
-                app.catalog.tools.len()
+                app.catalog
+                    .tools
+                    .iter()
+                    .filter(|tool| app.is_tool_available(tool))
+                    .count()
             )),
         ]),
         Line::from(vec![

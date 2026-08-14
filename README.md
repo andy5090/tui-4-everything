@@ -41,7 +41,13 @@ keys and disables AI when no provider is ready.
 - Linux or macOS
 - tmux 3.x as the current hidden app process backend
 - An authenticated CLI or configured API provider for optional HOME AI
-- The relevant package manager (`apt`, Snap, Homebrew, Cargo, or pipx) for installs
+- The relevant package manager (`apt`, XBPS, Snap, Homebrew, Cargo, or pipx) for installs
+
+T4E filters its catalog against the active OS, CPU architecture, and available
+install channels. Already installed and builtin apps remain visible. On Void
+Linux, T4E uses curated native XBPS ports where the package and launcher have
+been verified; apps that only have an incompatible Ubuntu or upstream installer
+are omitted instead of being offered as broken installs.
 
 ## Install a release
 

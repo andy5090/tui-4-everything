@@ -8,6 +8,10 @@ and date are assigned.
 
 ### Changed
 
+- Detect the active install environment before exposing catalog apps, add
+  curated Void Linux XBPS ports for lightweight native packages, retain
+  installed and builtin apps, and hide unverified i686 or Ubuntu-only install
+  paths.
 - Restore the DEMOS selector as a vertical stack and keep the adjacent
   REQUEST / REVIEW / RUN process view free of nested scrollbars.
 

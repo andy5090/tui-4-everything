@@ -12,6 +12,7 @@ use crate::catalog::models::{
 use crate::codex::service::CodexEvent;
 use crate::installer::diagnostics::FailureDiagnostics;
 use crate::installer::engine::{InstallPolicy, build_install_task, build_verified_update_task};
+use crate::installer::environment::InstallEnvironment;
 use crate::installer::execution::{InstallJob, OutputChunk, OutputStream};
 use crate::installer::queue::QueueState;
 use crate::mux::runtime::{LaunchOutcome, ManagedApp, ManagedSession};
@@ -330,6 +331,7 @@ pub struct AppState {
     pub home_focus: HomeFocus,
     pub settings_index: usize,
     pub system_overview: SystemOverview,
+    pub install_environment: InstallEnvironment,
     pub search_query: String,
     pub search_mode: bool,
     pub should_quit: bool,
@@ -383,7 +385,27 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(catalog: CatalogRegistry, workspaces: WorkspaceRegistry) -> Self {
-        Self::from_saved(catalog, workspaces, PersistentState::default(), None)
+        Self::from_saved(
+            catalog,
+            workspaces,
+            PersistentState::default(),
+            None,
+            InstallEnvironment::detect(),
+        )
+    }
+
+    pub fn new_with_install_environment(
+        catalog: CatalogRegistry,
+        workspaces: WorkspaceRegistry,
+        install_environment: InstallEnvironment,
+    ) -> Self {
+        Self::from_saved(
+            catalog,
+            workspaces,
+            PersistentState::default(),
+            None,
+            install_environment,
+        )
     }
 
     pub fn persistent(
@@ -391,12 +413,27 @@ impl AppState {
         workspaces: WorkspaceRegistry,
         state_path: PathBuf,
     ) -> Result<Self> {
+        Self::persistent_with_install_environment(
+            catalog,
+            workspaces,
+            state_path,
+            InstallEnvironment::detect(),
+        )
+    }
+
+    pub fn persistent_with_install_environment(
+        catalog: CatalogRegistry,
+        workspaces: WorkspaceRegistry,
+        state_path: PathBuf,
+        install_environment: InstallEnvironment,
+    ) -> Result<Self> {
         let saved = load_state(&state_path)?;
         Ok(Self::from_saved(
             catalog,
             workspaces,
             saved,
             Some(state_path),
+            install_environment,
         ))
     }
 
@@ -405,6 +442,7 @@ impl AppState {
         workspaces: WorkspaceRegistry,
         mut saved: PersistentState,
         state_path: Option<PathBuf>,
+        install_environment: InstallEnvironment,
     ) -> Self {
         for job in &mut saved.queue {
             if job.item.state == QueueState::Installing {
@@ -416,7 +454,7 @@ impl AppState {
                 ));
             }
         }
-        reconcile_saved_queue(&catalog, &mut saved);
+        reconcile_saved_queue(&catalog, &install_environment, &mut saved);
         saved.logs.push(timestamp_log("T4E dashboard started"));
         let mouse_enabled = saved.settings.mouse_enabled;
         Self {
@@ -433,6 +471,7 @@ impl AppState {
             home_focus: HomeFocus::Views,
             settings_index: 0,
             system_overview: cached_system_overview(),
+            install_environment,
             search_query: String::new(),
             search_mode: false,
             should_quit: false,
@@ -760,6 +799,7 @@ impl AppState {
         self.catalog
             .tools
             .iter()
+            .filter(|tool| self.is_tool_available(tool))
             .filter(|tool| {
                 query.is_empty()
                     || tool.name.to_ascii_lowercase().contains(&query)
@@ -798,6 +838,7 @@ impl AppState {
                 .tools
                 .iter()
                 .filter(|tool| tool.is_launchable_app())
+                .filter(|tool| self.is_tool_available(tool))
                 .filter(matches_query)
                 .collect();
         }
@@ -808,10 +849,11 @@ impl AppState {
                 .iter()
                 .filter(|recent| recent.kind == "tool")
                 .filter_map(|recent| {
-                    self.catalog
-                        .tools
-                        .iter()
-                        .find(|tool| tool.id == recent.id && tool.is_launchable_app())
+                    self.catalog.tools.iter().find(|tool| {
+                        tool.id == recent.id
+                            && tool.is_launchable_app()
+                            && self.is_tool_available(tool)
+                    })
                 })
                 .filter(matches_query)
                 .collect(),
@@ -821,10 +863,11 @@ impl AppState {
                 .into_iter()
                 .flat_map(|view| &view.apps)
                 .filter_map(|running| {
-                    self.catalog
-                        .tools
-                        .iter()
-                        .find(|tool| tool.id == running.window_name && tool.is_launchable_app())
+                    self.catalog.tools.iter().find(|tool| {
+                        tool.id == running.window_name
+                            && tool.is_launchable_app()
+                            && self.is_tool_available(tool)
+                    })
                 })
                 .filter(matches_query)
                 .collect(),
@@ -833,6 +876,7 @@ impl AppState {
                 .tools
                 .iter()
                 .filter(|tool| tool.is_launchable_app())
+                .filter(|tool| self.is_tool_available(tool))
                 .filter(|tool| match filter {
                     HomeFilter::AllApps => true,
                     HomeFilter::Installed => self.installed_tools.contains(&tool.id),
@@ -849,46 +893,59 @@ impl AppState {
         self.home_tools().get(self.home_app_index).copied()
     }
 
+    pub fn is_tool_available(&self, tool: &Tool) -> bool {
+        self.installed_tools.contains(&tool.id) || self.install_environment.supports(tool)
+    }
+
     pub fn home_filter_count(&self, filter: HomeFilter) -> usize {
         match filter {
             HomeFilter::AllApps => self
                 .catalog
                 .tools
                 .iter()
-                .filter(|tool| tool.is_launchable_app())
+                .filter(|tool| tool.is_launchable_app() && self.is_tool_available(tool))
                 .count(),
             HomeFilter::Installed => self
                 .catalog
                 .tools
                 .iter()
-                .filter(|tool| tool.is_launchable_app() && self.installed_tools.contains(&tool.id))
+                .filter(|tool| {
+                    tool.is_launchable_app()
+                        && self.is_tool_available(tool)
+                        && self.installed_tools.contains(&tool.id)
+                })
                 .count(),
             HomeFilter::Favorites => self
                 .catalog
                 .tools
                 .iter()
-                .filter(|tool| tool.is_launchable_app() && self.favorites.contains(&tool.id))
+                .filter(|tool| {
+                    tool.is_launchable_app()
+                        && self.is_tool_available(tool)
+                        && self.favorites.contains(&tool.id)
+                })
                 .count(),
             HomeFilter::Recent => self
                 .recents
                 .iter()
                 .filter(|item| {
                     item.kind == "tool"
-                        && self
-                            .catalog
-                            .tools
-                            .iter()
-                            .any(|tool| tool.id == item.id && tool.is_launchable_app())
+                        && self.catalog.tools.iter().any(|tool| {
+                            tool.id == item.id
+                                && tool.is_launchable_app()
+                                && self.is_tool_available(tool)
+                        })
                 })
                 .count(),
             HomeFilter::Running => self.app_view.as_ref().map_or(0, |view| {
                 view.apps
                     .iter()
                     .filter(|running| {
-                        self.catalog
-                            .tools
-                            .iter()
-                            .any(|tool| tool.id == running.window_name && tool.is_launchable_app())
+                        self.catalog.tools.iter().any(|tool| {
+                            tool.id == running.window_name
+                                && tool.is_launchable_app()
+                                && self.is_tool_available(tool)
+                        })
                     })
                     .count()
             }),
@@ -896,7 +953,11 @@ impl AppState {
                 .catalog
                 .tools
                 .iter()
-                .filter(|tool| tool.is_launchable_app() && tool.app_category() == category)
+                .filter(|tool| {
+                    tool.is_launchable_app()
+                        && self.is_tool_available(tool)
+                        && tool.app_category() == category
+                })
                 .count(),
         }
     }
@@ -921,7 +982,7 @@ impl AppState {
         self.catalog
             .tools
             .iter()
-            .filter(|tool| tool.category == ToolCategory::Agents)
+            .filter(|tool| tool.category == ToolCategory::Agents && self.is_tool_available(tool))
             .collect()
     }
 
@@ -945,6 +1006,7 @@ impl AppState {
             .catalog
             .tools
             .iter()
+            .filter(|tool| self.is_tool_available(tool))
             .map(|tool| {
                 let state = match self.tool_updates.get(&tool.id) {
                     Some(ToolUpdateState::Current { verified, .. }) => {
@@ -1688,7 +1750,12 @@ impl AppState {
         }
         let tools = ids
             .iter()
-            .map(|id| self.catalog.tools.iter().find(|tool| tool.id == *id))
+            .map(|id| {
+                self.catalog
+                    .tools
+                    .iter()
+                    .find(|tool| tool.id == *id && self.is_tool_available(tool))
+            })
             .collect::<Option<Vec<_>>>()?;
         Some(PipelineLaunchRequest {
             pipeline_id: tools
@@ -1742,7 +1809,12 @@ impl AppState {
     }
 
     fn request_tplay_search(&mut self, query: &str) -> bool {
-        let Some(tool) = self.catalog.tools.iter().find(|tool| tool.id == "tplay") else {
+        let Some(tool) = self
+            .catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "tplay" && self.is_tool_available(tool))
+        else {
             self.ai_launch_approval_mode = None;
             return false;
         };
@@ -2281,16 +2353,15 @@ impl AppState {
     }
 
     fn queue_verified_update_with_policy(&mut self, tool_id: &str, bypass_confirmation: bool) {
-        let platform = Platform::current();
         let Some(tool) = self.catalog.tools.iter().find(|tool| tool.id == tool_id) else {
             self.status = format!("Unknown app {tool_id}");
             return;
         };
-        let Some(installer) = tool.installer_for(platform) else {
+        let Some(installer) = self.install_environment.installer_for(tool) else {
             self.status = format!("No installer for {tool_id} on this platform");
             return;
         };
-        let Ok(task) = build_verified_update_task(tool, installer, &InstallPolicy::default())
+        let Ok(task) = build_verified_update_task(tool, &installer, &InstallPolicy::default())
         else {
             self.status = format!("No T4E-verified update for {tool_id}");
             return;
@@ -2324,7 +2395,8 @@ impl AppState {
             self.status = format!("{tool_id} is not installed");
             return;
         }
-        let Some(request) = uninstall_request_for_tool(tool, false) else {
+        let Some(request) = uninstall_request_for_tool(tool, &self.install_environment, false)
+        else {
             self.status = format!("No uninstall method for {tool_id}");
             return;
         };
@@ -2337,7 +2409,8 @@ impl AppState {
             return;
         };
         let tool_id = tool.id.clone();
-        let Some(request) = uninstall_request_for_tool(tool, true) else {
+        let Some(request) = uninstall_request_for_tool(tool, &self.install_environment, true)
+        else {
             self.status = format!("Reset and reinstall is unavailable for {tool_id}");
             return;
         };
@@ -2849,7 +2922,7 @@ impl AppState {
             return;
         }
         let current_task = if job.task.is_verified_update() {
-            build_current_verified_task(&self.catalog, &job.item.tool_id)
+            build_current_verified_task(&self.catalog, &self.install_environment, &job.item.tool_id)
         } else {
             self.build_current_task(&job.item.tool_id)
         };
@@ -2953,7 +3026,7 @@ impl AppState {
     }
 
     fn build_current_task(&self, tool_id: &str) -> Option<crate::installer::engine::InstallTask> {
-        build_current_task(&self.catalog, tool_id)
+        build_current_task(&self.catalog, &self.install_environment, tool_id)
     }
 
     fn handle_confirmation_key(&mut self, code: KeyCode) {
@@ -3292,13 +3365,19 @@ impl AppState {
     }
 }
 
-fn reconcile_saved_queue(catalog: &CatalogRegistry, saved: &mut PersistentState) {
+fn reconcile_saved_queue(
+    catalog: &CatalogRegistry,
+    install_environment: &InstallEnvironment,
+    saved: &mut PersistentState,
+) {
     let mut refreshed = Vec::new();
     for job in &mut saved.queue {
         if !matches!(job.item.state, QueueState::Queued | QueueState::Failed) {
             continue;
         }
-        let Some(current_task) = build_current_task(catalog, &job.item.tool_id) else {
+        let Some(current_task) =
+            build_current_task(catalog, install_environment, &job.item.tool_id)
+        else {
             continue;
         };
         if !install_plan_changed(&job.task, &current_task) {
@@ -3376,22 +3455,22 @@ fn provider_setup_last_field(setup: &ApiProviderSetupState) -> usize {
 
 fn build_current_task(
     catalog: &CatalogRegistry,
+    install_environment: &InstallEnvironment,
     tool_id: &str,
 ) -> Option<crate::installer::engine::InstallTask> {
-    let platform = Platform::current();
     let tool = catalog.tools.iter().find(|tool| tool.id == tool_id)?;
-    let installer = tool.installer_for(platform)?;
-    build_install_task(tool, installer, &InstallPolicy::default()).ok()
+    let installer = install_environment.installer_for(tool)?;
+    build_install_task(tool, &installer, &InstallPolicy::default()).ok()
 }
 
 fn build_current_verified_task(
     catalog: &CatalogRegistry,
+    install_environment: &InstallEnvironment,
     tool_id: &str,
 ) -> Option<crate::installer::engine::InstallTask> {
-    let platform = Platform::current();
     let tool = catalog.tools.iter().find(|tool| tool.id == tool_id)?;
-    let installer = tool.installer_for(platform)?;
-    build_verified_update_task(tool, installer, &InstallPolicy::default()).ok()
+    let installer = install_environment.installer_for(tool)?;
+    build_verified_update_task(tool, &installer, &InstallPolicy::default()).ok()
 }
 
 fn install_plan_changed(
@@ -3409,9 +3488,12 @@ fn install_plan_changed(
         || saved.version_probe != current.version_probe
 }
 
-fn uninstall_request_for_tool(tool: &Tool, reinstall: bool) -> Option<UninstallRequest> {
-    let platform = Platform::current();
-    let installer = tool.installer_for(platform)?;
+fn uninstall_request_for_tool(
+    tool: &Tool,
+    install_environment: &InstallEnvironment,
+    reinstall: bool,
+) -> Option<UninstallRequest> {
+    let installer = install_environment.installer_for(tool)?;
     let packages = if installer.method == InstallMethod::Cargo {
         installer.package_hints.join(" ")
     } else {
@@ -3468,6 +3550,10 @@ fn uninstall_command(
             "if pacman -Q {package} >/dev/null 2>&1; then sudo -n pacman -Rns --noconfirm {package}; fi"
         ),
         InstallMethod::Pacman => format!("sudo -n pacman -Rns --noconfirm {package}"),
+        InstallMethod::Xbps if tolerate_missing => format!(
+            "if xbps-query {package} >/dev/null 2>&1; then sudo -n xbps-remove -Ry {package}; fi"
+        ),
+        InstallMethod::Xbps => format!("sudo -n xbps-remove -Ry {package}"),
         InstallMethod::Snap | InstallMethod::SnapClassic if tolerate_missing => format!(
             "if snap list {package} >/dev/null 2>&1; then sudo -n snap remove {package}; fi"
         ),

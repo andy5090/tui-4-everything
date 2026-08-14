@@ -706,6 +706,7 @@ fn install_method_requires_privileges(method: &InstallMethod) -> bool {
         InstallMethod::Apt
             | InstallMethod::Dnf
             | InstallMethod::Pacman
+            | InstallMethod::Xbps
             | InstallMethod::Snap
             | InstallMethod::SnapClassic
             | InstallMethod::Pipx
@@ -725,6 +726,7 @@ fn uninstall_method_requires_privileges(method: &InstallMethod) -> bool {
         InstallMethod::Apt
             | InstallMethod::Dnf
             | InstallMethod::Pacman
+            | InstallMethod::Xbps
             | InstallMethod::Snap
             | InstallMethod::SnapClassic
             | InstallMethod::Pipx
@@ -892,6 +894,7 @@ mod tests {
         assert!(install_method_requires_privileges(&InstallMethod::Apt));
         assert!(install_method_requires_privileges(&InstallMethod::Dnf));
         assert!(install_method_requires_privileges(&InstallMethod::Pacman));
+        assert!(install_method_requires_privileges(&InstallMethod::Xbps));
         assert!(install_method_requires_privileges(&InstallMethod::Snap));
         assert!(install_method_requires_privileges(
             &InstallMethod::SnapClassic
@@ -921,5 +924,6 @@ mod tests {
         assert!(uninstall_method_requires_privileges(
             &InstallMethod::Fastfetch
         ));
+        assert!(uninstall_method_requires_privileges(&InstallMethod::Xbps));
     }
 }

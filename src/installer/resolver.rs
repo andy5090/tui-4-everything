@@ -123,6 +123,7 @@ impl PackageSearch for ShellPackageSearch {
             InstallMethod::Apt => ("apt-cache", vec!["search".to_string(), hint.to_string()]),
             InstallMethod::Dnf => ("dnf", vec!["search".to_string(), hint.to_string()]),
             InstallMethod::Pacman => ("pacman", vec!["-Ss".to_string(), hint.to_string()]),
+            InstallMethod::Xbps => ("xbps-query", vec!["-Rs".to_string(), hint.to_string()]),
             InstallMethod::Snap | InstallMethod::SnapClassic => {
                 ("snap", vec!["find".to_string(), hint.to_string()])
             }
