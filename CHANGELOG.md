@@ -6,6 +6,8 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-08-15
+
 ### Changed
 
 - Detect the active install environment before exposing catalog apps, add
