@@ -123,8 +123,9 @@ fn build_task(
         check_command,
         additional_check_commands: check_commands,
         install_timeout_sec: tool.install_timeout_sec,
-        requires_privileges: !installer.system_packages.is_empty()
-            && installer.platform == crate::catalog::models::Platform::Linux,
+        requires_privileges: installer.platform == crate::catalog::models::Platform::Linux
+            && (!installer.system_packages.is_empty()
+                || installer.method == InstallMethod::AsciiCamera),
         requires_confirmation,
         expected_version,
         version_probe,
@@ -198,7 +199,22 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         InstallMethod::Tplay => materialize_tplay_command(&installer.platform),
         InstallMethod::YoutubeTui => materialize_youtube_tui_command(&installer.platform),
         InstallMethod::Yewtube => materialize_yewtube_command(&installer.platform),
-        InstallMethod::AsciiCamera => materialize_ascii_camera_command(&installer.platform),
+        InstallMethod::AsciiCamera => {
+            let launcher = materialize_ascii_camera_command(&installer.platform);
+            // InstallEnvironment clears the APT-only system package field when
+            // it normalizes this composite recipe for Void Linux.
+            if installer.platform == crate::catalog::models::Platform::Linux
+                && installer.system_packages.is_empty()
+            {
+                format!(
+                    "sudo -n xbps-install -Sy {} && {}",
+                    installer.package_hints.join(" "),
+                    launcher
+                )
+            } else {
+                launcher
+            }
+        }
         InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
         InstallMethod::Fastfetch => materialize_fastfetch_command(&installer.platform),
         InstallMethod::Script => unreachable!("script installers return before package handling"),

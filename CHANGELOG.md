@@ -6,6 +6,14 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-08-15
+
+### Fixed
+
+- Map Void Linux's `lolcat-c` package to the managed `lolcat` output filter
+  and provide ASCII Camera through an XBPS-installed `mpv` plus T4E's
+  lightweight camera launcher.
+
 ## [0.6.1] - 2026-08-15
 
 ### Changed

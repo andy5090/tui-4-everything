@@ -96,6 +96,18 @@ impl InstallEnvironment {
     }
 
     fn xbps_installer(&self, tool: &Tool, mut installer: Installer) -> Option<Installer> {
+        if tool.id == "ascii-camera" && installer.method == InstallMethod::AsciiCamera {
+            // The composite installer still needs to create T4E's launcher after
+            // XBPS installs mpv, so keep its specialized method. An empty
+            // system_packages list distinguishes this normalized XBPS recipe
+            // from the catalog's APT recipe.
+            installer.package_hints = vec!["mpv".into()];
+            installer.system_packages.clear();
+            installer.install_cmd = None;
+            installer.verified_update = None;
+            return Some(installer);
+        }
+
         if let Some(port) = xbps_port(&tool.id) {
             installer.method = InstallMethod::Xbps;
             installer.package_hints = port.packages.iter().map(|value| (*value).into()).collect();
@@ -112,6 +124,9 @@ impl InstallEnvironment {
     }
 
     fn supports_xbps(&self, tool: &Tool, installer: &Installer) -> bool {
+        if tool.id == "ascii-camera" && installer.method == InstallMethod::AsciiCamera {
+            return true;
+        }
         if xbps_port(&tool.id).is_some() {
             return true;
         }
@@ -214,6 +229,7 @@ fn xbps_port(tool_id: &str) -> Option<XbpsPort> {
         "glow" => (&["glow"], None),
         "helix" => (&["helix"], None),
         "lynx" => (&["lynx"], None),
+        "lolcat" => (&["lolcat-c"], Some("lolcat")),
         "micro" => (&["micro"], None),
         "mpv" => (&["mpv"], None),
         "ncdu" => (&["ncdu"], None),
@@ -270,6 +286,36 @@ mod tests {
         let task =
             build_install_task(cmatrix, &installer, &InstallPolicy::default()).expect("xbps task");
         assert_eq!(task.command, "sudo -n xbps-install -Sy cmatrix");
+
+        let lolcat = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "lolcat")
+            .expect("lolcat");
+        let installer = environment.installer_for(lolcat).expect("lolcat XBPS port");
+        assert_eq!(installer.method, InstallMethod::Xbps);
+        assert_eq!(installer.package_hints, ["lolcat-c"]);
+        assert_eq!(installer.executable.as_deref(), Some("lolcat"));
+        let task =
+            build_install_task(lolcat, &installer, &InstallPolicy::default()).expect("lolcat task");
+        assert_eq!(task.command, "sudo -n xbps-install -Sy lolcat-c");
+        assert_eq!(task.check_command.as_deref(), Some("lolcat"));
+
+        let ascii_camera = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "ascii-camera")
+            .expect("ascii-camera");
+        let installer = environment
+            .installer_for(ascii_camera)
+            .expect("ascii-camera XBPS port");
+        assert_eq!(installer.method, InstallMethod::AsciiCamera);
+        assert!(installer.system_packages.is_empty());
+        let task = build_install_task(ascii_camera, &installer, &InstallPolicy::default())
+            .expect("ascii-camera task");
+        assert!(task.command.starts_with("sudo -n xbps-install -Sy mpv && "));
+        assert!(task.command.contains("t4e-ascii-camera"));
+        assert!(task.requires_privileges);
 
         let youtube = catalog
             .tools
