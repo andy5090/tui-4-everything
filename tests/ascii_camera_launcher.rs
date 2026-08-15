@@ -9,6 +9,7 @@ mod unix {
     use t4e::catalog::loader::load_catalog;
     use t4e::catalog::models::Platform;
     use t4e::installer::engine::{InstallPolicy, build_install_task};
+    use t4e::installer::environment::InstallEnvironment;
 
     #[test]
     fn managed_ascii_camera_launcher_maps_device_and_forwards_render_options() {
@@ -134,6 +135,48 @@ mod unix {
             fs::read_to_string(root.join("img2txt-args")).expect("img2txt arguments recorded");
         assert!(args.contains("--format=utf8\n"));
         assert!(args.contains("--dither=ordered4\n"));
+
+        fs::remove_dir_all(root).expect("test directory removed");
+    }
+
+    #[test]
+    fn void_launcher_refresh_skips_xbps_when_dependencies_are_installed() {
+        let root = temporary_directory();
+        let fake_bin = root.join("bin");
+        fs::create_dir_all(&fake_bin).expect("fake bin created");
+        write_executable(&fake_bin.join("xbps-query"), "#!/bin/sh\nexit 0\n");
+        write_executable(
+            &fake_bin.join("sudo"),
+            "#!/bin/sh\nprintf 'unexpected sudo invocation\\n' > \"$HOME/sudo-invoked\"\nexit 91\n",
+        );
+
+        let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+        let tool = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "ascii-camera")
+            .expect("ASCII Camera exists");
+        let environment =
+            InstallEnvironment::with_commands(Platform::Linux, "i686", ["xbps-install"]);
+        let installer = environment
+            .installer_for(tool)
+            .expect("Void ASCII Camera installer exists");
+        let task = build_install_task(tool, &installer, &InstallPolicy::default())
+            .expect("install task builds");
+        let path = format!("{}:/usr/bin:/bin", fake_bin.display());
+
+        let install = Command::new("sh")
+            .arg("-c")
+            .arg(&task.command)
+            .env("HOME", &root)
+            .env("PATH", &path)
+            .status()
+            .expect("installer runs");
+
+        assert!(install.success());
+        assert!(!root.join("sudo-invoked").exists());
+        assert!(root.join(".local/bin/t4e-ascii-camera").exists());
+        assert!(root.join(".local/bin/t4e-ascii-camera-v3").exists());
 
         fs::remove_dir_all(root).expect("test directory removed");
     }
