@@ -6,6 +6,14 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.6.4] - 2026-08-15
+
+### Fixed
+
+- Skip XBPS package transactions for already-installed ASCII Camera
+  dependencies so its managed launcher can be refreshed even when unrelated
+  installed packages have stale shared-library metadata.
+
 ## [0.6.3] - 2026-08-15
 
 ### Fixed

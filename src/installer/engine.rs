@@ -206,10 +206,14 @@ fn materialize_command(installer: &Installer) -> Result<String> {
             if installer.platform == crate::catalog::models::Platform::Linux
                 && installer.system_packages.is_empty()
             {
+                let packages = installer.package_hints.join(" ");
                 format!(
-                    "sudo -n xbps-install -Sy {} && {}",
-                    installer.package_hints.join(" "),
-                    launcher
+                    "missing_packages=; for package in {packages}; do \
+                     if ! xbps-query \"$package\" >/dev/null 2>&1; then \
+                     missing_packages=\"$missing_packages $package\"; fi; done; \
+                     if [ -n \"$missing_packages\" ]; then \
+                     sudo -n xbps-install -Sy $missing_packages || exit $?; fi; \
+                     {launcher}"
                 )
             } else {
                 launcher

@@ -316,8 +316,12 @@ mod tests {
             .expect("ascii-camera task");
         assert!(
             task.command
-                .starts_with("sudo -n xbps-install -Sy mpv ffmpeg libcaca && ")
+                .starts_with("missing_packages=; for package in mpv ffmpeg libcaca; do ")
         );
+        assert!(task.command.contains("xbps-query \"$package\""));
+        assert!(task.command.contains(
+            "if [ -n \"$missing_packages\" ]; then sudo -n xbps-install -Sy $missing_packages"
+        ));
         assert!(task.command.contains("t4e-ascii-camera"));
         assert!(task.requires_privileges);
 
