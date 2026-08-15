@@ -6,6 +6,14 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-08-15
+
+### Fixed
+
+- Provide a managed ffmpeg plus libcaca ASCII Camera renderer when mpv lacks
+  its optional caca output, refresh existing managed launchers, and record app
+  launch lifecycle messages in Activity.
+
 ## [0.6.2] - 2026-08-15
 
 ### Fixed

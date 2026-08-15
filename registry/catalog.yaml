@@ -44,7 +44,7 @@ tools:
   - id: ascii-camera
     name: "ASCII Camera"
     description: "Render a live camera feed as colored terminal character art without OpenCV."
-    key_hints: ["q quit", "d dithering (caca)", "c color mode (caca)"]
+    key_hints: ["q quit (mpv)", "T4E close (managed caca)"]
     category: entertainment
     tags: []
     audience: general
@@ -74,17 +74,22 @@ tools:
         flag: "--demuxer-lavf-o"
         values: ["framerate=15", "framerate=24", "framerate=30"]
         default_value: "framerate=30"
+      - id: caca-dither
+        label: "Caca dithering"
+        flag: "--caca-dither"
+        values: ["fstein", "ordered2", "ordered4", "ordered8", "random", "none"]
+        default_value: "fstein"
     checks:
-      - which: "t4e-ascii-camera-v2"
+      - which: "t4e-ascii-camera-v3"
     installers:
       - platform: macos
         method: ascii_camera
-        package_hints: ["mpv"]
+        package_hints: ["mpv", "ffmpeg", "libcaca"]
         executable: "t4e-ascii-camera"
       - platform: linux
         method: ascii_camera
-        package_hints: ["mpv"]
-        system_packages: ["mpv"]
+        package_hints: ["mpv", "ffmpeg", "caca-utils"]
+        system_packages: ["mpv", "ffmpeg", "caca-utils"]
         executable: "t4e-ascii-camera"
       - platform: termux
         method: ascii_camera

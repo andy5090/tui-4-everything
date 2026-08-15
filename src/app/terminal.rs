@@ -237,6 +237,8 @@ fn process_effects(
                 }
             }
             AppEffect::LaunchTool(request) => {
+                app.record_log(format!("app: launch requested {}", request.tool_id));
+                record_ascii_camera_renderer_fallback(app, &request.tool_id, &request.command);
                 let executable = request
                     .command
                     .split_whitespace()
@@ -248,10 +250,9 @@ fn process_effects(
                     executables.push("lolcat".to_string());
                 }
                 match tmux.preflight(&executables) {
-                    Ok(preflight) if !preflight.tmux_available => app.apply_workspace_error(
-                        "app launch",
-                        &anyhow::anyhow!("tmux is not installed"),
-                    ),
+                    Ok(preflight) if !preflight.tmux_available => {
+                        app.apply_app_error("app launch", &anyhow::anyhow!("tmux is not installed"))
+                    }
                     Ok(preflight) if !preflight.missing_commands.is_empty() => {
                         if preflight
                             .missing_commands
@@ -279,20 +280,27 @@ fn process_effects(
                             request.keep_open,
                             request.output_filter,
                         ) {
-                            Ok(_) => match tmux.list_apps("t4e-apps") {
-                                Ok(apps) => {
-                                    app.open_app_view("t4e-apps".to_string(), apps);
-                                    app.focus_app(&request.tool_id);
+                            Ok(_) => {
+                                app.record_log(format!("app: launched {}", request.tool_id));
+                                match tmux.list_apps("t4e-apps") {
+                                    Ok(apps) => {
+                                        app.open_app_view("t4e-apps".to_string(), apps);
+                                        app.focus_app(&request.tool_id);
+                                    }
+                                    Err(error) => app.apply_app_error("open app", &error),
                                 }
-                                Err(error) => app.apply_workspace_error("open app", &error),
-                            },
-                            Err(error) => app.apply_workspace_error("app launch", &error),
+                            }
+                            Err(error) => app.apply_app_error("app launch", &error),
                         }
                     }
-                    Err(error) => app.apply_workspace_error("app preflight", &error),
+                    Err(error) => app.apply_app_error("app preflight", &error),
                 }
             }
             AppEffect::LaunchPipeline(request) => {
+                app.record_log(format!(
+                    "app: pipeline launch requested {}",
+                    request.pipeline_id
+                ));
                 let executables = request
                     .stages
                     .iter()
@@ -306,12 +314,12 @@ fn process_effects(
                     })
                     .collect::<Vec<_>>();
                 match tmux.preflight(&executables) {
-                    Ok(preflight) if !preflight.tmux_available => app.apply_workspace_error(
+                    Ok(preflight) if !preflight.tmux_available => app.apply_app_error(
                         "pipeline launch",
                         &anyhow::anyhow!("tmux is not installed"),
                     ),
                     Ok(preflight) if !preflight.missing_commands.is_empty() => {
-                        app.apply_workspace_error(
+                        app.apply_app_error(
                             "pipeline launch",
                             &anyhow::anyhow!(
                                 "pipeline apps must be installed first: {}",
@@ -335,17 +343,23 @@ fn process_effects(
                             height,
                             request.keep_open,
                         ) {
-                            Ok(_) => match tmux.list_apps("t4e-apps") {
-                                Ok(apps) => {
-                                    app.open_app_view("t4e-apps".to_string(), apps);
-                                    app.focus_app(&request.pipeline_id);
+                            Ok(_) => {
+                                app.record_log(format!(
+                                    "app: pipeline launched {}",
+                                    request.pipeline_id
+                                ));
+                                match tmux.list_apps("t4e-apps") {
+                                    Ok(apps) => {
+                                        app.open_app_view("t4e-apps".to_string(), apps);
+                                        app.focus_app(&request.pipeline_id);
+                                    }
+                                    Err(error) => app.apply_app_error("open app", &error),
                                 }
-                                Err(error) => app.apply_workspace_error("open app", &error),
-                            },
-                            Err(error) => app.apply_workspace_error("pipeline launch", &error),
+                            }
+                            Err(error) => app.apply_app_error("pipeline launch", &error),
                         }
                     }
-                    Err(error) => app.apply_workspace_error("pipeline preflight", &error),
+                    Err(error) => app.apply_app_error("pipeline preflight", &error),
                 }
             }
             AppEffect::LaunchWorkspace(request) => {
@@ -392,6 +406,7 @@ fn process_effects(
                 if let Err(error) = tmux.close_app(&pane_id) {
                     app.apply_app_view_error(&error);
                 } else {
+                    app.record_log(format!("app: closed pane {pane_id}"));
                     reload_app_view(app, tmux);
                 }
             }
@@ -700,6 +715,35 @@ fn reload_app_view(app: &mut AppState, tmux: &TmuxRuntime<SystemTmuxRunner>) {
     }
 }
 
+fn record_ascii_camera_renderer_fallback(app: &mut AppState, tool_id: &str, command: &str) {
+    if tool_id != "ascii-camera" || requested_renderer(command) != Some("caca") {
+        return;
+    }
+    let Ok(output) = Command::new("mpv").arg("--vo=help").output() else {
+        return;
+    };
+    let help = String::from_utf8_lossy(&output.stdout);
+    if !mpv_supports_renderer(&help, "caca") {
+        app.record_log("app: mpv caca unavailable; using managed libcaca renderer");
+    }
+}
+
+fn requested_renderer(command: &str) -> Option<&str> {
+    let tokens = command.split_whitespace().collect::<Vec<_>>();
+    tokens.iter().enumerate().find_map(|(index, token)| {
+        token.strip_prefix("--vo=").or_else(|| {
+            (*token == "--vo")
+                .then(|| tokens.get(index + 1).copied())
+                .flatten()
+        })
+    })
+}
+
+fn mpv_supports_renderer(help: &str, renderer: &str) -> bool {
+    help.lines()
+        .any(|line| line.split_whitespace().next() == Some(renderer))
+}
+
 fn install_method_requires_privileges(method: &InstallMethod) -> bool {
     matches!(
         method,
@@ -870,8 +914,8 @@ impl Drop for TerminalSession {
 #[cfg(test)]
 mod tests {
     use super::{
-        frame_poll_interval, install_method_requires_privileges,
-        uninstall_method_requires_privileges,
+        frame_poll_interval, install_method_requires_privileges, mpv_supports_renderer,
+        requested_renderer, uninstall_method_requires_privileges,
     };
     use crate::app::events::Screen;
     use crate::catalog::models::InstallMethod;
@@ -925,5 +969,19 @@ mod tests {
             &InstallMethod::Fastfetch
         ));
         assert!(uninstall_method_requires_privileges(&InstallMethod::Xbps));
+    }
+
+    #[test]
+    fn ascii_camera_renderer_support_is_detected_from_command_and_mpv_help() {
+        assert_eq!(
+            requested_renderer("t4e-ascii-camera --device 0 --vo caca"),
+            Some("caca")
+        );
+        assert_eq!(requested_renderer("t4e-ascii-camera --vo=tct"), Some("tct"));
+        assert_eq!(requested_renderer("t4e-ascii-camera"), None);
+
+        let help = "Available video outputs:\n  tct true-color terminals\n";
+        assert!(mpv_supports_renderer(help, "tct"));
+        assert!(!mpv_supports_renderer(help, "caca"));
     }
 }

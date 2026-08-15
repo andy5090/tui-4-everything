@@ -1992,6 +1992,18 @@ fn activity_supports_arrow_and_page_navigation_with_timestamped_entries() {
 }
 
 #[test]
+fn app_execution_errors_are_recorded_in_activity() {
+    let mut app = app();
+    app.apply_app_error("launch", &anyhow::anyhow!("renderer unavailable"));
+
+    assert_eq!(
+        app.logs.last().and_then(|entry| entry.split("] ").nth(1)),
+        Some("app: launch failed: renderer unavailable")
+    );
+    assert_eq!(app.status, "App launch failed: renderer unavailable");
+}
+
+#[test]
 fn catalog_installs_current_app_and_tracks_favorites() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));

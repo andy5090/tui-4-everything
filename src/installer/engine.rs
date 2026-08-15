@@ -481,13 +481,13 @@ fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform)
             "'done' ",
             "> \"$HOME/.local/bin/t4e-ascii-camera\" && ",
             "chmod +x \"$HOME/.local/bin/t4e-ascii-camera\" && ",
-            "ln -sf t4e-ascii-camera \"$HOME/.local/bin/t4e-ascii-camera-v2\""
+            "ln -sf t4e-ascii-camera \"$HOME/.local/bin/t4e-ascii-camera-v3\""
         )
         .to_string();
     }
     let install = match platform {
         crate::catalog::models::Platform::Linux => "",
-        crate::catalog::models::Platform::Macos => "brew install mpv && ",
+        crate::catalog::models::Platform::Macos => "brew install mpv ffmpeg libcaca && ",
         crate::catalog::models::Platform::Termux => unreachable!(),
     };
     format!(
@@ -497,12 +497,14 @@ fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform)
          'renderer=tct' \
          'mirror=0' \
          'lavf_options=' \
+         'caca_dither=fstein' \
          'while [ \"$#\" -gt 0 ]; do' \
          '  case \"$1\" in' \
          '    --device) device=\"${{2:-0}}\"; shift 2 ;;' \
          '    --vo) renderer=\"${{2:-tct}}\"; shift 2 ;;' \
          '    --vf=hflip) mirror=1; shift ;;' \
          '    --demuxer-lavf-o) lavf_options=\"${{2:-}}\"; shift 2 ;;' \
+         '    --caca-dither) caca_dither=\"${{2:-fstein}}\"; shift 2 ;;' \
          '    *) printf \"Unknown ASCII Camera option: %s\\n\" \"$1\" >&2; exit 2 ;;' \
          '  esac' \
          'done' \
@@ -510,13 +512,48 @@ fn materialize_ascii_camera_command(platform: &crate::catalog::models::Platform)
          '  Darwin) input=\"av://avfoundation:${{device}}:none\" ;;' \
          '  *) input=\"av://v4l2:/dev/video${{device}}\" ;;' \
          'esac' \
+         'supports_renderer() {{ mpv --vo=help 2>/dev/null | grep -Eq \"^[[:space:]]*$1[[:space:]]\"; }}' \
+         'play_managed_caca() {{' \
+         '  command -v ffmpeg >/dev/null 2>&1 || {{ printf \"Caca rendering needs ffmpeg.\\n\" >&2; return 1; }}' \
+         '  command -v img2txt >/dev/null 2>&1 || {{ printf \"Caca rendering needs libcaca img2txt.\\n\" >&2; return 1; }}' \
+         '  case \"$caca_dither\" in fstein|ordered2|ordered4|ordered8|random|none) ;; *) printf \"Unsupported caca dither: %s\\n\" \"$caca_dither\" >&2; return 2 ;; esac' \
+         '  capture_fps=\"${{lavf_options#framerate=}}\"' \
+         '  case \"$capture_fps\" in \"\"|*[!0-9]*) capture_fps=30 ;; esac' \
+         '  frame_rate=$capture_fps; [ \"$frame_rate\" -gt 10 ] && frame_rate=10' \
+         '  work_dir=$(mktemp -d \"${{TMPDIR:-/tmp}}/t4e-ascii-caca.XXXXXX\") || return 1' \
+         '  frame=\"$work_dir/frame.ppm\"' \
+         '  video_filter=\"fps=$frame_rate\"' \
+         '  [ \"$mirror\" -eq 1 ] && video_filter=\"hflip,$video_filter\"' \
+         '  producer_pid=' \
+         '  cleanup_caca() {{ [ -n \"$producer_pid\" ] && kill \"$producer_pid\" 2>/dev/null || true; [ -n \"$producer_pid\" ] && wait \"$producer_pid\" 2>/dev/null || true; printf \"\\033[?25h\\033[0m\\n\"; rm -rf \"$work_dir\"; }}' \
+         '  trap cleanup_caca EXIT HUP INT TERM' \
+         '  case \"$(uname -s)\" in' \
+         '    Darwin) ffmpeg -hide_banner -loglevel error -f avfoundation -framerate \"$capture_fps\" -i \"${{device}}:none\" -an -vf \"$video_filter\" -update 1 -atomic_writing 1 \"$frame\" & ;;' \
+         '    *) ffmpeg -hide_banner -loglevel error -f video4linux2 -framerate \"$capture_fps\" -i \"/dev/video${{device}}\" -an -vf \"$video_filter\" -update 1 -atomic_writing 1 \"$frame\" & ;;' \
+         '  esac' \
+         '  producer_pid=$!' \
+         '  printf \"\\033[2J\\033[H\\033[?25l\"' \
+         '  while kill -0 \"$producer_pid\" 2>/dev/null || [ -s \"$frame\" ]; do' \
+         '    if [ -s \"$frame\" ]; then' \
+         '      columns=$(tput cols 2>/dev/null || printf 80)' \
+         '      rows=$(tput lines 2>/dev/null || printf 24); [ \"$rows\" -gt 1 ] && rows=$((rows - 1))' \
+         '      printf \"\\033[H\"' \
+         '      img2txt --width=\"$columns\" --height=\"$rows\" --format=utf8 --dither=\"$caca_dither\" \"$frame\" || return 1' \
+         '      rm -f \"$frame\"' \
+         '    fi' \
+         '    sleep 0.05' \
+         '  done' \
+         '  wait \"$producer_pid\"' \
+         '}}' \
+         'if [ \"$renderer\" = caca ] && ! supports_renderer caca; then play_managed_caca; exit $?; fi' \
+         'if ! supports_renderer \"$renderer\"; then printf \"mpv does not provide the %s renderer.\\n\" \"$renderer\" >&2; exit 1; fi' \
          'set --' \
          'if [ \"$mirror\" -eq 1 ]; then set -- \"$@\" \"--vf=hflip\"; fi' \
          'if [ -n \"$lavf_options\" ]; then set -- \"$@\" \"--demuxer-lavf-o=$lavf_options\"; fi' \
          'exec mpv --profile=low-latency --no-audio --untimed \"--vo=$renderer\" \"$@\" \"$input\"' \
          > \"$HOME/.local/bin/t4e-ascii-camera\" && \
          chmod +x \"$HOME/.local/bin/t4e-ascii-camera\" && \
-         ln -sf t4e-ascii-camera \"$HOME/.local/bin/t4e-ascii-camera-v2\""
+         ln -sf t4e-ascii-camera \"$HOME/.local/bin/t4e-ascii-camera-v3\""
     )
 }
 

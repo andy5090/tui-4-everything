@@ -22,7 +22,7 @@ mod unix {
         write_executable(&fake_bin.join("apt-get"), "#!/bin/sh\nexit 0\n");
         write_executable(
             &fake_bin.join("mpv"),
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/mpv-args\"\n",
+            "#!/bin/sh\nif [ \"$1\" = '--vo=help' ]; then printf '  tct true-color\\n  caca libcaca\\n'; exit 0; fi\nprintf '%s\\n' \"$@\" > \"$HOME/mpv-args\"\n",
         );
 
         let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
@@ -69,6 +69,71 @@ mod unix {
             assert!(args.ends_with("av://v4l2:/dev/video2\n"));
         }
         assert!(!args.contains("--device"));
+
+        fs::remove_dir_all(root).expect("test directory removed");
+    }
+
+    #[test]
+    fn managed_ascii_camera_uses_libcaca_when_mpv_lacks_caca() {
+        let root = temporary_directory();
+        let fake_bin = root.join("bin");
+        fs::create_dir_all(&fake_bin).expect("fake bin created");
+        write_executable(
+            &fake_bin.join("sudo"),
+            "#!/bin/sh\n[ \"$1\" = '-n' ] && shift\nexec \"$@\"\n",
+        );
+        write_executable(&fake_bin.join("apt-get"), "#!/bin/sh\nexit 0\n");
+        write_executable(
+            &fake_bin.join("mpv"),
+            "#!/bin/sh\nif [ \"$1\" = '--vo=help' ]; then printf '  tct true-color\\n'; exit 0; fi\nprintf '%s\\n' \"$@\" > \"$HOME/mpv-args\"\n",
+        );
+        write_executable(
+            &fake_bin.join("ffmpeg"),
+            "#!/bin/sh\nfor arg in \"$@\"; do frame=$arg; done\nprintf 'ppm' > \"$frame\"\n",
+        );
+        write_executable(
+            &fake_bin.join("img2txt"),
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$HOME/img2txt-args\"\nprintf 'managed-caca-frame\\n'\n",
+        );
+
+        let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+        let tool = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "ascii-camera")
+            .expect("ASCII Camera exists");
+        let installer = tool
+            .installers
+            .iter()
+            .find(|installer| installer.platform == Platform::Linux)
+            .expect("Linux installer exists");
+        let task = build_install_task(tool, installer, &InstallPolicy::default())
+            .expect("install task builds");
+        let path = format!("{}:/usr/bin:/bin", fake_bin.display());
+
+        let install = Command::new("sh")
+            .arg("-c")
+            .arg(&task.command)
+            .env("HOME", &root)
+            .env("PATH", &path)
+            .status()
+            .expect("installer runs");
+        assert!(install.success());
+
+        let run = Command::new(root.join(".local/bin/t4e-ascii-camera"))
+            .args(["--device", "0", "--vo", "caca", "--caca-dither", "ordered4"])
+            .env("HOME", &root)
+            .env("PATH", &path)
+            .output()
+            .expect("launcher runs");
+        assert!(run.status.success());
+        assert!(String::from_utf8_lossy(&run.stdout).contains("managed-caca-frame"));
+        assert!(!root.join("mpv-args").exists());
+
+        let args =
+            fs::read_to_string(root.join("img2txt-args")).expect("img2txt arguments recorded");
+        assert!(args.contains("--format=utf8\n"));
+        assert!(args.contains("--dither=ordered4\n"));
 
         fs::remove_dir_all(root).expect("test directory removed");
     }
@@ -143,7 +208,7 @@ mod unix {
         assert!(chafa_args.contains("--colors\n16\n"));
         assert!(chafa_args.contains("--size\n90x29\n"));
         assert!(!task.requires_privileges);
-        assert_eq!(task.check_command.as_deref(), Some("t4e-ascii-camera-v2"));
+        assert_eq!(task.check_command.as_deref(), Some("t4e-ascii-camera-v3"));
 
         fs::remove_dir_all(root).expect("test directory removed");
     }

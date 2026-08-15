@@ -98,10 +98,11 @@ impl InstallEnvironment {
     fn xbps_installer(&self, tool: &Tool, mut installer: Installer) -> Option<Installer> {
         if tool.id == "ascii-camera" && installer.method == InstallMethod::AsciiCamera {
             // The composite installer still needs to create T4E's launcher after
-            // XBPS installs mpv, so keep its specialized method. An empty
+            // XBPS installs its runtime dependencies, so keep the specialized
+            // method. An empty
             // system_packages list distinguishes this normalized XBPS recipe
             // from the catalog's APT recipe.
-            installer.package_hints = vec!["mpv".into()];
+            installer.package_hints = vec!["mpv".into(), "ffmpeg".into(), "libcaca".into()];
             installer.system_packages.clear();
             installer.install_cmd = None;
             installer.verified_update = None;
@@ -313,7 +314,10 @@ mod tests {
         assert!(installer.system_packages.is_empty());
         let task = build_install_task(ascii_camera, &installer, &InstallPolicy::default())
             .expect("ascii-camera task");
-        assert!(task.command.starts_with("sudo -n xbps-install -Sy mpv && "));
+        assert!(
+            task.command
+                .starts_with("sudo -n xbps-install -Sy mpv ffmpeg libcaca && ")
+        );
         assert!(task.command.contains("t4e-ascii-camera"));
         assert!(task.requires_privileges);
 

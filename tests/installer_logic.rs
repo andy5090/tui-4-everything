@@ -247,7 +247,7 @@ fn ascii_camera_install_reuses_mpv_without_opencv() {
             custom: None,
         },
         Check {
-            which: Some("t4e-ascii-camera-v2".to_string()),
+            which: Some("t4e-ascii-camera-v3".to_string()),
             version: None,
             custom: None,
         },
@@ -273,7 +273,7 @@ fn ascii_camera_install_reuses_mpv_without_opencv() {
     assert!(task.command.contains("\"--vo=$renderer\""));
     assert!(!task.command.to_ascii_lowercase().contains("opencv"));
     assert_eq!(task.check_command.as_deref(), Some("mpv"));
-    assert_eq!(task.additional_check_commands, ["t4e-ascii-camera-v2"]);
+    assert_eq!(task.additional_check_commands, ["t4e-ascii-camera-v3"]);
     assert!(task.requires_privileges);
     assert!(!task.requires_confirmation);
 }

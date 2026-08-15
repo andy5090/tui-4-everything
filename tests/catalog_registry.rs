@@ -91,7 +91,7 @@ fn registry_loads_and_validates() {
     assert!(ascii_camera.installers.iter().any(|installer| {
         installer.platform == Platform::Linux
             && installer.method == InstallMethod::AsciiCamera
-            && installer.system_packages == ["mpv"]
+            && installer.system_packages == ["mpv", "ffmpeg", "caca-utils"]
     }));
     assert!(ascii_camera.installers.iter().any(|installer| {
         installer.platform == Platform::Termux

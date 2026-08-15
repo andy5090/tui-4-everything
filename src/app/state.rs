@@ -1394,6 +1394,9 @@ impl AppState {
 
     pub fn apply_app_view_error(&mut self, error: &anyhow::Error) {
         self.return_after_app_close = false;
+        self.logs
+            .push(timestamp_log(format!("app: view failed: {error}")));
+        self.trim_logs();
         self.leave_app_view(&format!("App view closed: {error}"));
     }
 
@@ -1410,6 +1413,13 @@ impl AppState {
         self.logs.push(timestamp_log(format!(
             "workspace: {action} failed: {error}"
         )));
+        self.trim_logs();
+    }
+
+    pub fn apply_app_error(&mut self, action: &str, error: &anyhow::Error) {
+        self.status = format!("App {action} failed: {error}");
+        self.logs
+            .push(timestamp_log(format!("app: {action} failed: {error}")));
         self.trim_logs();
     }
 
@@ -3576,7 +3586,7 @@ fn uninstall_command(
         InstallMethod::YoutubeTui => "rm -f \"$HOME/.local/bin/t4e-youtube-tui\" \"$HOME/.local/bin/t4e-youtube-tui-v2\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/youtube-tui\" && (cargo uninstall youtube-tui || ! command -v youtube-tui >/dev/null 2>&1)".to_string(),
         InstallMethod::Yewtube => "rm -f \"$HOME/.local/bin/t4e-yewtube\" && if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq yewtube; then pipx uninstall yewtube; fi".to_string(),
         InstallMethod::AsciiCamera => {
-            "rm -f \"$HOME/.local/bin/t4e-ascii-camera\" \"$HOME/.local/bin/t4e-ascii-camera-v2\""
+            "rm -f \"$HOME/.local/bin/t4e-ascii-camera\" \"$HOME/.local/bin/t4e-ascii-camera-v2\" \"$HOME/.local/bin/t4e-ascii-camera-v3\""
                 .to_string()
         }
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
