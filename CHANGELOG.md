@@ -6,6 +6,8 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-24
+
 ### Added
 
 - Add explicit Termux install plans for the native package catalog, including
