@@ -30,6 +30,30 @@ impl TmuxRunner for MockRunner {
     }
 }
 
+struct InputPreparingRunner {
+    outputs: Mutex<VecDeque<TmuxOutput>>,
+    prepared: Arc<Mutex<Vec<String>>>,
+}
+
+impl TmuxRunner for InputPreparingRunner {
+    fn run(&self, _args: &[String]) -> anyhow::Result<TmuxOutput> {
+        Ok(self
+            .outputs
+            .lock()
+            .expect("outputs lock")
+            .pop_front()
+            .expect("mock output"))
+    }
+
+    fn prepare_app_input(&self, pane_id: &str) -> anyhow::Result<()> {
+        self.prepared
+            .lock()
+            .expect("prepared lock")
+            .push(pane_id.to_string());
+        Ok(())
+    }
+}
+
 fn output(success: bool, stdout: &str, stderr: &str) -> TmuxOutput {
     TmuxOutput {
         success,
@@ -599,6 +623,30 @@ fn embedded_app_controls_use_structured_tmux_arguments() {
             .any(|args| { args == &["resize-window", "-t", "%3", "-x", "100", "-y", "30"] })
     );
     assert!(!calls.iter().flatten().any(|arg| arg == "sh" || arg == "-c"));
+}
+
+#[test]
+fn spotatui_input_runs_terminal_preparation_hook() {
+    let prepared = Arc::new(Mutex::new(Vec::new()));
+    let runner = InputPreparingRunner {
+        outputs: Mutex::new(VecDeque::from([
+            output(true, "t4e-apps\t0\t1\tapp-launcher\n", ""),
+            output(true, "%3\t0\tspotatui\t0\tspotatui\t0\n", ""),
+            output(true, "", ""),
+            output(true, "", ""),
+        ])),
+        prepared: Arc::clone(&prepared),
+    };
+    let runtime = TmuxRuntime::new(runner);
+
+    runtime.list_apps("t4e-apps").expect("apps list");
+    runtime.send_app_text("%3", "query").expect("send text");
+    runtime.send_app_key("%3", "Down").expect("send key");
+
+    assert_eq!(
+        prepared.lock().expect("prepared lock").as_slice(),
+        ["%3", "%3"]
+    );
 }
 
 #[test]

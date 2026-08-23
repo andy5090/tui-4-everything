@@ -6,6 +6,14 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.6.5] - 2026-08-23
+
+### Fixed
+
+- Restore Spotatui's raw terminal mode before forwarding embedded input when
+  its full-screen interface unexpectedly returns to canonical echo mode,
+  preventing navigation keys from appearing as literal escape sequences.
+
 ## [0.6.4] - 2026-08-15
 
 ### Fixed

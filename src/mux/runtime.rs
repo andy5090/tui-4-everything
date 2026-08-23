@@ -1,4 +1,16 @@
 use std::collections::HashMap;
+#[cfg(unix)]
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::io;
+#[cfg(unix)]
+use std::mem::MaybeUninit;
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
+#[cfg(unix)]
+use std::os::unix::fs::{FileTypeExt, OpenOptionsExt};
+#[cfg(unix)]
+use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
 
@@ -20,6 +32,10 @@ pub struct TmuxOutput {
 
 pub trait TmuxRunner: Send + Sync + 'static {
     fn run(&self, args: &[String]) -> Result<TmuxOutput>;
+
+    fn prepare_app_input(&self, _pane_id: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -36,6 +52,29 @@ impl TmuxRunner for SystemTmuxRunner {
             stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         })
+    }
+
+    fn prepare_app_input(&self, pane_id: &str) -> Result<()> {
+        // Spotatui can remain in its alternate screen after its terminal has
+        // unexpectedly returned to canonical mode. Crossterm then receives
+        // tmux key sequences as echoed text instead of input events.
+        let output = self.run(&strings([
+            "display-message",
+            "-p",
+            "-t",
+            pane_id,
+            "#{pane_current_command}\t#{alternate_on}\t#{pane_tty}",
+        ]))?;
+        ensure_success("inspect app input mode", &output)?;
+        let Some(tty_path) = spotatui_raw_mode_target(output.stdout.trim_end_matches('\n'))? else {
+            return Ok(());
+        };
+
+        #[cfg(unix)]
+        repair_terminal_raw_mode(Path::new(tty_path))
+            .with_context(|| format!("failed to restore Spotatui input mode on {tty_path}"))?;
+
+        Ok(())
     }
 }
 
@@ -76,9 +115,15 @@ pub struct ManagedApp {
     pub process: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ManagedPane {
+    session_name: String,
+    app_id: String,
+}
+
 pub struct TmuxRuntime<R = SystemTmuxRunner> {
     runner: R,
-    managed_panes: Mutex<HashMap<String, String>>,
+    managed_panes: Mutex<HashMap<String, ManagedPane>>,
 }
 
 impl Default for TmuxRuntime<SystemTmuxRunner> {
@@ -593,7 +638,7 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
         self.managed_panes
             .lock()
             .map_err(|_| anyhow::anyhow!("managed pane registry is unavailable"))?
-            .retain(|_, session| session != session_name);
+            .retain(|_, pane| pane.session_name != session_name);
         Ok(())
     }
 
@@ -627,12 +672,16 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
             .managed_panes
             .lock()
             .map_err(|_| anyhow::anyhow!("managed pane registry is unavailable"))?;
-        managed_panes.retain(|_, session| session != session_name);
-        managed_panes.extend(
-            apps.iter()
-                .filter(|(_, dead)| !dead)
-                .map(|(app, _)| (app.pane_id.clone(), session_name.to_string())),
-        );
+        managed_panes.retain(|_, pane| pane.session_name != session_name);
+        managed_panes.extend(apps.iter().filter(|(_, dead)| !dead).map(|(app, _)| {
+            (
+                app.pane_id.clone(),
+                ManagedPane {
+                    session_name: session_name.to_string(),
+                    app_id: app.window_name.clone(),
+                },
+            )
+        }));
         Ok(apps)
     }
 
@@ -678,9 +727,12 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
     }
 
     pub fn send_app_text(&self, pane_id: &str, text: &str) -> Result<()> {
-        self.ensure_managed_pane(pane_id)?;
+        let app_id = self.managed_app_id(pane_id)?;
         if text.chars().any(|ch| ch.is_control()) {
             bail!("app text contains a control character");
+        }
+        if app_id == "spotatui" {
+            self.runner.prepare_app_input(pane_id)?;
         }
         let output = self
             .runner
@@ -689,13 +741,16 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
     }
 
     pub fn send_app_key(&self, pane_id: &str, key: &str) -> Result<()> {
-        self.ensure_managed_pane(pane_id)?;
+        let app_id = self.managed_app_id(pane_id)?;
         if key.is_empty()
             || !key
                 .chars()
                 .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
         {
             bail!("invalid app key: {key}");
+        }
+        if app_id == "spotatui" {
+            self.runner.prepare_app_input(pane_id)?;
         }
         let output = self
             .runner
@@ -727,17 +782,17 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
     }
 
     fn ensure_managed_pane(&self, pane_id: &str) -> Result<()> {
+        self.managed_app_id(pane_id).map(|_| ())
+    }
+
+    fn managed_app_id(&self, pane_id: &str) -> Result<String> {
         validate_pane_id(pane_id)?;
-        if self
-            .managed_panes
+        self.managed_panes
             .lock()
             .map_err(|_| anyhow::anyhow!("managed pane registry is unavailable"))?
-            .contains_key(pane_id)
-        {
-            Ok(())
-        } else {
-            bail!("pane {pane_id} is not managed by T4E")
-        }
+            .get(pane_id)
+            .map(|pane| pane.app_id.clone())
+            .ok_or_else(|| anyhow::anyhow!("pane {pane_id} is not managed by T4E"))
     }
 
     pub fn snapshot(&self, workspace: &Workspace) -> Result<ReproSnapshot> {
@@ -858,6 +913,67 @@ fn split_fields<'a>(line: &'a str, count: usize, label: &str) -> Result<Vec<&'a 
         bail!("invalid tmux {label} output: {line}");
     }
     Ok(fields)
+}
+
+fn spotatui_raw_mode_target(line: &str) -> Result<Option<&str>> {
+    let fields = split_fields(line, 3, "app input mode")?;
+    if fields[0] != "spotatui" || fields[1] != "1" {
+        return Ok(None);
+    }
+    if fields[2].is_empty() {
+        bail!("Spotatui pane has no terminal device");
+    }
+    Ok(Some(fields[2]))
+}
+
+#[cfg(unix)]
+fn repair_terminal_raw_mode(path: &Path) -> Result<bool> {
+    let supported_path = path.to_str().is_some_and(|path| {
+        path.strip_prefix("/dev/pts/").is_some_and(|suffix| {
+            !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_digit())
+        }) || path.strip_prefix("/dev/ttys").is_some_and(|suffix| {
+            !suffix.is_empty() && suffix.chars().all(|ch| ch.is_ascii_alphanumeric())
+        })
+    });
+    if !supported_path {
+        bail!("unsupported terminal device: {}", path.display());
+    }
+
+    let terminal = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(libc::O_CLOEXEC | libc::O_NOCTTY | libc::O_NOFOLLOW)
+        .open(path)?;
+    if !terminal.metadata()?.file_type().is_char_device() {
+        bail!(
+            "terminal device is not a character device: {}",
+            path.display()
+        );
+    }
+    repair_terminal_fd(terminal.as_raw_fd()).map_err(Into::into)
+}
+
+#[cfg(unix)]
+fn repair_terminal_fd(fd: std::os::fd::RawFd) -> io::Result<bool> {
+    let mut terminal = MaybeUninit::<libc::termios>::uninit();
+    // SAFETY: `terminal` points to writable storage for one termios value and
+    // is only assumed initialized after tcgetattr reports success.
+    if unsafe { libc::tcgetattr(fd, terminal.as_mut_ptr()) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: the successful tcgetattr call initialized the value.
+    let mut terminal = unsafe { terminal.assume_init() };
+    if terminal.c_lflag & (libc::ICANON | libc::ECHO) == 0 {
+        return Ok(false);
+    }
+
+    // SAFETY: `terminal` was initialized by tcgetattr above.
+    unsafe { libc::cfmakeraw(&mut terminal) };
+    // SAFETY: `fd` remains open for this call and `terminal` is initialized.
+    if unsafe { libc::tcsetattr(fd, libc::TCSAFLUSH, &terminal) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(true)
 }
 
 fn ensure_success(action: &str, output: &TmuxOutput) -> Result<()> {
@@ -1003,7 +1119,7 @@ fn strings<const N: usize>(values: [&str; N]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_dec_graphics, persistent_output_command};
+    use super::{normalize_dec_graphics, persistent_output_command, spotatui_raw_mode_target};
 
     #[test]
     fn dec_special_graphics_are_converted_without_corrupting_ansi_styles() {
@@ -1019,5 +1135,69 @@ mod tests {
         let command = persistent_output_command("fortune");
 
         assert!(command.contains("[T4E] command exited"));
+    }
+
+    #[test]
+    fn spotatui_raw_mode_repair_only_targets_its_alternate_screen() {
+        assert_eq!(
+            spotatui_raw_mode_target("spotatui\t1\t/dev/pts/7").expect("valid context"),
+            Some("/dev/pts/7")
+        );
+        assert_eq!(
+            spotatui_raw_mode_target("spotatui\t0\t/dev/pts/7").expect("valid context"),
+            None
+        );
+        assert_eq!(
+            spotatui_raw_mode_target("bash\t1\t/dev/pts/7").expect("valid context"),
+            None
+        );
+        assert!(spotatui_raw_mode_target("spotatui\t1").is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_pty_input_is_restored_to_raw_mode() {
+        use std::mem::MaybeUninit;
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+
+        let mut master_fd = -1;
+        let mut slave_fd = -1;
+        assert_eq!(
+            unsafe {
+                libc::openpty(
+                    &mut master_fd,
+                    &mut slave_fd,
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                    std::ptr::null(),
+                )
+            },
+            0
+        );
+        let _master = unsafe { OwnedFd::from_raw_fd(master_fd) };
+        let slave = unsafe { OwnedFd::from_raw_fd(slave_fd) };
+
+        let mut terminal = MaybeUninit::<libc::termios>::uninit();
+        assert_eq!(
+            unsafe { libc::tcgetattr(slave.as_raw_fd(), terminal.as_mut_ptr()) },
+            0
+        );
+        let mut terminal = unsafe { terminal.assume_init() };
+        terminal.c_lflag |= libc::ICANON | libc::ECHO;
+        assert_eq!(
+            unsafe { libc::tcsetattr(slave.as_raw_fd(), libc::TCSANOW, &terminal) },
+            0
+        );
+
+        assert!(super::repair_terminal_fd(slave.as_raw_fd()).expect("raw mode repair"));
+        assert!(!super::repair_terminal_fd(slave.as_raw_fd()).expect("raw mode is stable"));
+
+        let mut repaired = MaybeUninit::<libc::termios>::uninit();
+        assert_eq!(
+            unsafe { libc::tcgetattr(slave.as_raw_fd(), repaired.as_mut_ptr()) },
+            0
+        );
+        let repaired = unsafe { repaired.assume_init() };
+        assert_eq!(repaired.c_lflag & (libc::ICANON | libc::ECHO), 0);
     }
 }
