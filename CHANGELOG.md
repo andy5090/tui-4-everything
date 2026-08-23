@@ -6,6 +6,8 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-08-23
+
 ### Added
 
 - Add structured per-app key guides, including Cava's complete interactive
