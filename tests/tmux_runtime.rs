@@ -599,7 +599,7 @@ fn embedded_app_controls_use_structured_tmux_arguments() {
     assert!(
         calls
             .iter()
-            .any(|args| { args == &["capture-pane", "-p", "-e", "-t", "%3"] })
+            .any(|args| { args == &["capture-pane", "-p", "-e", "-N", "-t", "%3"] })
     );
     assert!(
         calls

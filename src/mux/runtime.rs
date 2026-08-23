@@ -696,6 +696,11 @@ impl<R: TmuxRunner> TmuxRuntime<R> {
     fn capture_app_with_join(&self, pane_id: &str, join_wrapped: bool) -> Result<String> {
         self.ensure_managed_pane(pane_id)?;
         let mut args = strings(["capture-pane", "-p", "-e"]);
+        // Preserve trailing cells for rendering so ANSI backgrounds are exact.
+        // Joined capture is only used for link extraction and should stay compact.
+        if !join_wrapped {
+            args.push("-N".to_string());
+        }
         if join_wrapped {
             args.push("-J".to_string());
         }

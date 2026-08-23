@@ -18,7 +18,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
 use crate::ai::service::AiService;
-use crate::catalog::models::{InstallMethod, OutputFilter};
+use crate::catalog::models::{InstallMethod, OutputFilter, Platform};
 use crate::installer::checks::{InstallChecker, SystemInstallChecker};
 use crate::installer::execution::{
     CommandRunner, ExecutionPolicy, InstallExecutor, InstallJob, OutputChunk, SystemCommandRunner,
@@ -192,8 +192,7 @@ fn process_effects(
                 if active.contains_key(&tool_id) {
                     continue;
                 }
-                if (job.task.requires_privileges
-                    || install_method_requires_privileges(&job.task.method))
+                if job.task.requires_privileges
                     && let Err(error) = session.suspend_for(|| acquire_install_privileges(&tool_id))
                 {
                     app.apply_install_authorization_error(&tool_id, &error);
@@ -452,7 +451,7 @@ fn process_effects(
                 if active.contains_key(&tool_id) {
                     continue;
                 }
-                if uninstall_method_requires_privileges(&request.method)
+                if request.requires_privileges
                     && let Err(error) = session.suspend_for(|| acquire_install_privileges(&tool_id))
                 {
                     app.apply_uninstall_result(&tool_id, false, &error.to_string(), reinstall);
@@ -565,6 +564,8 @@ fn process_effects(
 fn copy_to_clipboard(text: &str) -> Result<&'static str> {
     let candidates: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
         &[("pbcopy", &[])]
+    } else if Platform::current() == Platform::Termux {
+        &[("termux-clipboard-set", &[])]
     } else {
         &[
             ("wl-copy", &[]),
@@ -616,6 +617,8 @@ fn open_url(url: &str) -> Result<()> {
     }
     let program = if cfg!(target_os = "macos") {
         "open"
+    } else if Platform::current() == Platform::Termux {
+        "termux-open-url"
     } else {
         "xdg-open"
     };
@@ -742,41 +745,6 @@ fn requested_renderer(command: &str) -> Option<&str> {
 fn mpv_supports_renderer(help: &str, renderer: &str) -> bool {
     help.lines()
         .any(|line| line.split_whitespace().next() == Some(renderer))
-}
-
-fn install_method_requires_privileges(method: &InstallMethod) -> bool {
-    matches!(
-        method,
-        InstallMethod::Apt
-            | InstallMethod::Dnf
-            | InstallMethod::Pacman
-            | InstallMethod::Xbps
-            | InstallMethod::Snap
-            | InstallMethod::SnapClassic
-            | InstallMethod::Pipx
-            | InstallMethod::LazyVim
-            | InstallMethod::Tplay
-            | InstallMethod::YoutubeTui
-            | InstallMethod::Yewtube
-            | InstallMethod::AsciiCamera
-            | InstallMethod::Newsboat
-            | InstallMethod::Fastfetch
-    )
-}
-
-fn uninstall_method_requires_privileges(method: &InstallMethod) -> bool {
-    matches!(
-        method,
-        InstallMethod::Apt
-            | InstallMethod::Dnf
-            | InstallMethod::Pacman
-            | InstallMethod::Xbps
-            | InstallMethod::Snap
-            | InstallMethod::SnapClassic
-            | InstallMethod::Pipx
-            | InstallMethod::Newsboat
-            | InstallMethod::Fastfetch
-    )
 }
 
 fn acquire_install_privileges(tool_id: &str) -> Result<()> {
@@ -913,12 +881,8 @@ impl Drop for TerminalSession {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        frame_poll_interval, install_method_requires_privileges, mpv_supports_renderer,
-        requested_renderer, uninstall_method_requires_privileges,
-    };
+    use super::{frame_poll_interval, mpv_supports_renderer, requested_renderer};
     use crate::app::events::Screen;
-    use crate::catalog::models::InstallMethod;
     use std::time::Duration;
 
     #[test]
@@ -931,44 +895,6 @@ mod tests {
             frame_poll_interval(Screen::Catalog),
             Duration::from_millis(100)
         );
-    }
-
-    #[test]
-    fn system_package_managers_request_privileges() {
-        assert!(install_method_requires_privileges(&InstallMethod::Apt));
-        assert!(install_method_requires_privileges(&InstallMethod::Dnf));
-        assert!(install_method_requires_privileges(&InstallMethod::Pacman));
-        assert!(install_method_requires_privileges(&InstallMethod::Xbps));
-        assert!(install_method_requires_privileges(&InstallMethod::Snap));
-        assert!(install_method_requires_privileges(
-            &InstallMethod::SnapClassic
-        ));
-        assert!(install_method_requires_privileges(&InstallMethod::Pipx));
-        assert!(install_method_requires_privileges(&InstallMethod::LazyVim));
-        assert!(install_method_requires_privileges(&InstallMethod::Tplay));
-        assert!(install_method_requires_privileges(
-            &InstallMethod::YoutubeTui
-        ));
-        assert!(install_method_requires_privileges(&InstallMethod::Yewtube));
-        assert!(install_method_requires_privileges(
-            &InstallMethod::AsciiCamera
-        ));
-        assert!(install_method_requires_privileges(&InstallMethod::Newsboat));
-        assert!(install_method_requires_privileges(
-            &InstallMethod::Fastfetch
-        ));
-        assert!(!install_method_requires_privileges(&InstallMethod::Brew));
-        assert!(!install_method_requires_privileges(&InstallMethod::Cargo));
-        assert!(!uninstall_method_requires_privileges(
-            &InstallMethod::LazyVim
-        ));
-        assert!(uninstall_method_requires_privileges(
-            &InstallMethod::Newsboat
-        ));
-        assert!(uninstall_method_requires_privileges(
-            &InstallMethod::Fastfetch
-        ));
-        assert!(uninstall_method_requires_privileges(&InstallMethod::Xbps));
     }
 
     #[test]

@@ -22,6 +22,14 @@ use t4e::mux::runtime::ManagedApp;
 use t4e::storage::{AiApprovalMode, AppTheme, PersistentState, UserSettings, save_state};
 
 fn app() -> AppState {
+    app_for_platform(if cfg!(target_os = "macos") {
+        Platform::Macos
+    } else {
+        Platform::Linux
+    })
+}
+
+fn app_for_platform(platform: Platform) -> AppState {
     let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
     let workspaces =
         load_workspaces(Path::new("registry/workspaces.yaml")).expect("workspaces load");
@@ -29,7 +37,7 @@ fn app() -> AppState {
         catalog,
         workspaces,
         InstallEnvironment::with_commands(
-            Platform::current(),
+            platform,
             "x86_64",
             [
                 "awk",
@@ -649,6 +657,44 @@ fn newsboat_uninstall_removes_managed_feeds_and_snap() {
 }
 
 #[test]
+fn termux_newsboat_uninstall_uses_pkg_without_privileges() {
+    let mut app = app_for_platform(Platform::Termux);
+    app.handle_key(key(KeyCode::Char('2')));
+    app.handle_key(key(KeyCode::Char('/')));
+    for ch in "newsboat".chars() {
+        app.handle_key(key(KeyCode::Char(ch)));
+    }
+    app.handle_key(key(KeyCode::Enter));
+    app.installed_tools.insert("newsboat".to_string());
+
+    app.handle_key(key(KeyCode::Char('U')));
+    app.handle_key(key(KeyCode::Enter));
+
+    let Some(AppEffect::Uninstall(request)) = app.take_effect() else {
+        panic!("uninstall request expected");
+    };
+    assert!(request.command.contains("pkg uninstall -y newsboat"));
+    assert!(!request.command.contains("sudo"));
+    assert!(!request.requires_privileges);
+}
+
+#[test]
+fn termux_hides_root_only_btop_even_when_it_is_installed() {
+    let mut app = app_for_platform(Platform::Termux);
+    let btop = app
+        .catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "btop")
+        .expect("btop")
+        .clone();
+    app.installed_tools.insert("btop".to_string());
+
+    assert!(!app.is_tool_available(&btop));
+    assert!(app.home_tools().iter().all(|tool| tool.id != "btop"));
+}
+
+#[test]
 fn reset_reinstall_recovers_a_partial_termusic_install_and_stale_queue_item() {
     let mut app = app();
     app.handle_key(key(KeyCode::Char('2')));
@@ -915,15 +961,50 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
     terminal
         .draw(|frame| render(frame, &mut app))
         .expect("app background renders");
-    let canvas_cell = terminal
+    let captured_cell = terminal
+        .backend()
+        .buffer()
+        .cell((40, 4))
+        .expect("captured app cell");
+    assert_eq!(
+        captured_cell.bg,
+        Color::White,
+        "the app's explicit background should be preserved"
+    );
+    let uncaptured_cell = terminal
         .backend()
         .buffer()
         .cell((40, 12))
-        .expect("app canvas cell");
+        .expect("uncaptured app cell");
     assert_eq!(
-        canvas_cell.bg,
-        Color::White,
-        "the app background should fill uncaptured canvas rows"
+        uncaptured_cell.bg,
+        Color::Reset,
+        "the app background should not be inferred across uncaptured rows"
+    );
+
+    app.app_view.as_mut().expect("app view").content = "\u{1b}[37;40mAPP   \u{1b}[0m".to_string();
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("partial app background renders");
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell((2, 4))
+            .expect("explicit app background cell")
+            .bg,
+        Color::Black,
+        "the app's explicit black background should be preserved"
+    );
+    assert_eq!(
+        terminal
+            .backend()
+            .buffer()
+            .cell((20, 4))
+            .expect("cell after app output")
+            .bg,
+        Color::Reset,
+        "black must not extend past the cells emitted by the app"
     );
 
     app.handle_key(key(KeyCode::Esc));
@@ -3205,7 +3286,11 @@ fn stale_saved_install_plan_is_refreshed_from_the_current_registry() {
         workspaces,
         path.clone(),
         InstallEnvironment::with_commands(
-            Platform::current(),
+            if cfg!(target_os = "macos") {
+                Platform::Macos
+            } else {
+                Platform::Linux
+            },
             std::env::consts::ARCH,
             [
                 "apt-get", "brew", "cargo", "curl", "npm", "pipx", "pkg", "snap",

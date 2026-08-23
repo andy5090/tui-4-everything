@@ -102,6 +102,18 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
                 );
             }
         }
+        let termux_count = tool
+            .installers
+            .iter()
+            .filter(|installer| installer.platform == Platform::Termux)
+            .count();
+        if termux_count > 1 {
+            bail!(
+                "tool {} must define at most one Termux installer, found {}",
+                tool.id,
+                termux_count
+            );
+        }
 
         for installer in &tool.installers {
             let hints_required = !matches!(installer.method, InstallMethod::Builtin);
@@ -127,6 +139,11 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
                     "tool {} has system packages on a non-Linux installer",
                     tool.id
                 );
+            }
+            if matches!(installer.method, InstallMethod::Pkg | InstallMethod::Pip)
+                && installer.platform != Platform::Termux
+            {
+                bail!("tool {} uses a Termux-only installer method", tool.id);
             }
             if matches!(installer.method, InstallMethod::Script) && !installer.requires_confirm {
                 bail!(

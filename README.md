@@ -38,16 +38,21 @@ keys and disables AI when no provider is ready.
 ## Requirements
 
 - Rust stable toolchain
-- Linux or macOS
+- Linux, macOS, or Termux on Android (`aarch64`)
 - tmux 3.x as the current hidden app process backend
 - An authenticated CLI or configured API provider for optional HOME AI
-- The relevant package manager (`apt`, XBPS, Snap, Homebrew, Cargo, or pipx) for installs
+- The relevant package manager (`apt`, `pkg`, XBPS, Snap, Homebrew, Cargo, or pipx) for installs
 
 T4E filters its catalog against the active OS, CPU architecture, and available
 install channels. Already installed and builtin apps remain visible. On Void
 Linux, T4E uses curated native XBPS ports where the package and launcher have
 been verified; apps that only have an incompatible Ubuntu or upstream installer
 are omitted instead of being offered as broken installs.
+On Termux, T4E detects both Android-native builds and portable Linux release
+binaries at runtime. It uses explicit `pkg`, Cargo source, or Python recipes
+verified for Termux and hides Linux-only recipes that depend on `sudo`, Snap,
+glibc, or desktop services. The root-only Termux build of `btop` is hidden
+because it immediately exits on standard, non-rooted Android devices.
 
 ## Install a release
 
@@ -85,6 +90,21 @@ shell, and run `t4e`. T4E requires `tmux` 3.x to launch managed applications
 and a ready AI provider for HOME AI. Without one, application browsing and
 management continue normally while AI input stays disabled. Rust is only
 required when building from source.
+
+For Termux, install the runtime prerequisites first, then use the same release
+installer. The portable ARM64 archive is selected automatically:
+
+```bash
+pkg install -y curl tar tmux
+curl -fsSL https://raw.githubusercontent.com/andy5090/tui-4-everything/main/install.sh | bash
+```
+
+Termux-native app installs run through `pkg` without `sudo`. Android browser,
+clipboard, and camera integration use the `termux-api` package plus the
+matching Termux:API Android app; clipboard copy still falls back to OSC 52 when
+the API command is unavailable. Termleaf requires `pkg install rust`; T4E then
+builds the pinned, verified Termleaf tag from source because its upstream
+prebuilt installer does not provide an Android aarch64 binary.
 
 After the first installation, T4E can check for and install its own verified
 releases without rerunning the installer command:

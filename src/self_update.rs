@@ -272,6 +272,7 @@ fn release_asset_label(os: &str, architecture: &str) -> Result<String> {
         ("linux", "x86_64") => "linux-x86_64-musl",
         ("linux", "x86" | "i386" | "i486" | "i586" | "i686") => "linux-i686-musl",
         ("linux", "aarch64") => "linux-aarch64-musl",
+        ("android", "aarch64") => "linux-aarch64-musl",
         ("macos", "aarch64") => "macos-arm64",
         _ => bail!("T4E self-update does not support {os}/{architecture}"),
     };
@@ -560,6 +561,10 @@ mod tests {
         );
         assert_eq!(
             release_asset_label("linux", "aarch64").expect("linux arm64"),
+            "linux-aarch64-musl"
+        );
+        assert_eq!(
+            release_asset_label("android", "aarch64").expect("Termux arm64"),
             "linux-aarch64-musl"
         );
         assert_eq!(

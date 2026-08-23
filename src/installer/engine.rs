@@ -33,11 +33,12 @@ pub struct InstallPolicy {
 
 impl InstallTask {
     pub fn effective_timeout_sec(&self, configured_timeout_sec: u64) -> u64 {
-        let method_default = if self.method == InstallMethod::Cargo {
-            configured_timeout_sec.max(1_800)
-        } else {
-            configured_timeout_sec
-        };
+        let method_default =
+            if matches!(self.method, InstallMethod::Cargo | InstallMethod::Termleaf) {
+                configured_timeout_sec.max(1_800)
+            } else {
+                configured_timeout_sec
+            };
         self.install_timeout_sec
             .map_or(method_default, |timeout| method_default.max(timeout))
     }
@@ -125,7 +126,23 @@ fn build_task(
         install_timeout_sec: tool.install_timeout_sec,
         requires_privileges: installer.platform == crate::catalog::models::Platform::Linux
             && (!installer.system_packages.is_empty()
-                || installer.method == InstallMethod::AsciiCamera),
+                || matches!(
+                    installer.method,
+                    InstallMethod::Apt
+                        | InstallMethod::Dnf
+                        | InstallMethod::Pacman
+                        | InstallMethod::Xbps
+                        | InstallMethod::Snap
+                        | InstallMethod::SnapClassic
+                        | InstallMethod::Pipx
+                        | InstallMethod::LazyVim
+                        | InstallMethod::Tplay
+                        | InstallMethod::YoutubeTui
+                        | InstallMethod::Yewtube
+                        | InstallMethod::AsciiCamera
+                        | InstallMethod::Newsboat
+                        | InstallMethod::Fastfetch
+                )),
         requires_confirmation,
         expected_version,
         version_probe,
@@ -177,6 +194,7 @@ fn materialize_command(installer: &Installer) -> Result<String> {
             "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y {}",
             hint
         ),
+        InstallMethod::Pkg => format!("pkg install -y {}", installer.package_hints.join(" ")),
         InstallMethod::Dnf => format!("sudo -n dnf install -y {}", hint),
         InstallMethod::Pacman => format!("sudo -n pacman -S --noconfirm {}", hint),
         InstallMethod::Xbps => format!(
@@ -189,11 +207,18 @@ fn materialize_command(installer: &Installer) -> Result<String> {
             "command -v pipx >/dev/null 2>&1 || sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 install -y pipx; pipx install {}",
             hint
         ),
+        InstallMethod::Pip => format!("python -m pip install --upgrade {}", hint),
         InstallMethod::NpmGlobal => format!("npm install -g {}", hint),
         InstallMethod::Cargo => format!(
             "cargo install --locked {}",
             installer.package_hints.join(" ")
         ),
+        InstallMethod::Termleaf => concat!(
+            "cargo install --locked --git ",
+            "https://github.com/andy5090/termleaf ",
+            "--tag v0.3.5 termleaf"
+        )
+        .to_string(),
         InstallMethod::Go => format!("go install {}", hint),
         InstallMethod::LazyVim => materialize_lazyvim_command(&installer.platform),
         InstallMethod::Tplay => materialize_tplay_command(&installer.platform),

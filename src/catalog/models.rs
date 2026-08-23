@@ -413,10 +413,12 @@ pub enum Platform {
 
 impl Platform {
     pub fn current() -> Self {
-        if cfg!(target_os = "macos") {
-            Self::Macos
-        } else if cfg!(target_os = "android") {
+        let prefix = std::env::var("PREFIX").ok();
+        let has_termux_version = std::env::var_os("TERMUX_VERSION").is_some();
+        if is_termux_runtime(std::env::consts::OS, prefix.as_deref(), has_termux_version) {
             Self::Termux
+        } else if cfg!(target_os = "macos") {
+            Self::Macos
         } else {
             Self::Linux
         }
@@ -431,6 +433,32 @@ impl Platform {
     }
 }
 
+fn is_termux_runtime(target_os: &str, prefix: Option<&str>, has_termux_version: bool) -> bool {
+    target_os == "android"
+        || has_termux_version
+        || prefix.is_some_and(|prefix| {
+            prefix.ends_with("/com.termux/files/usr")
+                || prefix.ends_with("/com.termux.debug/files/usr")
+        })
+}
+
+#[cfg(test)]
+mod platform_tests {
+    use super::is_termux_runtime;
+
+    #[test]
+    fn termux_is_detected_for_android_and_portable_linux_builds() {
+        assert!(is_termux_runtime("android", None, false));
+        assert!(is_termux_runtime(
+            "linux",
+            Some("/data/data/com.termux/files/usr"),
+            false
+        ));
+        assert!(is_termux_runtime("linux", None, true));
+        assert!(!is_termux_runtime("linux", Some("/usr"), false));
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum InstallMethod {
     #[serde(rename = "builtin")]
@@ -441,6 +469,8 @@ pub enum InstallMethod {
     BrewCask,
     #[serde(rename = "apt")]
     Apt,
+    #[serde(rename = "pkg")]
+    Pkg,
     #[serde(rename = "dnf")]
     Dnf,
     #[serde(rename = "pacman")]
@@ -453,10 +483,14 @@ pub enum InstallMethod {
     SnapClassic,
     #[serde(rename = "pipx")]
     Pipx,
+    #[serde(rename = "pip")]
+    Pip,
     #[serde(rename = "npm_global")]
     NpmGlobal,
     #[serde(rename = "cargo")]
     Cargo,
+    #[serde(rename = "termleaf")]
+    Termleaf,
     #[serde(rename = "go")]
     Go,
     #[serde(rename = "lazyvim")]
@@ -486,14 +520,17 @@ impl InstallMethod {
             Self::Brew => "brew",
             Self::BrewCask => "brew_cask",
             Self::Apt => "apt",
+            Self::Pkg => "pkg",
             Self::Dnf => "dnf",
             Self::Pacman => "pacman",
             Self::Xbps => "xbps",
             Self::Snap => "snap",
             Self::SnapClassic => "snap_classic",
             Self::Pipx => "pipx",
+            Self::Pip => "pip",
             Self::NpmGlobal => "npm_global",
             Self::Cargo => "cargo",
+            Self::Termleaf => "termleaf",
             Self::Go => "go",
             Self::LazyVim => "lazyvim",
             Self::Tplay => "tplay",

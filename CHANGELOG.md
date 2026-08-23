@@ -6,6 +6,23 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Added
+
+- Add explicit Termux install plans for the native package catalog, including
+  media, file, system, editor, game, and utility applications, with a verified
+  source build for Termleaf on Android aarch64.
+
+### Fixed
+
+- Preserve embedded apps' original ANSI/default backgrounds by capturing tmux
+  trailing cells and removing inferred canvas background fills.
+- Detect Termux at runtime even when T4E is installed from the portable Linux
+  release, use `pkg` without `sudo`, and hide Linux-only fallback installers.
+- Hide the root-only Termux `btop` package and install `yt-dlp` through the
+  verified Python path instead of offering unavailable repository packages.
+- Use Termux:API commands for opening links and copying text, and allow ARM64
+  Termux builds to select the verified portable self-update asset.
+
 ## [0.7.0] - 2026-08-23
 
 ### Added

@@ -314,21 +314,47 @@ fn registry_loads_and_validates() {
             .collect::<Vec<_>>(),
         ["termleaf", "termleaf-update"]
     );
-    assert!(termleaf.installers.iter().all(|installer| {
-        installer.method == InstallMethod::Script
-            && installer.requires_confirm
-            && installer.install_cmd.as_deref().is_some_and(|command| {
-                command.contains("andy5090/termleaf/releases/download/v0.3.5/")
-                    && command.contains("termleaf-installer.sh")
-                    && command.contains("TERMLEAF_VERSION=0.3.5")
+    assert!(
+        termleaf
+            .installers
+            .iter()
+            .filter(|installer| installer.platform != Platform::Termux)
+            .all(|installer| {
+                installer.method == InstallMethod::Script
+                    && installer.requires_confirm
+                    && installer.install_cmd.as_deref().is_some_and(|command| {
+                        command.contains("andy5090/termleaf/releases/download/v0.3.5/")
+                            && command.contains("termleaf-installer.sh")
+                            && command.contains("TERMLEAF_VERSION=0.3.5")
+                    })
+                    && installer.verified_update.as_ref().is_some_and(|update| {
+                        update.version == "0.3.5"
+                            && update.command.contains("/releases/download/v0.3.5/")
+                            && update.command.contains("TERMLEAF_VERSION=0.3.5")
+                            && update.evidence.ends_with("/releases/tag/v0.3.5")
+                    })
             })
-            && installer.verified_update.as_ref().is_some_and(|update| {
+    );
+    let termleaf_termux = termleaf
+        .installers
+        .iter()
+        .find(|installer| installer.platform == Platform::Termux)
+        .expect("Termleaf has a Termux source installer");
+    assert_eq!(termleaf_termux.method, InstallMethod::Termleaf);
+    assert!(termleaf_termux.requires_confirm);
+    assert!(
+        termleaf_termux
+            .verified_update
+            .as_ref()
+            .is_some_and(|update| {
                 update.version == "0.3.5"
-                    && update.command.contains("/releases/download/v0.3.5/")
-                    && update.command.contains("TERMLEAF_VERSION=0.3.5")
+                    && update
+                        .command
+                        .contains("cargo install --locked --force --git")
+                    && update.command.contains("--tag v0.3.5 termleaf")
                     && update.evidence.ends_with("/releases/tag/v0.3.5")
             })
-    }));
+    );
     assert!(
         catalog
             .packs

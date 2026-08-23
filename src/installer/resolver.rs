@@ -120,7 +120,9 @@ impl PackageSearch for ShellPackageSearch {
             InstallMethod::Brew | InstallMethod::BrewCask => {
                 ("brew", vec!["search".to_string(), hint.to_string()])
             }
-            InstallMethod::Apt => ("apt-cache", vec!["search".to_string(), hint.to_string()]),
+            InstallMethod::Apt | InstallMethod::Pkg => {
+                ("apt-cache", vec!["search".to_string(), hint.to_string()])
+            }
             InstallMethod::Dnf => ("dnf", vec!["search".to_string(), hint.to_string()]),
             InstallMethod::Pacman => ("pacman", vec!["-Ss".to_string(), hint.to_string()]),
             InstallMethod::Xbps => ("xbps-query", vec!["-Rs".to_string(), hint.to_string()]),

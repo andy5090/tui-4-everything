@@ -156,6 +156,7 @@ pub struct UninstallRequest {
     pub command: String,
     pub check_command: String,
     pub method: InstallMethod,
+    pub requires_privileges: bool,
     pub reinstall: bool,
 }
 
@@ -911,7 +912,8 @@ impl AppState {
     }
 
     pub fn is_tool_available(&self, tool: &Tool) -> bool {
-        self.installed_tools.contains(&tool.id) || self.install_environment.supports(tool)
+        self.install_environment.is_runtime_compatible(tool)
+            && (self.installed_tools.contains(&tool.id) || self.install_environment.supports(tool))
     }
 
     pub fn home_filter_count(&self, filter: HomeFilter) -> usize {
@@ -3598,7 +3600,16 @@ fn uninstall_request_for_tool(
     } else {
         installer.package_hints.first()?.clone()
     };
-    let command = uninstall_command(&installer.method, &packages, reinstall)?;
+    let command = if installer.platform == Platform::Termux
+        && installer.method == InstallMethod::Newsboat
+    {
+        let remove = uninstall_command(&InstallMethod::Pkg, &packages, reinstall)?;
+        format!(
+            "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"${{XDG_DATA_HOME:-$HOME/.local/share}}/t4e/newsboat\" && {remove}"
+        )
+    } else {
+        uninstall_command(&installer.method, &packages, reinstall)?
+    };
     let check_command = installer
         .executable
         .clone()
@@ -3615,6 +3626,19 @@ fn uninstall_request_for_tool(
         command,
         check_command,
         method: installer.method.clone(),
+        requires_privileges: installer.platform == Platform::Linux
+            && matches!(
+                installer.method,
+                InstallMethod::Apt
+                    | InstallMethod::Dnf
+                    | InstallMethod::Pacman
+                    | InstallMethod::Xbps
+                    | InstallMethod::Snap
+                    | InstallMethod::SnapClassic
+                    | InstallMethod::Pipx
+                    | InstallMethod::Newsboat
+                    | InstallMethod::Fastfetch
+            ),
         reinstall,
     })
 }
@@ -3641,6 +3665,10 @@ fn uninstall_command(
                 "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y {package}"
             )
         }
+        InstallMethod::Pkg if tolerate_missing => format!(
+            "if dpkg-query -W -f='${{db:Status-Abbrev}}' {package} 2>/dev/null | grep -q '^ii'; then pkg uninstall -y {package}; fi"
+        ),
+        InstallMethod::Pkg => format!("pkg uninstall -y {package}"),
         InstallMethod::Dnf if tolerate_missing => format!(
             "if rpm -q {package} >/dev/null 2>&1; then sudo -n dnf remove -y {package}; fi"
         ),
@@ -3663,11 +3691,15 @@ fn uninstall_command(
             "if pipx list --short 2>/dev/null | cut -d' ' -f1 | grep -Fxq {package}; then pipx uninstall {package}; fi"
         ),
         InstallMethod::Pipx => format!("pipx uninstall {package}"),
+        InstallMethod::Pip if tolerate_missing => format!(
+            "if python -m pip show {package} >/dev/null 2>&1; then python -m pip uninstall -y {package}; fi"
+        ),
+        InstallMethod::Pip => format!("python -m pip uninstall -y {package}"),
         InstallMethod::NpmGlobal if tolerate_missing => format!(
             "if npm list --global --depth=0 {package} >/dev/null 2>&1; then npm uninstall --global {package}; fi"
         ),
         InstallMethod::NpmGlobal => format!("npm uninstall --global {package}"),
-        InstallMethod::Cargo => format!(
+        InstallMethod::Cargo | InstallMethod::Termleaf => format!(
             "for package in {package}; do cargo uninstall \"$package\" || ! command -v \"$package\" >/dev/null 2>&1 || exit 1; done"
         ),
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),

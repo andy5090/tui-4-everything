@@ -171,6 +171,9 @@ tools:
         method: cargo
         package_hints: ["ncspot"]
         system_packages: ["pkg-config", "libssl-dev", "libasound2-dev", "libdbus-1-dev", "libpulse-dev"]
+      - platform: termux
+        method: pkg
+        package_hints: ["ncspot"]
   - id: cava
     name: "Cava"
     description: "A real-time terminal audio spectrum visualizer."
@@ -202,6 +205,9 @@ tools:
         package_hints: ["cava"]
       - platform: linux
         method: apt
+        package_hints: ["cava"]
+      - platform: termux
+        method: pkg
         package_hints: ["cava"]
   - id: termusic
     name: "Termusic"
@@ -246,6 +252,9 @@ tools:
         package_hints: ["mpv"]
       - platform: linux
         method: apt
+        package_hints: ["mpv"]
+      - platform: termux
+        method: pkg
         package_hints: ["mpv"]
   - id: yewtube
     name: "Yewtube"
@@ -364,6 +373,10 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["yt-dlp"]
+      - platform: termux
+        method: pip
+        package_hints: ["yt-dlp"]
+        system_packages: ["python"]
   - id: ffmpeg
     name: "ffmpeg"
     category: utility
@@ -379,6 +392,9 @@ tools:
         package_hints: ["ffmpeg"]
       - platform: linux
         method: apt
+        package_hints: ["ffmpeg"]
+      - platform: termux
+        method: pkg
         package_hints: ["ffmpeg"]
   - id: streamlink
     name: "Streamlink"
@@ -411,6 +427,9 @@ tools:
         package_hints: ["mediainfo"]
       - platform: linux
         method: apt
+        package_hints: ["mediainfo"]
+      - platform: termux
+        method: pkg
         package_hints: ["mediainfo"]
   - id: shellcast
     name: "Shellcast"
@@ -461,6 +480,10 @@ tools:
         method: newsboat
         package_hints: ["newsboat"]
         executable: "t4e-newsboat"
+      - platform: termux
+        method: newsboat
+        package_hints: ["newsboat"]
+        executable: "t4e-newsboat"
   - id: glow
     name: "Glow"
     description: "Read and browse Markdown files with terminal formatting."
@@ -483,6 +506,9 @@ tools:
         package_hints: ["glow"]
       - platform: linux
         method: snap
+        package_hints: ["glow"]
+      - platform: termux
+        method: pkg
         package_hints: ["glow"]
   - id: fastfetch
     name: "Fastfetch"
@@ -507,6 +533,9 @@ tools:
         method: fastfetch
         package_hints: ["fastfetch"]
         system_packages: ["curl"]
+      - platform: termux
+        method: pkg
+        package_hints: ["fastfetch"]
   - id: btop
     name: "btop"
     description: "Monitor CPU, memory, disks, network activity, and running processes in real time."
@@ -557,6 +586,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["lynx"]
+      - platform: termux
+        method: pkg
+        package_hints: ["lynx"]
   - id: jq
     name: "jq"
     category: utility
@@ -572,6 +604,9 @@ tools:
         package_hints: ["jq"]
       - platform: linux
         method: apt
+        package_hints: ["jq"]
+      - platform: termux
+        method: pkg
         package_hints: ["jq"]
   - id: yq
     name: "yq"
@@ -589,6 +624,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["yq"]
+      - platform: termux
+        method: pkg
+        package_hints: ["yq"]
   - id: tldr
     name: "tldr"
     category: reading
@@ -605,6 +643,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["tldr"]
+      - platform: termux
+        method: pkg
+        package_hints: ["tealdeer"]
   - id: less
     name: "less"
     category: reading
@@ -620,6 +661,9 @@ tools:
         package_hints: ["less"]
       - platform: linux
         method: apt
+        package_hints: ["less"]
+      - platform: termux
+        method: pkg
         package_hints: ["less"]
   - id: yazi
     name: "Yazi"
@@ -644,6 +688,9 @@ tools:
       - platform: linux
         method: snap_classic
         package_hints: ["yazi"]
+      - platform: termux
+        method: pkg
+        package_hints: ["yazi"]
   - id: bat
     name: "bat"
     category: files
@@ -661,6 +708,9 @@ tools:
         method: apt
         package_hints: ["bat"]
         executable: "batcat"
+      - platform: termux
+        method: pkg
+        package_hints: ["bat"]
   - id: eza
     name: "eza"
     category: files
@@ -676,6 +726,9 @@ tools:
         package_hints: ["eza"]
       - platform: linux
         method: apt
+        package_hints: ["eza"]
+      - platform: termux
+        method: pkg
         package_hints: ["eza"]
   - id: fd
     name: "fd"
@@ -694,6 +747,9 @@ tools:
         method: apt
         package_hints: ["fd-find"]
         executable: "fdfind"
+      - platform: termux
+        method: pkg
+        package_hints: ["fd"]
   - id: ripgrep
     name: "ripgrep"
     category: files
@@ -709,6 +765,9 @@ tools:
         package_hints: ["ripgrep"]
       - platform: linux
         method: apt
+        package_hints: ["ripgrep"]
+      - platform: termux
+        method: pkg
         package_hints: ["ripgrep"]
   - id: fzf
     name: "fzf"
@@ -726,6 +785,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["fzf"]
+      - platform: termux
+        method: pkg
+        package_hints: ["fzf"]
   - id: zoxide
     name: "zoxide"
     category: files
@@ -741,6 +803,9 @@ tools:
         package_hints: ["zoxide"]
       - platform: linux
         method: apt
+        package_hints: ["zoxide"]
+      - platform: termux
+        method: pkg
         package_hints: ["zoxide"]
   - id: dust
     name: "dust"
@@ -758,6 +823,9 @@ tools:
       - platform: linux
         method: cargo
         package_hints: ["du-dust"]
+      - platform: termux
+        method: pkg
+        package_hints: ["dust"]
   - id: duf
     name: "duf"
     category: files
@@ -773,6 +841,9 @@ tools:
         package_hints: ["duf"]
       - platform: linux
         method: apt
+        package_hints: ["duf"]
+      - platform: termux
+        method: pkg
         package_hints: ["duf"]
   - id: ncdu
     name: "ncdu"
@@ -799,6 +870,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["ncdu"]
+      - platform: termux
+        method: pkg
+        package_hints: ["ncdu"]
   - id: broot
     name: "broot"
     description: "Navigate directory trees, search files, and run file operations."
@@ -822,6 +896,9 @@ tools:
       - platform: linux
         method: cargo
         package_hints: ["broot"]
+      - platform: termux
+        method: pkg
+        package_hints: ["broot"]
   - id: tree
     name: "tree"
     category: files
@@ -837,6 +914,9 @@ tools:
         package_hints: ["tree"]
       - platform: linux
         method: apt
+        package_hints: ["tree"]
+      - platform: termux
+        method: pkg
         package_hints: ["tree"]
   - id: file
     name: "file"
@@ -854,6 +934,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["file"]
+      - platform: termux
+        method: pkg
+        package_hints: ["file"]
   - id: p7zip
     name: "p7zip"
     category: files
@@ -870,6 +953,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["p7zip-full"]
+      - platform: termux
+        method: pkg
+        package_hints: ["p7zip"]
   - id: unzip
     name: "unzip"
     category: files
@@ -886,6 +972,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["unzip"]
+      - platform: termux
+        method: pkg
+        package_hints: ["unzip"]
   - id: rsync
     name: "rsync"
     category: files
@@ -901,6 +990,9 @@ tools:
         package_hints: ["rsync"]
       - platform: linux
         method: apt
+        package_hints: ["rsync"]
+      - platform: termux
+        method: pkg
         package_hints: ["rsync"]
   - id: cmatrix
     name: "cmatrix"
@@ -953,6 +1045,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["cmatrix"]
+      - platform: termux
+        method: pkg
+        package_hints: ["cmatrix"]
   - id: bastet
     name: "bastet"
     description: "Play an adversarial terminal block-stacking game."
@@ -983,6 +1078,9 @@ tools:
         package_hints: ["bastet"]
       - platform: linux
         method: apt
+        package_hints: ["bastet"]
+      - platform: termux
+        method: pkg
         package_hints: ["bastet"]
   - id: asciiquarium
     name: "Asciiquarium"
@@ -1024,6 +1122,9 @@ tools:
         package_hints: ["sl"]
       - platform: linux
         method: apt
+        package_hints: ["sl"]
+      - platform: termux
+        method: pkg
         package_hints: ["sl"]
   - id: lolcat
     name: "lolcat"
@@ -1084,6 +1185,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["figlet"]
+      - platform: termux
+        method: pkg
+        package_hints: ["figlet"]
   - id: cowsay
     name: "cowsay"
     description: "Display text in a configurable ASCII speech bubble."
@@ -1107,6 +1211,9 @@ tools:
         package_hints: ["cowsay"]
       - platform: linux
         method: apt
+        package_hints: ["cowsay"]
+      - platform: termux
+        method: pkg
         package_hints: ["cowsay"]
   - id: fortune
     name: "fortune"
@@ -1132,6 +1239,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["fortune-mod"]
+      - platform: termux
+        method: pkg
+        package_hints: ["fortune"]
   - id: tty-clock
     name: "tty-clock"
     description: "Show a large configurable digital clock in the terminal."
@@ -1190,6 +1300,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["tty-clock"]
+      - platform: termux
+        method: pkg
+        package_hints: ["tty-clock"]
   - id: big-clock
     name: "Big Clock"
     description: "Show a digital clock with extra-large digits that scale to fill the terminal. Built into T4E, so it never needs installation."
@@ -1238,6 +1351,8 @@ tools:
         method: builtin
       - platform: linux
         method: builtin
+      - platform: termux
+        method: builtin
   - id: nyancat
     name: "nyancat"
     description: "Play the colorful Nyan Cat terminal animation."
@@ -1257,6 +1372,9 @@ tools:
         package_hints: ["nyancat"]
       - platform: linux
         method: apt
+        package_hints: ["nyancat"]
+      - platform: termux
+        method: pkg
         package_hints: ["nyancat"]
   - id: pipes-sh
     name: "pipes.sh"
@@ -1339,6 +1457,9 @@ tools:
       - platform: linux
         method: apt
         package_hints: ["ninvaders"]
+      - platform: termux
+        method: pkg
+        package_hints: ["ninvaders"]
   - id: nudoku
     name: "nudoku"
     description: "Play and solve Sudoku puzzles in a terminal interface."
@@ -1376,6 +1497,9 @@ tools:
         package_hints: ["nudoku"]
       - platform: linux
         method: apt
+        package_hints: ["nudoku"]
+      - platform: termux
+        method: pkg
         package_hints: ["nudoku"]
   - id: termleaf
     name: "Termleaf"
@@ -1425,7 +1549,19 @@ tools:
           command: "curl --proto '=https' --tlsv1.2 -LsSf https://github.com/andy5090/termleaf/releases/download/v0.3.5/termleaf-installer.sh | TERMLEAF_VERSION=0.3.5 sh"
           verified_at: "2026-08-08"
           evidence: "https://github.com/andy5090/termleaf/releases/tag/v0.3.5"
-    notes: "T4E installs and updates only the pinned Termleaf 0.3.5 release after catalog verification."
+      - platform: termux
+        method: termleaf
+        package_hints: ["termleaf"]
+        requires_confirm: true
+        verified_update:
+          version: "0.3.5"
+          version_probe:
+            executable: "termleaf"
+            args: ["--version"]
+          command: "cargo install --locked --force --git https://github.com/andy5090/termleaf --tag v0.3.5 termleaf"
+          verified_at: "2026-08-23"
+          evidence: "https://github.com/andy5090/termleaf/releases/tag/v0.3.5"
+    notes: "T4E installs and updates only the pinned Termleaf 0.3.5 release after catalog verification; Termux builds it from the tagged source."
   - id: micro
     name: "Micro"
     description: "A straightforward terminal text editor with familiar shortcuts."
@@ -1448,6 +1584,9 @@ tools:
         package_hints: ["micro"]
       - platform: linux
         method: apt
+        package_hints: ["micro"]
+      - platform: termux
+        method: pkg
         package_hints: ["micro"]
   - id: helix
     name: "Helix"
@@ -1474,6 +1613,9 @@ tools:
       - platform: linux
         method: snap_classic
         package_hints: ["helix"]
+      - platform: termux
+        method: pkg
+        package_hints: ["helix"]
   - id: lazyvim
     name: "LazyVim"
     description: "A full IDE configuration for Neovim, isolated from your existing Neovim setup."
@@ -1499,6 +1641,9 @@ tools:
         method: lazyvim
         package_hints: ["lazyvim"]
       - platform: linux
+        method: lazyvim
+        package_hints: ["lazyvim"]
+      - platform: termux
         method: lazyvim
         package_hints: ["lazyvim"]
   - id: visidata
@@ -1565,7 +1710,6 @@ tools:
       - platform: linux
         method: npm_global
         package_hints: ["@openai/codex"]
-
   - id: opencode
     name: "OpenCode"
     description: "An open-source terminal coding agent with multiple model providers."

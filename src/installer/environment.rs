@@ -25,6 +25,7 @@ impl InstallEnvironment {
             "npm",
             "pacman",
             "pipx",
+            "python",
             "pkg",
             "sha256sum",
             "shasum",
@@ -61,6 +62,9 @@ impl InstallEnvironment {
     }
 
     pub fn supports(&self, tool: &Tool) -> bool {
+        if !self.is_runtime_compatible(tool) {
+            return false;
+        }
         let Some(installer) = tool.installer_for(self.platform) else {
             return false;
         };
@@ -77,6 +81,9 @@ impl InstallEnvironment {
     }
 
     pub fn installer_for(&self, tool: &Tool) -> Option<Installer> {
+        if !self.is_runtime_compatible(tool) {
+            return None;
+        }
         let installer = tool.installer_for(self.platform)?.clone();
         if installer.method == InstallMethod::Builtin {
             return Some(installer);
@@ -145,13 +152,15 @@ impl InstallEnvironment {
         }
         match installer.method {
             InstallMethod::Apt => self.has("apt-get"),
+            InstallMethod::Pkg => false,
             InstallMethod::Dnf => self.has("dnf"),
             InstallMethod::Pacman => self.has("pacman"),
             InstallMethod::Xbps => self.has("xbps-install"),
             InstallMethod::Snap | InstallMethod::SnapClassic => self.has("snap"),
-            InstallMethod::Cargo => self.has("cargo"),
+            InstallMethod::Cargo | InstallMethod::Termleaf => self.has("cargo"),
             InstallMethod::NpmGlobal => !is_32_bit_x86(&self.architecture) && self.has("npm"),
             InstallMethod::Pipx => self.has("pipx") || self.has("apt-get"),
+            InstallMethod::Pip => false,
             InstallMethod::Go => self.has("go"),
             InstallMethod::Script => self.supports_linux_script(tool),
             InstallMethod::LazyVim => self.has("apt-get") && self.has("snap"),
@@ -173,7 +182,7 @@ impl InstallEnvironment {
     fn supports_macos(&self, installer: &Installer) -> bool {
         match installer.method {
             InstallMethod::Brew | InstallMethod::BrewCask => self.has("brew"),
-            InstallMethod::Cargo => self.has("cargo"),
+            InstallMethod::Cargo | InstallMethod::Termleaf => self.has("cargo"),
             InstallMethod::NpmGlobal => self.has("npm"),
             InstallMethod::Go => self.has("go"),
             InstallMethod::Script => self.has("curl"),
@@ -183,17 +192,30 @@ impl InstallEnvironment {
     }
 
     fn supports_termux(&self, installer: &Installer) -> bool {
+        if installer.platform != Platform::Termux && installer.method != InstallMethod::Builtin {
+            return false;
+        }
         match installer.method {
-            InstallMethod::Cargo => self.has("cargo"),
+            InstallMethod::Pkg
+            | InstallMethod::Pip
+            | InstallMethod::AsciiCamera
+            | InstallMethod::Newsboat
+            | InstallMethod::Fastfetch
+            | InstallMethod::LazyVim => self.has("pkg"),
+            InstallMethod::Cargo | InstallMethod::Termleaf => self.has("cargo"),
             InstallMethod::NpmGlobal => self.has("npm"),
             InstallMethod::Go => self.has("go"),
             InstallMethod::Builtin => true,
-            _ => self.has("pkg"),
+            _ => false,
         }
     }
 
     fn has(&self, command: &str) -> bool {
         self.commands.contains(command)
+    }
+
+    pub fn is_runtime_compatible(&self, tool: &Tool) -> bool {
+        !(self.platform == Platform::Termux && tool.id == "btop")
     }
 
     fn supports_linux_script(&self, tool: &Tool) -> bool {
@@ -331,6 +353,89 @@ mod tests {
             .find(|tool| tool.id == "youtube-tui")
             .expect("youtube-tui");
         assert!(!environment.supports(youtube));
+    }
+
+    #[test]
+    fn termux_uses_only_explicit_native_installers_without_sudo() {
+        let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+        let environment =
+            InstallEnvironment::with_commands(Platform::Termux, "aarch64", ["cargo", "npm", "pkg"]);
+        let supported = catalog
+            .tools
+            .iter()
+            .filter_map(|tool| {
+                environment
+                    .installer_for(tool)
+                    .map(|installer| (tool, installer))
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(supported.len(), 46);
+        for (tool, installer) in supported {
+            assert!(
+                installer.platform == Platform::Termux
+                    || installer.method == InstallMethod::Builtin,
+                "{} fell back to a non-Termux installer",
+                tool.id
+            );
+            let task = build_install_task(tool, &installer, &InstallPolicy::default())
+                .expect("Termux task builds");
+            assert!(!task.command.contains("sudo"), "{} uses sudo", tool.id);
+            assert!(
+                !task.command.contains("apt-get") && !task.command.contains("snap install"),
+                "{} uses a Linux-only package manager",
+                tool.id
+            );
+            assert!(!task.requires_privileges, "{} requests sudo", tool.id);
+        }
+
+        let spotatui = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "spotatui")
+            .expect("spotatui");
+        assert!(!environment.supports(spotatui));
+
+        let btop = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "btop")
+            .expect("btop");
+        assert!(!environment.is_runtime_compatible(btop));
+        assert!(environment.installer_for(btop).is_none());
+
+        let yt_dlp = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "yt-dlp")
+            .expect("yt-dlp");
+        let installer = environment.installer_for(yt_dlp).expect("yt-dlp installer");
+        assert_eq!(installer.method, InstallMethod::Pip);
+        let task = build_install_task(yt_dlp, &installer, &InstallPolicy::default())
+            .expect("yt-dlp task builds");
+        assert!(task.command.contains("pkg install -y python"));
+        assert!(
+            task.command
+                .contains("python -m pip install --upgrade yt-dlp")
+        );
+
+        let termleaf = catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == "termleaf")
+            .expect("termleaf");
+        let installer = environment
+            .installer_for(termleaf)
+            .expect("Termleaf is supported on Termux");
+        assert_eq!(installer.method, InstallMethod::Termleaf);
+        let task = build_install_task(termleaf, &installer, &InstallPolicy::default())
+            .expect("Termleaf task builds");
+        assert_eq!(
+            task.command,
+            "cargo install --locked --git https://github.com/andy5090/termleaf --tag v0.3.5 termleaf"
+        );
+        assert!(task.requires_confirmation);
+        assert!(!task.requires_privileges);
     }
 
     #[test]

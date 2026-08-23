@@ -117,6 +117,49 @@ fn apt_command_uses_cached_sudo_noninteractively() {
 }
 
 #[test]
+fn termux_pkg_install_never_requests_sudo() {
+    let tool = fake_tool(vec![]);
+    let installer = Installer {
+        platform: Platform::Termux,
+        method: InstallMethod::Pkg,
+        package_hints: vec!["ripgrep".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+        verified_update: None,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(task.command, "pkg install -y ripgrep");
+    assert!(!task.requires_privileges);
+}
+
+#[test]
+fn termux_pip_install_bootstraps_python_without_sudo() {
+    let tool = fake_tool(vec![]);
+    let installer = Installer {
+        platform: Platform::Termux,
+        method: InstallMethod::Pip,
+        package_hints: vec!["yt-dlp".to_string()],
+        system_packages: vec!["python".to_string()],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+        verified_update: None,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+    assert_eq!(
+        task.command,
+        "pkg install -y python && python -m pip install --upgrade yt-dlp"
+    );
+    assert!(!task.requires_privileges);
+}
+
+#[test]
 fn verified_update_task_uses_pinned_command_and_records_expected_version() {
     let mut tool = fake_tool(vec![]);
     tool.checks = vec![Check {
@@ -295,6 +338,47 @@ fn cargo_install_uses_the_published_lockfile() {
     let task =
         build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert_eq!(task.command, "cargo install --locked spotatui");
+}
+
+#[test]
+fn termleaf_builds_the_verified_tag_from_source_on_termux() {
+    let mut tool = fake_tool(vec![Capability::FileWrite]);
+    tool.id = "termleaf".to_string();
+    tool.checks = vec![
+        Check {
+            which: Some("termleaf".to_string()),
+            version: None,
+            custom: None,
+        },
+        Check {
+            which: Some("termleaf-update".to_string()),
+            version: None,
+            custom: None,
+        },
+    ];
+    let installer = Installer {
+        platform: Platform::Termux,
+        method: InstallMethod::Termleaf,
+        package_hints: vec!["termleaf".to_string()],
+        system_packages: vec![],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: true,
+        verified_update: None,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+
+    assert_eq!(
+        task.command,
+        "cargo install --locked --git https://github.com/andy5090/termleaf --tag v0.3.5 termleaf"
+    );
+    assert_eq!(task.check_command.as_deref(), Some("termleaf"));
+    assert_eq!(task.additional_check_commands, ["termleaf-update"]);
+    assert!(task.requires_confirmation);
+    assert!(!task.requires_privileges);
+    assert_eq!(task.effective_timeout_sec(1_080), 1_800);
 }
 
 #[test]
