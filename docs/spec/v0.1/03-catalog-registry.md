@@ -20,6 +20,11 @@ v0.2+에서 tool/packs 분리 파일 및 원격 동기화 고려.
 - capabilities: NETWORK|ACCOUNT|FILE_READ|FILE_WRITE|DELETE|SYSTEM|COMMANDS|AUTONOMOUS[]
 - exposure: starter|labs (default: starter)
 - run: { cmd: string }
+- key_hints: KeyHint[] (launchable app은 하나 이상 필수)
+  - binding: { keys: string[], action: string }
+  - notice: { note: string }
+  - unknown: { unknown: string } (버전별 키가 달라 자동 판정 불가)
+  - 이전 문자열 형식은 읽을 수 있지만 자동 충돌 검사는 불완전으로 표시
 - installers: Installer[]
 - checks: Check[] (optional)
 - notes/badges: optional

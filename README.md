@@ -215,8 +215,8 @@ four most recent live output lines.
 Important actions are intentionally explicit:
 
 - Catalog: `Enter` runs, `I` installs, and `U` uninstalls the current app.
-  App details preview app-specific key hints, T4E controls, and a plain-language
-  explanation next to the capability-derived risk level.
+  App details preview structured app-specific key bindings, the T4E controls
+  that will be captured, and an automatic collision result before launch.
 - Install queue: `x` runs one item, `X` runs queued items sequentially.
 - Activity: `Up`/`Down` or `j`/`k` scroll one row, `PageUp`/`PageDown`
   scroll ten rows, `Home`/`End` jump to the newest/oldest entry, and `c`
@@ -225,6 +225,12 @@ Important actions are intentionally explicit:
   `Alt+Left`/`Alt+Right` switches apps, `Alt+Backspace`
   returns to the previous screen while keeping apps running, and `Alt+Q` closes
   the current app. On HOME, `Alt+Q` exits T4E even when search is focused.
+  `Alt+K` opens a scrollable guide containing the current app's declared keys,
+  every T4E-captured key, and any detected overlaps. If both layers need the
+  same Alt binding, `Shift+Alt+<key>` sends that Alt key directly to the app;
+  the clickable App View toolbar remains available for the corresponding T4E
+  action. Version-dependent or legacy free-form key guides are marked as an
+  incomplete check instead of being assumed conflict-free.
   `Backspace` and `Esc` are forwarded to the running app.
   T4E mouse controls are enabled by default for lists, app tabs, scrolling, and
   App View footer actions. Dragging inside one panel highlights its text and

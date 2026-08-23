@@ -11,7 +11,7 @@ use t4e::app::events::Screen;
 use t4e::app::state::{AiMessage, AiWorkflowPhase, AppEffect, AppState, HomeFilter, HomeFocus};
 use t4e::app::ui::render;
 use t4e::catalog::loader::{load_catalog, load_workspaces};
-use t4e::catalog::models::{AppCategory, InstallMethod, OutputFilter, Platform};
+use t4e::catalog::models::{AppCategory, InstallMethod, KeyHint, OutputFilter, Platform};
 use t4e::codex::service::CodexEvent;
 use t4e::installer::checks::CheckResult;
 use t4e::installer::engine::{InstallPolicy, build_install_task};
@@ -209,7 +209,10 @@ fn catalog_detail_previews_app_keys_and_explains_risk() {
         .collect::<String>();
 
     assert!(rendered.contains("risk: SAFE (app-owned config, cache, and UI state only)"));
-    assert!(rendered.contains("app keys: q quit"));
+    assert!(rendered.contains("App key guide"));
+    assert!(rendered.contains("toggle asynchronous scrolling"));
+    assert!(rendered.contains("random bold / all bold / bold off"));
+    assert!(rendered.contains("input check: No documented conflicts with T4E"));
     assert!(rendered.contains("T4E controls: Enter run | I install | U uninstall | R reinstall"));
 }
 
@@ -890,8 +893,10 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
         .map(|cell| cell.symbol())
         .collect::<String>();
     assert!(rendered.contains("embedded app output"));
-    assert!(rendered.contains("[Alt-Q] Close"));
-    assert!(rendered.contains("[Alt-BS] Background"));
+    assert!(rendered.contains("[Alt+K Keys]"));
+    assert!(rendered.contains("[Background]"));
+    assert!(rendered.contains("[Close]"));
+    assert!(rendered.contains("Shift+Alt"));
     assert!(
         terminal
             .backend()
@@ -935,6 +940,98 @@ fn app_view_switches_closes_and_forwards_keys_without_tmux_shortcuts() {
     app.update_app_view(Vec::new(), String::new());
     assert_eq!(app.screen, Screen::Home);
     assert!(app.app_view.is_none());
+}
+
+#[test]
+fn app_view_key_guide_explains_conflicts_and_shift_alt_passthrough() {
+    let mut app = app();
+    app.open_app_view(
+        "t4e-apps".to_string(),
+        vec![ManagedApp {
+            pane_id: "%30".to_string(),
+            window_index: 0,
+            window_name: "cava".to_string(),
+            pane_index: 0,
+            process: "cava".to_string(),
+        }],
+    );
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::ALT));
+    let view = app.app_view.as_ref().expect("app view");
+    assert!(view.key_guide_open);
+
+    let backend = TestBackend::new(100, 30);
+    let mut terminal = Terminal::new(backend).expect("test terminal");
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("key guide renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(rendered.contains("Cava key guide"));
+    assert!(rendered.contains("cycle background color"));
+    assert!(rendered.contains("No documented conflicts"));
+    assert!(rendered.contains("Shift+Alt"));
+
+    app.handle_key(key(KeyCode::Down));
+    assert_eq!(app.app_view.as_ref().expect("app view").key_guide_scroll, 1);
+    app.handle_key(key(KeyCode::Esc));
+    assert!(!app.app_view.as_ref().expect("app view").key_guide_open);
+
+    for expected in ["b", "f"] {
+        app.handle_key(key(KeyCode::Char(
+            expected.chars().next().expect("one character"),
+        )));
+        assert!(matches!(
+            app.take_effect(),
+            Some(AppEffect::SendAppInput { pane_id, input: t4e::app::state::AppInput::Text(text) })
+                if pane_id == "%30" && text == expected
+        ));
+    }
+
+    app.handle_key(KeyEvent::new(
+        KeyCode::Char('q'),
+        KeyModifiers::SHIFT | KeyModifiers::ALT,
+    ));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::SendAppInput { pane_id, input: t4e::app::state::AppInput::Key(key) })
+            if pane_id == "%30" && key == "M-q"
+    ));
+
+    app.catalog
+        .tools
+        .iter_mut()
+        .find(|tool| tool.id == "cava")
+        .expect("Cava catalog entry")
+        .key_hints
+        .push(KeyHint::Binding {
+            keys: vec!["M-q".to_string()],
+            action: "alternate app command".to_string(),
+        });
+    app.handle_key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::ALT));
+    terminal
+        .draw(|frame| render(frame, &mut app))
+        .expect("conflict guide renders");
+    let rendered = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|cell| cell.symbol())
+        .collect::<String>();
+    assert!(rendered.contains("Alt+Q: app alternate app command / T4E close app"));
+    app.handle_key(key(KeyCode::Esc));
+
+    app.handle_key(KeyEvent::new(KeyCode::Char('q'), KeyModifiers::ALT));
+    assert!(matches!(
+        app.take_effect(),
+        Some(AppEffect::CloseApp(pane_id)) if pane_id == "%30"
+    ));
 }
 
 #[test]
@@ -1187,8 +1284,8 @@ fn mouse_selects_lists_switches_tabs_and_closes_from_the_footer() {
     app.handle_mouse(
         MouseEvent {
             kind: MouseEventKind::Down(MouseButton::Left),
-            column: 70,
-            row: 23,
+            column: 33,
+            row: 22,
             modifiers: KeyModifiers::NONE,
         },
         24,

@@ -48,8 +48,21 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
         }) {
             bail!("tool {} has an invalid launch argument", tool.id);
         }
-        if tool.key_hints.iter().any(|hint| hint.trim().is_empty()) {
-            bail!("tool {} has an empty key hint", tool.id);
+        if tool.is_launchable_app() && tool.key_hints.is_empty() {
+            bail!("launchable tool {} has no key guide", tool.id);
+        }
+        if tool.key_hints.iter().any(|hint| !hint.is_valid()) {
+            bail!("tool {} has an invalid key hint", tool.id);
+        }
+        let mut documented_keys = HashSet::new();
+        for key in tool.key_hints.iter().flat_map(|hint| hint.keys()) {
+            let normalized = key
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect::<String>();
+            if !documented_keys.insert(normalized) {
+                bail!("tool {} has a duplicate documented key: {key}", tool.id);
+            }
         }
         let mut option_ids = HashSet::new();
         for option in &tool.run_options {

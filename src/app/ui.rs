@@ -7,12 +7,16 @@ use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Tabs, Wrap};
 use ratatui::{Frame, Terminal};
 
-use crate::catalog::models::RiskLevel;
+use crate::catalog::models::{KeyHint, RiskLevel, Tool};
 use crate::installer::queue::QueueState;
 use crate::mux::workspace::TmuxView;
 use crate::storage::{ProviderAuthMode, default_api_provider_profiles};
 
 use super::events::Screen;
+use super::shortcuts::{
+    APP_VIEW_SHORTCUTS, APP_VIEW_TOOLBAR_LABELS, app_view_conflicts, conflict_summary,
+    has_incomplete_key_guide,
+};
 use super::state::{
     AiWorkflowPhase, AppState, HomeFilter, HomeFocus, LinkAction, NAVIGATION_TAB_LABELS,
     ToolUpdateState,
@@ -58,6 +62,13 @@ pub fn render(frame: &mut Frame<'_>, app: &mut AppState) {
 
     if app.screen == Screen::AppView {
         render_app_view(frame, app, area);
+        if app
+            .app_view
+            .as_ref()
+            .is_some_and(|view| view.key_guide_open)
+        {
+            render_app_key_guide(frame, app, area);
+        }
         if app.link_picker.is_some() {
             render_link_picker(frame, app, area);
         }
@@ -575,14 +586,8 @@ fn render_home(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 tool.app_category().label(),
                 AppState::risk_label(tool.risk_level())
             )),
-            Line::from(format!(
-                "Keys: {}",
-                if tool.key_hints.is_empty() {
-                    "See built-in help".to_string()
-                } else {
-                    tool.key_hints.join(" | ")
-                }
-            )),
+            Line::from(format!("Keys: {}", tool.key_hint_summary())),
+            Line::from(format!("Input: {}", conflict_summary(tool))),
         ]);
     }
     let active_install = app.selected_home_tool().and_then(|tool| {
@@ -886,16 +891,6 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
                 )),
                 Line::from(format!("run: {}", tool.run_command_for_current_platform())),
                 Line::from(format!("launch options: {}", tool.run_options.len())),
-                Line::from(format!(
-                    "app keys: {}",
-                    if tool.key_hints.is_empty() {
-                        "See the app's built-in help".to_string()
-                    } else {
-                        tool.key_hints.join(" | ")
-                    }
-                )),
-                Line::from("T4E controls: Enter run | I install | U uninstall | R reinstall"),
-                Line::from(""),
             ];
             if let Some(job) = app.queue.iter().find(|job| job.item.tool_id == tool.id) {
                 lines.push(Line::styled(
@@ -943,6 +938,15 @@ fn render_catalog(frame: &mut Frame<'_>, app: &mut AppState, area: Rect) {
             }
             lines.extend([
                 Line::from(""),
+                Line::styled(
+                    "App key guide",
+                    Style::default().fg(accent()).add_modifier(Modifier::BOLD),
+                ),
+            ]);
+            lines.extend(key_hint_lines(tool, 18));
+            lines.extend([
+                Line::from(format!("input check: {}", conflict_summary(tool))),
+                Line::from("T4E controls: Enter run | I install | U uninstall | R reinstall"),
                 Line::styled(
                     "Enter run  I install  U remove  R reinstall  f favorite  Backspace HOME",
                     Style::default().fg(muted()),
@@ -1178,7 +1182,7 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
         .constraints([
             Constraint::Length(3),
             Constraint::Min(8),
-            Constraint::Length(2),
+            Constraint::Length(3),
         ])
         .split(area);
     let titles = view
@@ -1228,14 +1232,160 @@ fn render_app_view(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
             .wrap(Wrap { trim: false }),
         sections[1],
     );
+    let app_keys = app.selected_running_tool().map_or_else(
+        || "No catalog key guide for this process".to_string(),
+        |tool| tool.key_hint_summary(),
+    );
+    let input_check = app.selected_running_tool().map_or_else(
+        || "Conflict check unavailable".to_string(),
+        conflict_summary,
+    );
     frame.render_widget(
         Paragraph::new(vec![
-            Line::from("[Alt-Left/Right] Switch  [Alt-BS] Background  [Alt-Q] Close"),
-            Line::from("[Alt-O] Open link  [Alt-C] Copy clean link"),
+            Line::from(format!("APP [Alt+K Keys] {app_keys}")),
+            Line::from(format!("T4E {}", APP_VIEW_TOOLBAR_LABELS.join(" "))),
+            Line::from(format!("CHECK Shift+Alt bypass · {input_check}")),
         ])
         .style(Style::default().fg(Color::Gray)),
         sections[2],
     );
+}
+
+fn render_app_key_guide(frame: &mut Frame<'_>, app: &AppState, area: Rect) {
+    let Some(view) = &app.app_view else {
+        return;
+    };
+    let tool = app.selected_running_tool();
+    let name = tool.map_or_else(
+        || {
+            view.apps
+                .get(view.selected)
+                .map_or("App", |managed| managed.window_name.as_str())
+        },
+        |tool| tool.name.as_str(),
+    );
+    let height = area.height.saturating_sub(4).clamp(12, 24);
+    let popup = centered_rect(88, height, area);
+    frame.render_widget(Clear, popup);
+
+    let mut lines = vec![Line::styled(
+        "App shortcuts",
+        Style::default().fg(accent()).add_modifier(Modifier::BOLD),
+    )];
+    if let Some(tool) = tool {
+        lines.extend(key_hint_lines(tool, 20));
+    } else {
+        lines.push(Line::styled(
+            "No catalog key guide is available for this process.",
+            Style::default().fg(muted()),
+        ));
+    }
+
+    lines.extend([
+        Line::from(""),
+        Line::styled(
+            "T4E captured shortcuts",
+            Style::default().fg(accent()).add_modifier(Modifier::BOLD),
+        ),
+    ]);
+    lines.extend(APP_VIEW_SHORTCUTS.iter().map(|shortcut| {
+        Line::from(vec![
+            Span::styled(
+                format!("{:<20}", shortcut.key),
+                Style::default().fg(selected()),
+            ),
+            Span::raw(shortcut.action),
+        ])
+    }));
+
+    lines.extend([
+        Line::from(""),
+        Line::styled(
+            "Collision review",
+            Style::default().fg(accent()).add_modifier(Modifier::BOLD),
+        ),
+    ]);
+    let conflicts = tool.map_or_else(Vec::new, app_view_conflicts);
+    if conflicts.is_empty() && tool.is_some_and(has_incomplete_key_guide) {
+        lines.push(Line::styled(
+            "Check incomplete: some app shortcuts are unknown or legacy text.",
+            Style::default().fg(Color::Yellow),
+        ));
+    } else if conflicts.is_empty() {
+        lines.push(Line::styled(
+            "No documented conflicts with T4E captured shortcuts.",
+            Style::default().fg(Color::Green),
+        ));
+    } else {
+        lines.extend(conflicts.iter().map(|conflict| {
+            Line::styled(
+                format!(
+                    "{}: app {} / T4E {}",
+                    conflict.key, conflict.app_action, conflict.t4e_action
+                ),
+                Style::default().fg(Color::Yellow),
+            )
+        }));
+        if tool.is_some_and(has_incomplete_key_guide) {
+            lines.push(Line::styled(
+                "Additional shortcuts remain unknown; use Shift+Alt if another overlap appears.",
+                Style::default().fg(Color::Yellow),
+            ));
+        }
+    }
+    lines.extend([
+        Line::from("Shift+Alt+<key> sends the corresponding Alt key directly to the app."),
+        Line::from("Use the clickable T4E toolbar when the app owns the same Alt shortcut."),
+        Line::from(""),
+        Line::styled(
+            "Up/Down or PgUp/PgDn scroll · Esc or Alt+K closes",
+            Style::default().fg(muted()),
+        ),
+    ]);
+
+    let viewport_height = usize::from(popup.height.saturating_sub(2));
+    let max_scroll = lines
+        .len()
+        .saturating_sub(viewport_height)
+        .min(u16::MAX as usize) as u16;
+    let scroll = view.key_guide_scroll.min(max_scroll);
+    frame.render_widget(
+        Paragraph::new(lines)
+            .block(panel(&format!("{name} key guide")))
+            .scroll((scroll, 0))
+            .wrap(Wrap { trim: false }),
+        popup,
+    );
+}
+
+fn key_hint_lines(tool: &Tool, key_width: usize) -> Vec<Line<'static>> {
+    if tool.key_hints.is_empty() {
+        return vec![Line::styled(
+            "No app key guide is declared.",
+            Style::default().fg(Color::Yellow),
+        )];
+    }
+    tool.key_hints
+        .iter()
+        .map(|hint| match hint {
+            KeyHint::Binding { keys, action } => Line::from(vec![
+                Span::styled(
+                    format!("{:<key_width$}", keys.join(" / ")),
+                    Style::default().fg(selected()),
+                ),
+                Span::raw(action.clone()),
+            ]),
+            KeyHint::Notice { note } => Line::styled(note.clone(), Style::default().fg(muted())),
+            KeyHint::Unknown { unknown } => Line::styled(
+                format!("Coverage incomplete: {unknown}"),
+                Style::default().fg(Color::Yellow),
+            ),
+            KeyHint::Legacy(note) => Line::styled(
+                format!("Legacy key text: {note}"),
+                Style::default().fg(Color::Yellow),
+            ),
+        })
+        .collect()
 }
 
 fn app_canvas_background(content: &Text<'_>, viewport_width: u16) -> Option<Color> {
@@ -1837,7 +1987,7 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("AI permission: Bypass / Auto / Ask in Settings"),
             Line::from("Enter run | I install | U uninstall | R reinstall"),
             Line::from("F1 Help | Ctrl+F HOME search | Tab panels | Shift+Tab tabs"),
-            Line::from("Activity arrows/PgUp/PgDn | Alt+Q close | Alt+BS background"),
+            Line::from("App View Alt+K keys | Shift+Alt bypass | Alt+Q close | Alt+BS background"),
         ]
     } else {
         vec![
@@ -1891,6 +2041,8 @@ fn render_help(frame: &mut Frame<'_>, area: Rect) {
             Line::from("Alt+Left / Right    switch running apps"),
             Line::from("Alt+Backspace       leave an app running in the background"),
             Line::from("Alt+Q               close the current app; quit from HOME"),
+            Line::from("Alt+K               inspect app keys, T4E keys, and collisions"),
+            Line::from("Shift+Alt+key       send a T4E-captured Alt key to the app"),
             Line::from("Mouse drag         copy text inside one panel without its border"),
             Line::from("Alt+M               disable / enable T4E mouse controls"),
             Line::from("Alt+O / Alt+C       open or copy a link from the current app"),

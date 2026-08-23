@@ -6,6 +6,14 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Added
+
+- Add structured per-app key guides, including Cava's complete interactive
+  controls, and require every launchable catalog app to declare input guidance.
+- Show T4E-owned shortcuts and documented collisions before launch and in a
+  scrollable `Alt+K` App View guide, with clickable controls and
+  `Shift+Alt+<key>` passthrough as universal conflict workarounds.
+
 ## [0.6.5] - 2026-08-23
 
 ### Fixed

@@ -44,7 +44,10 @@ tools:
   - id: ascii-camera
     name: "ASCII Camera"
     description: "Render a live camera feed as colored terminal character art without OpenCV."
-    key_hints: ["q quit (mpv)", "T4E close (managed caca)"]
+    key_hints:
+      - keys: ["q"]
+        action: "quit when using the mpv renderer"
+      - note: "Use the T4E Close control for the managed caca renderer."
     category: entertainment
     tags: []
     audience: general
@@ -99,7 +102,12 @@ tools:
   - id: spotatui
     name: "Spotatui"
     description: "A Spotify TUI focused on browsing, discovery, and playback control."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings can vary by Spotatui version; inspect ? help inside the installed app."
     category: entertainment
     tags: []
     audience: general
@@ -118,7 +126,12 @@ tools:
   - id: spotify-player
     name: "Spotify Player"
     description: "A full-featured Spotify client with library, playlist, search, and playback views."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings can vary with the installed keymap; inspect ? help inside the app."
     category: entertainment
     tags: []
     audience: general
@@ -137,7 +150,12 @@ tools:
   - id: ncspot
     name: "Ncspot"
     description: "A lightweight, keyboard-focused Spotify client inspired by ncurses players."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings can vary with the installed keymap; inspect ? help inside the app."
     category: entertainment
     tags: []
     audience: general
@@ -156,7 +174,21 @@ tools:
   - id: cava
     name: "Cava"
     description: "A real-time terminal audio spectrum visualizer."
-    key_hints: ["q quit"]
+    key_hints:
+      - keys: ["Up", "Down"]
+        action: "increase / decrease sensitivity"
+      - keys: ["Left", "Right"]
+        action: "decrease / increase the number of bars"
+      - keys: ["r"]
+        action: "reload configuration"
+      - keys: ["c"]
+        action: "reload configured colors"
+      - keys: ["f"]
+        action: "cycle graph / foreground color"
+      - keys: ["b"]
+        action: "cycle background color"
+      - keys: ["q", "Ctrl+C"]
+        action: "quit"
     category: entertainment
     tags: []
     audience: general
@@ -174,7 +206,12 @@ tools:
   - id: termusic
     name: "Termusic"
     description: "A terminal music player for local audio libraries."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings can vary with the installed keymap; inspect ? help inside the app."
     install_timeout_sec: 3600
     category: entertainment
     tags: []
@@ -213,7 +250,12 @@ tools:
   - id: yewtube
     name: "Yewtube"
     description: "Search and play YouTube content from an interactive terminal client."
-    key_hints: ["h help", "q quit"]
+    key_hints:
+      - keys: ["h"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings are available from h help and can vary by installed version."
     category: entertainment
     tags: []
     audience: general
@@ -245,7 +287,12 @@ tools:
   - id: youtube-tui
     name: "YouTube TUI"
     description: "Browse and search YouTube in a configurable TUI with external video playback."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings are available from ? help and can vary by installed version."
     install_timeout_sec: 3600
     category: entertainment
     tags: []
@@ -278,7 +325,9 @@ tools:
   - id: tplay
     name: "tplay"
     description: "Play local or online media, including YouTube, as colored terminal ASCII art."
-    key_hints: ["q quit"]
+    key_hints:
+      - keys: ["q"]
+        action: "quit"
     install_timeout_sec: 3600
     category: entertainment
     tags: []
@@ -366,7 +415,12 @@ tools:
   - id: shellcast
     name: "Shellcast"
     description: "Browse, subscribe to, and play podcasts from the terminal."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional bindings are available from ? help and can vary by installed version."
     category: reading
     tags: []
     audience: general
@@ -385,7 +439,12 @@ tools:
   - id: newsboat
     name: "Newsboat"
     description: "A keyboard-driven RSS and Atom feed reader."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Newsboat supports configurable bindings; inspect ? help for the active configuration."
     category: reading
     tags: []
     audience: prosumer
@@ -405,7 +464,12 @@ tools:
   - id: glow
     name: "Glow"
     description: "Read and browse Markdown files with terminal formatting."
-    key_hints: ["j/k scroll", "q quit"]
+    key_hints:
+      - keys: ["j", "k"]
+        action: "scroll"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional navigation bindings can vary by installed version."
     category: reading
     tags: []
     audience: general
@@ -423,7 +487,8 @@ tools:
   - id: fastfetch
     name: "Fastfetch"
     description: "Show a concise, colorful summary of the current system and terminal environment."
-    key_hints: ["Alt-Q close in T4E"]
+    key_hints:
+      - note: "Output-only app; use the T4E Close control when finished."
     category: utility
     tags: []
     audience: general
@@ -445,7 +510,12 @@ tools:
   - id: btop
     name: "btop"
     description: "Monitor CPU, memory, disks, network activity, and running processes in real time."
-    key_hints: ["q quit", "? help"]
+    key_hints:
+      - keys: ["q"]
+        action: "quit"
+      - keys: ["?"]
+        action: "open help"
+      - unknown: "Additional process and view controls are listed in ? help inside the installed app."
     category: utility
     tags: []
     audience: general
@@ -465,7 +535,14 @@ tools:
   - id: lynx
     name: "Lynx"
     description: "Browse websites as text with a keyboard-driven terminal interface."
-    key_hints: ["arrows navigate", "Enter open", "q quit"]
+    key_hints:
+      - keys: ["Up", "Down", "Left", "Right"]
+        action: "navigate"
+      - keys: ["Enter"]
+        action: "open"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Lynx has an extensive configurable keymap; inspect ? help for the active build."
     category: reading
     tags: []
     audience: general
@@ -547,7 +624,12 @@ tools:
   - id: yazi
     name: "Yazi"
     description: "A fast terminal file manager with previews and bulk operations."
-    key_hints: ["? help", "q quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Yazi supports configurable bindings; inspect ? help for the active configuration."
     category: files
     tags: []
     audience: general
@@ -695,7 +777,14 @@ tools:
   - id: ncdu
     name: "ncdu"
     description: "Interactively inspect disk usage and remove large files."
-    key_hints: ["arrows navigate", "d delete", "q quit"]
+    key_hints:
+      - keys: ["Up", "Down", "Left", "Right"]
+        action: "navigate"
+      - keys: ["d"]
+        action: "delete selected item"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "Additional sort, display, refresh, and shell bindings vary by ncdu version."
     category: files
     tags: []
     audience: general
@@ -713,7 +802,12 @@ tools:
   - id: broot
     name: "broot"
     description: "Navigate directory trees, search files, and run file operations."
-    key_hints: ["? help", "Esc quit"]
+    key_hints:
+      - keys: ["?"]
+        action: "open help"
+      - keys: ["Esc"]
+        action: "quit"
+      - unknown: "Broot verbs and bindings are configurable; inspect ? help for the active configuration."
     category: files
     tags: []
     audience: general
@@ -811,7 +905,17 @@ tools:
   - id: cmatrix
     name: "cmatrix"
     description: "Display an animated digital-rain terminal effect."
-    key_hints: ["q quit"]
+    key_hints:
+      - keys: ["a"]
+        action: "toggle asynchronous scrolling"
+      - keys: ["b", "B", "n"]
+        action: "random bold / all bold / bold off"
+      - keys: ["0-9"]
+        action: "adjust update speed"
+      - keys: ["!", "@", "#", "$", "%", "^", "&", ")"]
+        action: "select a runtime color"
+      - keys: ["q"]
+        action: "quit"
     category: fun
     tags: []
     audience: general
@@ -852,7 +956,20 @@ tools:
   - id: bastet
     name: "bastet"
     description: "Play an adversarial terminal block-stacking game."
-    key_hints: ["arrows move", "Space rotate", "q quit"]
+    key_hints:
+      - keys: ["Left", "Right", "Down"]
+        action: "move left / right / one step down"
+      - keys: ["Space"]
+        action: "rotate clockwise"
+      - keys: ["Up"]
+        action: "rotate counter-clockwise"
+      - keys: ["Enter"]
+        action: "hard drop"
+      - keys: ["P"]
+        action: "pause"
+      - keys: ["Ctrl+C"]
+        action: "quit immediately"
+      - unknown: "Bastet lets users change these default bindings from its start menu."
     category: fun
     tags: []
     audience: general
@@ -870,6 +987,9 @@ tools:
   - id: asciiquarium
     name: "Asciiquarium"
     description: "Display an animated ASCII aquarium in the terminal."
+    key_hints:
+      - keys: ["Ctrl+C"]
+        action: "quit"
     category: fun
     tags: []
     audience: general
@@ -888,6 +1008,9 @@ tools:
   - id: sl
     name: "sl"
     description: "Run a brief animated steam locomotive across the terminal."
+    key_hints:
+      - keys: ["Ctrl+C"]
+        action: "stop the animation early"
     category: fun
     tags: []
     audience: general
@@ -922,6 +1045,8 @@ tools:
   - id: figlet
     name: "Figlet"
     description: "Turn a short message into large configurable ASCII-art lettering."
+    key_hints:
+      - note: "Output-only app; use the T4E toolbar to close or background it."
     category: fun
     tags: []
     audience: general
@@ -962,6 +1087,8 @@ tools:
   - id: cowsay
     name: "cowsay"
     description: "Display text in a configurable ASCII speech bubble."
+    key_hints:
+      - note: "Output-only app; use the T4E toolbar to close or background it."
     category: fun
     tags: []
     audience: general
@@ -984,6 +1111,8 @@ tools:
   - id: fortune
     name: "fortune"
     description: "Print a random quotation or short message."
+    key_hints:
+      - note: "Output-only app; use the T4E toolbar to close or background it."
     category: fun
     tags: []
     audience: general
@@ -1006,7 +1135,17 @@ tools:
   - id: tty-clock
     name: "tty-clock"
     description: "Show a large configurable digital clock in the terminal."
-    key_hints: ["q quit"]
+    key_hints:
+      - keys: ["h", "j", "k", "l"]
+        action: "move the clock when it is not centered"
+      - keys: ["0-7"]
+        action: "select color"
+      - keys: ["b", "x", "c", "r"]
+        action: "toggle bold / box / centered / rebound"
+      - keys: ["s", "t"]
+        action: "toggle seconds / 12-hour time"
+      - keys: ["q"]
+        action: "quit"
     category: fun
     tags: []
     audience: general
@@ -1054,7 +1193,13 @@ tools:
   - id: big-clock
     name: "Big Clock"
     description: "Show a digital clock with extra-large digits that scale to fill the terminal. Built into T4E, so it never needs installation."
-    key_hints: ["q quit", "c or arrows cycle color"]
+    key_hints:
+      - keys: ["q", "Esc", "Ctrl+C"]
+        action: "quit"
+      - keys: ["c", "Right"]
+        action: "cycle clock color forward"
+      - keys: ["C", "Left"]
+        action: "cycle clock color backward"
     category: fun
     tags: []
     audience: general
@@ -1096,6 +1241,9 @@ tools:
   - id: nyancat
     name: "nyancat"
     description: "Play the colorful Nyan Cat terminal animation."
+    key_hints:
+      - keys: ["Ctrl+C"]
+        action: "quit"
     category: fun
     tags: []
     audience: general
@@ -1113,7 +1261,16 @@ tools:
   - id: pipes-sh
     name: "pipes.sh"
     description: "Generate animated terminal pipes with configurable colors and styles."
-    key_hints: ["q quit"]
+    key_hints:
+      - keys: ["P", "O"]
+        action: "increase / decrease straight-pipe probability"
+      - keys: ["F", "D"]
+        action: "increase / decrease frame rate"
+      - keys: ["B", "C", "K"]
+        action: "toggle bold / color / persistent pipe style"
+      - keys: ["q"]
+        action: "quit (any unhandled key also quits)"
+      - unknown: "Runtime controls can vary by the packaged pipes.sh version."
     category: fun
     tags: []
     audience: general
@@ -1161,6 +1318,13 @@ tools:
   - id: ninvaders
     name: "ninvaders"
     description: "Play a terminal adaptation of the classic space shooter."
+    key_hints:
+      - keys: ["Left", "Right"]
+        action: "move"
+      - keys: ["Space"]
+        action: "shoot"
+      - keys: ["Ctrl+C"]
+        action: "quit"
     category: fun
     tags: []
     audience: general
@@ -1178,6 +1342,27 @@ tools:
   - id: nudoku
     name: "nudoku"
     description: "Play and solve Sudoku puzzles in a terminal interface."
+    key_hints:
+      - keys: ["Arrows", "h", "j", "k", "l"]
+        action: "move"
+      - keys: ["1-9"]
+        action: "enter a number"
+      - keys: ["Delete", "Backspace", "x"]
+        action: "clear a cell"
+      - keys: ["c"]
+        action: "check the solution"
+      - keys: ["H"]
+        action: "reveal one number"
+      - keys: ["m"]
+        action: "toggle matching-number marks"
+      - keys: ["N"]
+        action: "new puzzle"
+      - keys: ["S"]
+        action: "solve puzzle"
+      - keys: ["Q"]
+        action: "quit"
+      - keys: ["r"]
+        action: "redraw after a terminal resize"
     category: fun
     tags: []
     audience: general
@@ -1195,7 +1380,14 @@ tools:
   - id: termleaf
     name: "Termleaf"
     description: "A distraction-free terminal text editor built for focused writing."
-    key_hints: ["F1 help", "Ctrl-S save", "Ctrl-Q quit"]
+    key_hints:
+      - keys: ["F1"]
+        action: "open help"
+      - keys: ["Ctrl+S"]
+        action: "save"
+      - keys: ["Ctrl+Q"]
+        action: "quit"
+      - unknown: "Editing bindings are listed in F1 help and can vary by installed version."
     category: edit
     tags: []
     audience: general
@@ -1237,7 +1429,12 @@ tools:
   - id: micro
     name: "Micro"
     description: "A straightforward terminal text editor with familiar shortcuts."
-    key_hints: ["Ctrl-S save", "Ctrl-Q quit"]
+    key_hints:
+      - keys: ["Ctrl+S"]
+        action: "save"
+      - keys: ["Ctrl+Q"]
+        action: "quit"
+      - unknown: "Micro supports a configurable keymap; inspect its command help for active bindings."
     category: edit
     tags: []
     audience: general
@@ -1255,7 +1452,14 @@ tools:
   - id: helix
     name: "Helix"
     description: "A modal code editor with built-in language-server support."
-    key_hints: [":w save", ":q quit", "Space-? commands"]
+    key_hints:
+      - keys: [":w"]
+        action: "save"
+      - keys: [":q"]
+        action: "quit"
+      - keys: ["Space+?"]
+        action: "open command help"
+      - unknown: "Helix is modal and supports many configurable bindings beyond this quick-start set."
     category: ide
     tags: []
     audience: prosumer
@@ -1273,7 +1477,14 @@ tools:
   - id: lazyvim
     name: "LazyVim"
     description: "A full IDE configuration for Neovim, isolated from your existing Neovim setup."
-    key_hints: ["Space help", ":w save", ":q quit"]
+    key_hints:
+      - keys: ["Space"]
+        action: "open leader command menu"
+      - keys: [":w"]
+        action: "save"
+      - keys: [":q"]
+        action: "quit"
+      - unknown: "LazyVim and installed plugins can add or replace leader and Alt bindings."
     category: ide
     tags: []
     audience: developer
@@ -1293,7 +1504,12 @@ tools:
   - id: visidata
     name: "VisiData"
     description: "Interactively explore, transform, and analyze tabular data."
-    key_hints: ["Ctrl-H help", "q quit"]
+    key_hints:
+      - keys: ["Ctrl+H"]
+        action: "open help"
+      - keys: ["q"]
+        action: "quit"
+      - unknown: "VisiData has a large sheet-specific command set; inspect Ctrl+H help for active bindings."
     category: edit
     tags: []
     audience: prosumer
@@ -1311,6 +1527,8 @@ tools:
   - id: claude-code
     name: "Claude Code"
     description: "An agentic coding assistant that works inside the terminal."
+    key_hints:
+      - unknown: "Shortcuts vary by installed version; inspect Claude Code's built-in help before relying on an Alt binding."
     category: agents
     tags: ["agent"]
     audience: developer
@@ -1331,6 +1549,8 @@ tools:
   - id: codex-cli
     name: "Codex CLI"
     description: "OpenAI's terminal coding agent for repository-aware development tasks."
+    key_hints:
+      - unknown: "Shortcuts vary by installed version; inspect Codex's built-in help before relying on an Alt binding."
     category: agents
     tags: ["agent"]
     audience: developer
@@ -1349,6 +1569,8 @@ tools:
   - id: opencode
     name: "OpenCode"
     description: "An open-source terminal coding agent with multiple model providers."
+    key_hints:
+      - unknown: "Shortcuts vary by installed version; inspect OpenCode's built-in help before relying on an Alt binding."
     category: agents
     tags: ["agent"]
     audience: developer

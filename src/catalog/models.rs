@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CatalogRegistry {
@@ -23,7 +24,7 @@ pub struct Tool {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub key_hints: Vec<String>,
+    pub key_hints: Vec<KeyHint>,
     #[serde(default)]
     pub install_timeout_sec: Option<u64>,
     pub category: ToolCategory,
@@ -44,6 +45,52 @@ pub struct Tool {
     #[serde(default)]
     pub checks: Vec<Check>,
     pub notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum KeyHint {
+    Binding { keys: Vec<String>, action: String },
+    Notice { note: String },
+    Unknown { unknown: String },
+    Legacy(String),
+}
+
+impl KeyHint {
+    pub fn keys(&self) -> &[String] {
+        match self {
+            Self::Binding { keys, .. } => keys,
+            Self::Notice { .. } | Self::Unknown { .. } | Self::Legacy(_) => &[],
+        }
+    }
+
+    pub fn is_valid(&self) -> bool {
+        match self {
+            Self::Binding { keys, action } => {
+                !keys.is_empty()
+                    && !action.trim().is_empty()
+                    && keys.iter().all(|key| {
+                        !key.trim().is_empty()
+                            && key.len() <= 32
+                            && !key.chars().any(char::is_control)
+                    })
+            }
+            Self::Notice { note } | Self::Legacy(note) => !note.trim().is_empty(),
+            Self::Unknown { unknown } => !unknown.trim().is_empty(),
+        }
+    }
+}
+
+impl fmt::Display for KeyHint {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Binding { keys, action } => {
+                write!(formatter, "{} {action}", keys.join("/"))
+            }
+            Self::Notice { note } | Self::Legacy(note) => formatter.write_str(note),
+            Self::Unknown { .. } => formatter.write_str("additional keys unknown"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -122,6 +169,17 @@ pub struct Check {
 }
 
 impl Tool {
+    pub fn key_hint_summary(&self) -> String {
+        if self.key_hints.is_empty() {
+            return "No key guide declared".to_string();
+        }
+        self.key_hints
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(" | ")
+    }
+
     /// Prefer a native Termux installer while retaining the legacy Linux plan
     /// until each catalog application has been migrated explicitly.
     pub fn installer_for(&self, platform: Platform) -> Option<&Installer> {

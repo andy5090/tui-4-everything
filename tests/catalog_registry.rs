@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use t4e::app::shortcuts::{app_view_conflicts, conflict_summary};
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::{
     AppCategory, Audience, Capability, CatalogRegistry, Check, Exposure, InstallMethod, Installer,
-    OutputFilter, Platform, RiskLevel, RunSpec, Tool, ToolCategory, VerifiedUpdate, VersionProbe,
+    KeyHint, OutputFilter, Platform, RiskLevel, RunSpec, Tool, ToolCategory, VerifiedUpdate,
+    VersionProbe,
 };
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
@@ -72,6 +74,82 @@ fn registry_loads_and_validates() {
     assert!(yewtube.run_options[0].default_enabled);
     assert_eq!(yewtube.run_command_for(Platform::Macos), "t4e-yewtube");
     assert!(!yewtube.key_hints.is_empty());
+
+    let missing_key_guides = catalog
+        .tools
+        .iter()
+        .filter(|tool| tool.is_launchable_app() && tool.key_hints.is_empty())
+        .map(|tool| tool.id.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        missing_key_guides.is_empty(),
+        "launchable apps need key guides: {}",
+        missing_key_guides.join(", ")
+    );
+    let unstructured_key_guides = catalog
+        .tools
+        .iter()
+        .filter(|tool| {
+            tool.is_launchable_app()
+                && tool
+                    .key_hints
+                    .iter()
+                    .any(|hint| matches!(hint, KeyHint::Legacy(_)))
+        })
+        .map(|tool| tool.id.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        unstructured_key_guides.is_empty(),
+        "built-in app key guides must support collision checks: {}",
+        unstructured_key_guides.join(", ")
+    );
+
+    let cava = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "cava")
+        .expect("Cava exists");
+    let cava_keys = cava
+        .key_hints
+        .iter()
+        .flat_map(KeyHint::keys)
+        .collect::<Vec<_>>();
+    for expected in [
+        "Up", "Down", "Left", "Right", "r", "c", "f", "b", "q", "Ctrl+C",
+    ] {
+        assert!(
+            cava_keys.iter().any(|key| key.as_str() == expected),
+            "Cava declares {expected}"
+        );
+    }
+    assert!(app_view_conflicts(cava).is_empty());
+
+    let mut conflicting = cava.clone();
+    conflicting.key_hints.push(KeyHint::Binding {
+        keys: vec!["Alt+Q".to_string()],
+        action: "app action".to_string(),
+    });
+    let conflicts = app_view_conflicts(&conflicting);
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].key, "Alt+Q");
+
+    conflicting.key_hints.push(KeyHint::Unknown {
+        unknown: "custom keymap".to_string(),
+    });
+    let summary = conflict_summary(&conflicting);
+    assert!(summary.contains("Conflict: Alt+Q"));
+    assert!(summary.contains("additional keys unknown"));
+
+    let mut legacy = cava.clone();
+    legacy.key_hints = vec![KeyHint::Legacy("Alt-Q maybe closes".to_string())];
+    assert!(conflict_summary(&legacy).starts_with("Check incomplete"));
+
+    let codex = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "codex-cli")
+        .expect("Codex CLI exists");
+    assert!(conflict_summary(codex).starts_with("Check incomplete"));
 
     let ascii_camera = catalog
         .tools
@@ -504,7 +582,9 @@ fn verified_update_tool(verified_update: Option<VerifiedUpdate>) -> Tool {
         id: "verified-ripgrep".to_string(),
         name: "Verified Ripgrep".to_string(),
         description: Some("Version-pinned ripgrep".to_string()),
-        key_hints: vec![],
+        key_hints: vec![KeyHint::Notice {
+            note: "No interactive shortcuts".to_string(),
+        }],
         install_timeout_sec: None,
         category: ToolCategory::Utility,
         tags: vec![],

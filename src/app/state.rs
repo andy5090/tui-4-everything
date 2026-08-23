@@ -26,6 +26,7 @@ use crate::storage::{
 use crate::system_info::{SystemOverview, cached_system_overview};
 
 use super::events::Screen;
+use super::shortcuts::toolbar_action_at;
 
 pub const NAVIGATION_TAB_LABELS: [&str; 4] = ["HOME", "Activity", "Settings", "Help"];
 
@@ -218,6 +219,8 @@ pub struct AppViewState {
     pub apps: Vec<ManagedApp>,
     pub selected: usize,
     pub content: String,
+    pub key_guide_open: bool,
+    pub key_guide_scroll: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -525,7 +528,7 @@ impl AppState {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) {
-        if key.modifiers.contains(KeyModifiers::ALT) && key.code == KeyCode::Char('m') {
+        if has_exact_alt_modifier(key) && key.code == KeyCode::Char('m') {
             self.mouse_enabled = !self.mouse_enabled;
             self.settings.mouse_enabled = self.mouse_enabled;
             self.mouse_selection = None;
@@ -684,6 +687,20 @@ impl AppState {
                     MouseEventKind::ScrollUp | MouseEventKind::ScrollDown
                 ))
         {
+            self.mouse_selection = None;
+            return;
+        }
+
+        if self
+            .app_view
+            .as_ref()
+            .is_some_and(|view| view.key_guide_open)
+        {
+            match mouse.kind {
+                MouseEventKind::ScrollUp => self.move_app_key_guide(-1),
+                MouseEventKind::ScrollDown => self.move_app_key_guide(1),
+                _ => {}
+            }
             self.mouse_selection = None;
             return;
         }
@@ -968,6 +985,15 @@ impl AppState {
                 .iter()
                 .any(|running| running.window_name == tool_id)
         })
+    }
+
+    pub fn selected_running_tool(&self) -> Option<&Tool> {
+        let app_id = self
+            .app_view
+            .as_ref()
+            .and_then(|view| view.apps.get(view.selected))
+            .map(|app| app.window_name.as_str())?;
+        self.catalog.tools.iter().find(|tool| tool.id == app_id)
     }
 
     fn selected_action_tool(&self) -> Option<&Tool> {
@@ -1342,6 +1368,8 @@ impl AppState {
             apps,
             selected: 0,
             content: String::new(),
+            key_guide_open: false,
+            key_guide_scroll: 0,
         });
         self.link_picker = None;
         self.screen = Screen::AppView;
@@ -1360,6 +1388,8 @@ impl AppState {
             apps,
             selected: 0,
             content: String::new(),
+            key_guide_open: false,
+            key_guide_scroll: 0,
         });
         self.link_picker = None;
     }
@@ -1371,6 +1401,7 @@ impl AppState {
         if let Some(index) = view.apps.iter().position(|app| app.window_name == app_id) {
             view.selected = index;
             view.content.clear();
+            view.key_guide_scroll = 0;
         }
     }
 
@@ -1985,21 +2016,39 @@ impl AppState {
             self.handle_link_picker_key(key.code);
             return;
         }
+        if self
+            .app_view
+            .as_ref()
+            .is_some_and(|view| view.key_guide_open)
+        {
+            match key.code {
+                KeyCode::Esc => self.toggle_app_key_guide(),
+                KeyCode::Char('k') if has_exact_alt_modifier(key) => self.toggle_app_key_guide(),
+                KeyCode::Up | KeyCode::Char('k') => self.move_app_key_guide(-1),
+                KeyCode::Down | KeyCode::Char('j') => self.move_app_key_guide(1),
+                KeyCode::PageUp => self.move_app_key_guide(-8),
+                KeyCode::PageDown => self.move_app_key_guide(8),
+                KeyCode::Home => self.set_app_key_guide_scroll(0),
+                _ => {}
+            }
+            return;
+        }
         match key.code {
-            KeyCode::Left if key.modifiers.contains(KeyModifiers::ALT) => self.move_app_view(-1),
-            KeyCode::Right if key.modifiers.contains(KeyModifiers::ALT) => self.move_app_view(1),
-            KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::ALT) => {
+            KeyCode::Left if has_exact_alt_modifier(key) => self.move_app_view(-1),
+            KeyCode::Right if has_exact_alt_modifier(key) => self.move_app_view(1),
+            KeyCode::Char('q') if has_exact_alt_modifier(key) => {
                 self.request_close_current_app();
             }
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::ALT) => {
+            KeyCode::Char('c') if has_exact_alt_modifier(key) => {
                 self.request_app_url(false);
             }
-            KeyCode::Char('o') if key.modifiers.contains(KeyModifiers::ALT) => {
+            KeyCode::Char('o') if has_exact_alt_modifier(key) => {
                 self.request_app_url(true);
             }
-            KeyCode::Backspace if key.modifiers.contains(KeyModifiers::ALT) => {
+            KeyCode::Backspace if has_exact_alt_modifier(key) => {
                 self.background_app_view();
             }
+            KeyCode::Char('k') if has_exact_alt_modifier(key) => self.toggle_app_key_guide(),
             _ => {
                 let Some(input) = app_input_from_key(key) else {
                     return;
@@ -2026,6 +2075,39 @@ impl AppState {
         {
             self.return_after_app_close = true;
             self.effects.push_back(AppEffect::CloseApp(pane_id));
+        }
+    }
+
+    fn toggle_app_key_guide(&mut self) {
+        let Some(view) = &mut self.app_view else {
+            return;
+        };
+        view.key_guide_open = !view.key_guide_open;
+        view.key_guide_scroll = 0;
+        self.status = if view.key_guide_open {
+            "Opened app key guide"
+        } else {
+            "Closed app key guide"
+        }
+        .to_string();
+    }
+
+    fn move_app_key_guide(&mut self, delta: isize) {
+        let Some(view) = &mut self.app_view else {
+            return;
+        };
+        view.key_guide_scroll = if delta.is_negative() {
+            view.key_guide_scroll
+                .saturating_sub(u16::try_from(delta.unsigned_abs()).unwrap_or(u16::MAX))
+        } else {
+            view.key_guide_scroll
+                .saturating_add(u16::try_from(delta).unwrap_or(u16::MAX))
+        };
+    }
+
+    fn set_app_key_guide_scroll(&mut self, scroll: u16) {
+        if let Some(view) = &mut self.app_view {
+            view.key_guide_scroll = scroll;
         }
     }
 
@@ -2141,14 +2223,19 @@ impl AppState {
                 }
                 start = start.saturating_add(width + 3);
             }
-        } else if row >= terminal_height.saturating_sub(2) {
-            match column {
-                0..=11 => self.move_app_view(1),
-                12..=33 => self.move_app_view(-1),
-                34..=51 => {
-                    self.background_app_view();
-                }
-                _ => self.request_close_current_app(),
+        } else if row == terminal_height.saturating_sub(3) {
+            if (4..16).contains(&column) {
+                self.toggle_app_key_guide();
+            }
+        } else if row == terminal_height.saturating_sub(2) {
+            match toolbar_action_at(column) {
+                Some(0) => self.move_app_view(-1),
+                Some(1) => self.move_app_view(1),
+                Some(2) => self.background_app_view(),
+                Some(3) => self.request_close_current_app(),
+                Some(4) => self.request_app_url(true),
+                Some(5) => self.request_app_url(false),
+                _ => {}
             }
         }
     }
@@ -2222,6 +2309,7 @@ impl AppState {
         };
         view.selected = move_index(view.selected, view.apps.len(), delta);
         view.content.clear();
+        view.key_guide_scroll = 0;
     }
 
     fn move_catalog(&mut self, delta: isize) {
@@ -2477,6 +2565,7 @@ impl AppState {
                 view.return_screen = self.screen;
                 view.selected = index;
                 view.content.clear();
+                view.key_guide_scroll = 0;
             }
             self.screen = Screen::AppView;
             self.ai_launch_approval_mode = None;
@@ -3597,6 +3686,10 @@ fn uninstall_command(
         }
     };
     Some(command)
+}
+
+fn has_exact_alt_modifier(key: KeyEvent) -> bool {
+    key.modifiers == KeyModifiers::ALT
 }
 
 fn app_input_from_key(key: KeyEvent) -> Option<AppInput> {
