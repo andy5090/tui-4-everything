@@ -156,7 +156,7 @@ batch-install units.
 | Files | Yazi, ncdu, broot |
 | Editors | Termleaf, Micro, Helix, LazyVim |
 | AI | Claude Code, Codex CLI, OpenCode |
-| System | ASCII Camera, Fastfetch |
+| System | ASCII Camera, Fastfetch, Neofetch, btop |
 | Utilities | Glow, VisiData |
 | Games | bastet, ninvaders, nudoku |
 | Entertainment | Figlet, cowsay, fortune, cmatrix, Asciiquarium, tty-clock, Big Clock, nyancat, pipes.sh, and visual utilities |

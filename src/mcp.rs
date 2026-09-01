@@ -150,9 +150,7 @@ fn call_tool(
                 .find(|tool| tool.id == tool_id)
                 .ok_or_else(|| anyhow::anyhow!("unknown tool: {tool_id}"))?;
             let installer = tool
-                .installers
-                .iter()
-                .find(|installer| installer.platform == platform)
+                .installer_for_target(platform, crate::catalog::models::current_architecture())
                 .ok_or_else(|| anyhow::anyhow!("no installer for {tool_id}"))?;
             let task = build_install_task(tool, installer, &InstallPolicy::default())?;
             json!({

@@ -4,9 +4,9 @@ use std::path::Path;
 use t4e::app::shortcuts::{app_view_conflicts, conflict_summary};
 use t4e::catalog::loader::{load_catalog, load_workspaces};
 use t4e::catalog::models::{
-    AppCategory, Audience, Capability, CatalogRegistry, Check, Exposure, InstallMethod, Installer,
-    KeyHint, OutputFilter, Platform, RiskLevel, RunSpec, Tool, ToolCategory, VerifiedUpdate,
-    VersionProbe,
+    AppCategory, Architecture, Audience, Capability, CatalogRegistry, Check, Exposure,
+    InstallMethod, Installer, KeyHint, OutputFilter, Platform, RiskLevel, RunSpec, Tool,
+    ToolCategory, VerifiedUpdate, VersionProbe,
 };
 use t4e::catalog::validator::{validate_catalog, validate_workspaces};
 
@@ -52,8 +52,24 @@ fn registry_loads_and_validates() {
         .find(|tool| tool.id == "asciiquarium")
         .expect("asciiquarium exists");
     assert!(asciiquarium.installers.iter().any(|installer| {
-        installer.platform == Platform::Linux && installer.method == InstallMethod::Snap
+        installer.platform == Platform::Linux
+            && installer.method == InstallMethod::Asciiquarium
+            && installer.supports_architecture(Architecture::X86)
     }));
+
+    let spotatui = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "spotatui")
+        .expect("spotatui exists");
+    assert_eq!(spotatui.install_timeout_sec, Some(7_200));
+
+    let spotify_player = catalog
+        .tools
+        .iter()
+        .find(|tool| tool.id == "spotify-player")
+        .expect("spotify-player exists");
+    assert_eq!(spotify_player.install_timeout_sec, Some(7_200));
 
     let yewtube = catalog
         .tools
@@ -459,7 +475,15 @@ fn glow_and_read_only_helpers_belong_to_the_viewers_pack() {
         .expect("viewers pack exists");
     assert_eq!(
         viewers.tool_ids,
-        ["fastfetch", "btop", "glow", "bat", "less", "mediainfo"]
+        [
+            "fastfetch",
+            "neofetch",
+            "btop",
+            "glow",
+            "bat",
+            "less",
+            "mediainfo",
+        ]
     );
 
     let podcasts = catalog
@@ -532,6 +556,52 @@ fn workspaces_load_and_have_tmux_minimum() {
         .count();
 
     assert!(tmux_count >= 3, "expected at least three tmux workspaces");
+}
+
+#[test]
+fn i686_catalog_uses_supported_installers_and_lightweight_spotatui() {
+    let catalog = load_catalog(Path::new("registry/catalog.yaml")).expect("catalog loads");
+    let installer = |tool_id: &str, architecture: Architecture| {
+        catalog
+            .tools
+            .iter()
+            .find(|tool| tool.id == tool_id)
+            .and_then(|tool| tool.installer_for_target(Platform::Linux, architecture))
+            .expect("target installer exists")
+    };
+
+    assert_eq!(
+        installer("neofetch", Architecture::X86).method,
+        InstallMethod::Apt
+    );
+    for tool_id in ["fastfetch", "helix", "claude-code", "opencode"] {
+        assert!(
+            catalog
+                .tools
+                .iter()
+                .find(|tool| tool.id == tool_id)
+                .and_then(|tool| tool.installer_for_target(Platform::Linux, Architecture::X86))
+                .is_none(),
+            "{tool_id} must stay hidden on i686"
+        );
+    }
+    for tool_id in ["glow", "yazi", "codex-cli", "spotatui"] {
+        let target = installer(tool_id, Architecture::X86);
+        assert!(target.supports_architecture(Architecture::X86));
+    }
+
+    let spotatui = installer("spotatui", Architecture::X86);
+    assert_eq!(spotatui.method, InstallMethod::Spotatui);
+    assert!(spotatui.system_packages.contains(&"lld".to_string()));
+
+    let codex = installer("codex-cli", Architecture::X86);
+    assert_eq!(codex.method, InstallMethod::Script);
+    assert!(
+        codex
+            .install_cmd
+            .as_deref()
+            .is_some_and(|command| command.contains("andy5090/codex-for-i686-linux"))
+    );
 }
 
 #[test]
@@ -627,6 +697,7 @@ fn verified_update_tool(verified_update: Option<VerifiedUpdate>) -> Tool {
             Installer {
                 platform: Platform::Linux,
                 method: InstallMethod::Apt,
+                architectures: vec![],
                 package_hints: vec!["ripgrep".to_string()],
                 system_packages: vec![],
                 executable: Some("ripgrep".to_string()),
@@ -637,6 +708,7 @@ fn verified_update_tool(verified_update: Option<VerifiedUpdate>) -> Tool {
             Installer {
                 platform: Platform::Macos,
                 method: InstallMethod::Brew,
+                architectures: vec![],
                 package_hints: vec!["ripgrep".to_string()],
                 system_packages: vec![],
                 executable: Some("ripgrep".to_string()),

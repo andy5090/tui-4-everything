@@ -67,6 +67,7 @@ fn runtime_risk_is_derived_only_from_capabilities() {
         installers: vec![Installer {
             platform: t4e::catalog::models::Platform::Linux,
             method: InstallMethod::Script,
+            architectures: vec![],
             package_hints: vec!["custom".to_string()],
             system_packages: vec![],
             executable: None,

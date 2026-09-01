@@ -3,7 +3,9 @@ use std::collections::{HashMap, HashSet};
 use anyhow::{Result, bail};
 use chrono::Utc;
 
-use crate::catalog::models::{Capability, CatalogRegistry, InstallMethod, Platform, ToolCategory};
+use crate::catalog::models::{
+    Architecture, Capability, CatalogRegistry, InstallMethod, Platform, ToolCategory,
+};
 use crate::installer::checks::normalize_version;
 use crate::mux::workspace::WorkspaceRegistry;
 
@@ -88,18 +90,34 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
             }
         }
         for platform in [Platform::Macos, Platform::Linux] {
-            let count = tool
+            let installers = tool
                 .installers
                 .iter()
                 .filter(|installer| installer.platform == platform)
-                .count();
-            if count != 1 {
+                .collect::<Vec<_>>();
+            if installers.is_empty() {
                 bail!(
-                    "tool {} must define exactly one {:?} installer, found {}",
+                    "tool {} must define at least one {:?} installer",
                     tool.id,
-                    platform,
-                    count
+                    platform
                 );
+            }
+            for (index, installer) in installers.iter().enumerate() {
+                for other in installers.iter().skip(index + 1) {
+                    let overlaps = installer.architectures.is_empty()
+                        || other.architectures.is_empty()
+                        || installer
+                            .architectures
+                            .iter()
+                            .any(|architecture| other.architectures.contains(architecture));
+                    if overlaps {
+                        bail!(
+                            "tool {} has overlapping {:?} installer architectures",
+                            tool.id,
+                            platform
+                        );
+                    }
+                }
             }
         }
         let termux_count = tool
@@ -131,6 +149,16 @@ pub fn validate_catalog(catalog: &CatalogRegistry) -> Result<()> {
                 .any(|package| !is_safe_argument(package))
             {
                 bail!("tool {} installer has invalid system packages", tool.id);
+            }
+            let unique_architectures = installer.architectures.iter().collect::<HashSet<_>>();
+            if unique_architectures.len() != installer.architectures.len() {
+                bail!("tool {} installer has duplicate architectures", tool.id);
+            }
+            if installer.architectures.contains(&Architecture::Other) {
+                bail!(
+                    "tool {} installer cannot target an unknown architecture",
+                    tool.id
+                );
             }
             if !installer.system_packages.is_empty()
                 && !matches!(installer.platform, Platform::Linux | Platform::Termux)

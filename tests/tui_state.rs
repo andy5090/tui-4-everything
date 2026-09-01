@@ -756,7 +756,7 @@ fn reset_reinstall_tolerates_missing_packages_across_install_channels() {
     } else {
         [
             ("lynx", "dpkg-query"),
-            ("asciiquarium", "snap list"),
+            ("asciiquarium", "t4e/asciiquarium"),
             ("yewtube", "pipx list --short"),
             ("youtube-tui", "cargo uninstall"),
         ]
@@ -3302,7 +3302,7 @@ fn stale_saved_install_plan_is_refreshed_from_the_current_registry() {
     let expected_method = if cfg!(target_os = "macos") {
         InstallMethod::Brew
     } else {
-        InstallMethod::Snap
+        InstallMethod::Asciiquarium
     };
     assert_eq!(refreshed.task.method, expected_method);
     assert_eq!(
@@ -3310,7 +3310,7 @@ fn stale_saved_install_plan_is_refreshed_from_the_current_registry() {
         if cfg!(target_os = "macos") {
             "brew"
         } else {
-            "snap"
+            "asciiquarium"
         }
     );
     assert_eq!(refreshed.item.attempts, 0);

@@ -6,6 +6,21 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-09-01
+
+### Added
+
+- Select catalog installers by architecture and add verified i686 paths for
+  Glow, Yazi, Asciiquarium, Neofetch, and Codex CLI.
+
+### Fixed
+
+- Install Spotatui on memory-constrained i686 Linux with extended network and
+  install timeouts, its lightweight feature set, reduced compiler optimization,
+  and LLVM LLD linking.
+- Keep unsupported x86_64/aarch64-only applications hidden on i686 while
+  preserving native Termux and XBPS installer selection.
+
 ## [0.8.0] - 2026-08-24
 
 ### Added

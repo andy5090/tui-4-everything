@@ -246,6 +246,10 @@ fn materialize_command(installer: &Installer) -> Result<String> {
         }
         InstallMethod::Newsboat => materialize_newsboat_command(&installer.platform),
         InstallMethod::Fastfetch => materialize_fastfetch_command(&installer.platform),
+        InstallMethod::Glow => materialize_glow_command(&installer.platform),
+        InstallMethod::Yazi => materialize_yazi_command(&installer.platform),
+        InstallMethod::Asciiquarium => materialize_asciiquarium_command(&installer.platform),
+        InstallMethod::Spotatui => materialize_spotatui_command(),
         InstallMethod::Script => unreachable!("script installers return before package handling"),
         InstallMethod::Builtin => {
             unreachable!("builtin installers return before package handling")
@@ -273,6 +277,64 @@ fn materialize_command(installer: &Installer) -> Result<String> {
             bail!("system_packages are not supported by macOS installers")
         }
     }
+}
+
+fn materialize_glow_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Linux => concat!(
+            "package=\"$(mktemp --suffix=.deb)\" && trap 'rm -f \"$package\"' EXIT && ",
+            "curl -fL --retry 3 -o \"$package\" ",
+            "\"https://github.com/charmbracelet/glow/releases/download/v2.1.2/glow_2.1.2_i386.deb\" && ",
+            "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get ",
+            "-o DPkg::Lock::Timeout=300 install -y \"$package\""
+        )
+        .to_string(),
+        crate::catalog::models::Platform::Macos => "brew install glow".to_string(),
+        crate::catalog::models::Platform::Termux => "pkg install -y glow".to_string(),
+    }
+}
+
+fn materialize_yazi_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Linux => {
+            "cargo install --locked yazi-fm@26.5.6 yazi-cli@26.5.6".to_string()
+        }
+        crate::catalog::models::Platform::Macos => "brew install yazi".to_string(),
+        crate::catalog::models::Platform::Termux => "pkg install -y yazi".to_string(),
+    }
+}
+
+fn materialize_asciiquarium_command(platform: &crate::catalog::models::Platform) -> String {
+    match platform {
+        crate::catalog::models::Platform::Linux => concat!(
+            "data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/asciiquarium\" && ",
+            "mkdir -p \"$data_dir\" \"$HOME/.local/bin\" && ",
+            "cpanm --notest --local-lib-contained \"$data_dir/perl5\" Term::Animation && ",
+            "curl -fL --retry 3 -o \"$data_dir/asciiquarium\" ",
+            "\"https://raw.githubusercontent.com/cmatsuoka/asciiquarium/",
+            "8bdb7d441a36a5a9f64b853317a66f9d4a82f08f/asciiquarium\" && ",
+            "chmod +x \"$data_dir/asciiquarium\" && ",
+            "printf '%s\\n' '#!/bin/sh' ",
+            "'data_dir=\"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/asciiquarium\"' ",
+            "'exec env PERL5LIB=\"$data_dir/perl5/lib/perl5${PERL5LIB:+:$PERL5LIB}\" ",
+            "perl \"$data_dir/asciiquarium\" \"$@\"' > \"$HOME/.local/bin/asciiquarium\" && ",
+            "chmod +x \"$HOME/.local/bin/asciiquarium\""
+        )
+        .to_string(),
+        crate::catalog::models::Platform::Macos => "brew install asciiquarium".to_string(),
+        crate::catalog::models::Platform::Termux => "pkg install -y asciiquarium".to_string(),
+    }
+}
+
+fn materialize_spotatui_command() -> String {
+    concat!(
+        "CARGO_HTTP_TIMEOUT=600 CARGO_HTTP_LOW_SPEED_LIMIT=1 CARGO_NET_RETRY=10 ",
+        "CARGO_PROFILE_RELEASE_OPT_LEVEL=0 CARGO_PROFILE_RELEASE_LTO=false ",
+        "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 ",
+        "RUSTFLAGS='-C link-arg=-fuse-ld=lld' ",
+        "cargo install --locked spotatui --no-default-features --features telemetry"
+    )
+    .to_string()
 }
 
 fn materialize_fastfetch_command(platform: &crate::catalog::models::Platform) -> String {

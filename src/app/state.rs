@@ -3638,6 +3638,7 @@ fn uninstall_request_for_tool(
                     | InstallMethod::Pipx
                     | InstallMethod::Newsboat
                     | InstallMethod::Fastfetch
+                    | InstallMethod::Glow
             ),
         reinstall,
     })
@@ -3699,7 +3700,10 @@ fn uninstall_command(
             "if npm list --global --depth=0 {package} >/dev/null 2>&1; then npm uninstall --global {package}; fi"
         ),
         InstallMethod::NpmGlobal => format!("npm uninstall --global {package}"),
-        InstallMethod::Cargo | InstallMethod::Termleaf => format!(
+        InstallMethod::Cargo
+        | InstallMethod::Termleaf
+        | InstallMethod::Yazi
+        | InstallMethod::Spotatui => format!(
             "for package in {package}; do cargo uninstall \"$package\" || ! command -v \"$package\" >/dev/null 2>&1 || exit 1; done"
         ),
         InstallMethod::LazyVim => "rm -f \"$HOME/.local/bin/t4e-lazyvim\" && rm -rf \"${XDG_CONFIG_HOME:-$HOME/.config}/t4e-lazyvim\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e-lazyvim\" \"${XDG_STATE_HOME:-$HOME/.local/state}/t4e-lazyvim\" \"${XDG_CACHE_HOME:-$HOME/.cache}/t4e-lazyvim\"".to_string(),
@@ -3713,6 +3717,9 @@ fn uninstall_command(
         InstallMethod::Newsboat => "rm -f \"$HOME/.local/bin/t4e-newsboat\" && rm -rf \"$HOME/snap/newsboat/common/t4e\" \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/newsboat\" && if command -v snap >/dev/null 2>&1; then if snap list newsboat >/dev/null 2>&1; then sudo -n snap remove newsboat; fi; elif command -v brew >/dev/null 2>&1 && brew list --formula newsboat >/dev/null 2>&1; then brew uninstall newsboat; fi".to_string(),
         InstallMethod::Fastfetch if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' fastfetch 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch; fi".to_string(),
         InstallMethod::Fastfetch => "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y fastfetch".to_string(),
+        InstallMethod::Glow if tolerate_missing => "if dpkg-query -W -f='${db:Status-Abbrev}' glow 2>/dev/null | grep -q '^ii'; then sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y glow; fi".to_string(),
+        InstallMethod::Glow => "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=300 remove -y glow".to_string(),
+        InstallMethod::Asciiquarium => "rm -f \"$HOME/.local/bin/asciiquarium\" && rm -rf \"${XDG_DATA_HOME:-$HOME/.local/share}/t4e/asciiquarium\"".to_string(),
         InstallMethod::Builtin | InstallMethod::Go | InstallMethod::Script | InstallMethod::Other => {
             return None;
         }

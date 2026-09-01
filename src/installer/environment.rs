@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::env;
 use std::path::PathBuf;
 
-use crate::catalog::models::{InstallMethod, Installer, Platform, Tool};
+use crate::catalog::models::{Architecture, InstallMethod, Installer, Platform, Tool};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InstallEnvironment {
@@ -65,7 +65,9 @@ impl InstallEnvironment {
         if !self.is_runtime_compatible(tool) {
             return false;
         }
-        let Some(installer) = tool.installer_for(self.platform) else {
+        let Some(installer) =
+            tool.installer_for_target(self.platform, Architecture::from_name(&self.architecture))
+        else {
             return false;
         };
         if installer.method == InstallMethod::Builtin {
@@ -84,7 +86,9 @@ impl InstallEnvironment {
         if !self.is_runtime_compatible(tool) {
             return None;
         }
-        let installer = tool.installer_for(self.platform)?.clone();
+        let installer = tool
+            .installer_for_target(self.platform, Architecture::from_name(&self.architecture))?
+            .clone();
         if installer.method == InstallMethod::Builtin {
             return Some(installer);
         }
@@ -157,7 +161,10 @@ impl InstallEnvironment {
             InstallMethod::Pacman => self.has("pacman"),
             InstallMethod::Xbps => self.has("xbps-install"),
             InstallMethod::Snap | InstallMethod::SnapClassic => self.has("snap"),
-            InstallMethod::Cargo | InstallMethod::Termleaf => self.has("cargo"),
+            InstallMethod::Cargo
+            | InstallMethod::Termleaf
+            | InstallMethod::Yazi
+            | InstallMethod::Spotatui => self.has("cargo"),
             InstallMethod::NpmGlobal => !is_32_bit_x86(&self.architecture) && self.has("npm"),
             InstallMethod::Pipx => self.has("pipx") || self.has("apt-get"),
             InstallMethod::Pip => false,
@@ -174,6 +181,9 @@ impl InstallEnvironment {
                     && self.has("curl")
                     && matches!(self.architecture.as_str(), "x86_64" | "aarch64")
             }
+            InstallMethod::Glow | InstallMethod::Asciiquarium => {
+                self.has("apt-get") && self.has("curl")
+            }
             InstallMethod::Builtin => true,
             InstallMethod::Brew | InstallMethod::BrewCask | InstallMethod::Other => false,
         }
@@ -182,7 +192,10 @@ impl InstallEnvironment {
     fn supports_macos(&self, installer: &Installer) -> bool {
         match installer.method {
             InstallMethod::Brew | InstallMethod::BrewCask => self.has("brew"),
-            InstallMethod::Cargo | InstallMethod::Termleaf => self.has("cargo"),
+            InstallMethod::Cargo
+            | InstallMethod::Termleaf
+            | InstallMethod::Yazi
+            | InstallMethod::Spotatui => self.has("cargo"),
             InstallMethod::NpmGlobal => self.has("npm"),
             InstallMethod::Go => self.has("go"),
             InstallMethod::Script => self.has("curl"),

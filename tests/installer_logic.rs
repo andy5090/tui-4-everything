@@ -61,6 +61,7 @@ fn script_installers_always_require_confirmation() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Script,
+        architectures: vec![],
         package_hints: vec!["example".to_string()],
         system_packages: vec![],
         executable: None,
@@ -80,6 +81,7 @@ fn danger_tools_require_confirmation_even_for_pkg_manager() {
     let installer = Installer {
         platform: Platform::Macos,
         method: InstallMethod::Brew,
+        architectures: vec![],
         package_hints: vec!["codex".to_string()],
         system_packages: vec![],
         executable: None,
@@ -100,6 +102,7 @@ fn apt_command_uses_cached_sudo_noninteractively() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
+        architectures: vec![],
         package_hints: vec!["ripgrep".to_string()],
         system_packages: vec![],
         executable: None,
@@ -122,6 +125,7 @@ fn termux_pkg_install_never_requests_sudo() {
     let installer = Installer {
         platform: Platform::Termux,
         method: InstallMethod::Pkg,
+        architectures: vec![],
         package_hints: vec!["ripgrep".to_string()],
         system_packages: vec![],
         executable: None,
@@ -142,6 +146,7 @@ fn termux_pip_install_bootstraps_python_without_sudo() {
     let installer = Installer {
         platform: Platform::Termux,
         method: InstallMethod::Pip,
+        architectures: vec![],
         package_hints: vec!["yt-dlp".to_string()],
         system_packages: vec!["python".to_string()],
         executable: None,
@@ -170,6 +175,7 @@ fn verified_update_task_uses_pinned_command_and_records_expected_version() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
+        architectures: vec![],
         package_hints: vec!["ripgrep".to_string()],
         system_packages: vec![],
         executable: None,
@@ -213,6 +219,7 @@ fn pipx_install_bootstraps_the_package_manager() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Pipx,
+        architectures: vec![],
         package_hints: vec!["yewtube".to_string()],
         system_packages: vec![],
         executable: None,
@@ -252,6 +259,7 @@ fn yewtube_install_creates_managed_terminal_video_renderers() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Yewtube,
+        architectures: vec![],
         package_hints: vec!["yewtube".to_string()],
         system_packages: vec!["mpv".to_string(), "python3".to_string()],
         executable: Some("t4e-yewtube".to_string()),
@@ -298,6 +306,7 @@ fn ascii_camera_install_reuses_mpv_without_opencv() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::AsciiCamera,
+        architectures: vec![],
         package_hints: vec!["mpv".to_string()],
         system_packages: vec!["mpv".to_string()],
         executable: Some("t4e-ascii-camera".to_string()),
@@ -327,6 +336,7 @@ fn cargo_install_uses_the_published_lockfile() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Cargo,
+        architectures: vec![],
         package_hints: vec!["spotatui".to_string()],
         system_packages: vec![],
         executable: None,
@@ -338,6 +348,38 @@ fn cargo_install_uses_the_published_lockfile() {
     let task =
         build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
     assert_eq!(task.command, "cargo install --locked spotatui");
+}
+
+#[test]
+fn i686_spotatui_uses_the_lightweight_low_memory_build() {
+    let mut tool = fake_tool(vec![]);
+    tool.id = "spotatui".to_string();
+    tool.install_timeout_sec = Some(7_200);
+    let installer = Installer {
+        platform: Platform::Linux,
+        method: InstallMethod::Spotatui,
+        architectures: vec![],
+        package_hints: vec!["spotatui".to_string()],
+        system_packages: vec!["lld".to_string()],
+        executable: None,
+        install_cmd: None,
+        requires_confirm: false,
+        verified_update: None,
+    };
+
+    let task =
+        build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+
+    assert!(task.command.contains("CARGO_HTTP_TIMEOUT=600"));
+    assert!(task.command.contains("CARGO_HTTP_LOW_SPEED_LIMIT=1"));
+    assert!(task.command.contains("CARGO_PROFILE_RELEASE_OPT_LEVEL=0"));
+    assert!(task.command.contains("link-arg=-fuse-ld=lld"));
+    assert!(
+        task.command
+            .contains("--no-default-features --features telemetry")
+    );
+    assert_eq!(task.effective_timeout_sec(600), 7_200);
+    assert!(task.requires_privileges);
 }
 
 #[test]
@@ -359,6 +401,7 @@ fn termleaf_builds_the_verified_tag_from_source_on_termux() {
     let installer = Installer {
         platform: Platform::Termux,
         method: InstallMethod::Termleaf,
+        architectures: vec![],
         package_hints: vec!["termleaf".to_string()],
         system_packages: vec![],
         executable: None,
@@ -400,6 +443,7 @@ fn cargo_install_bootstraps_declared_system_dependencies_and_binaries() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Cargo,
+        architectures: vec![],
         package_hints: vec!["termusic".to_string(), "termusic-server".to_string()],
         system_packages: vec![
             "protobuf-compiler".to_string(),
@@ -431,6 +475,7 @@ fn tplay_install_uses_an_isolated_current_yt_dlp() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Tplay,
+        architectures: vec![],
         package_hints: vec!["tplay".to_string()],
         system_packages: vec!["python3-venv".to_string()],
         executable: Some("t4e-tplay".to_string()),
@@ -478,6 +523,7 @@ fn youtube_tui_install_puts_current_yt_dlp_first_for_mpv() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::YoutubeTui,
+        architectures: vec![],
         package_hints: vec!["youtube-tui".to_string()],
         system_packages: vec!["mpv".to_string(), "python3-venv".to_string()],
         executable: Some("t4e-youtube-tui-v2".to_string()),
@@ -524,6 +570,7 @@ fn newsboat_install_creates_a_first_feed_launcher() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Newsboat,
+        architectures: vec![],
         package_hints: vec!["newsboat".to_string()],
         system_packages: vec![],
         executable: Some("t4e-newsboat".to_string()),
@@ -549,6 +596,7 @@ fn snap_command_uses_cached_sudo_noninteractively() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Snap,
+        architectures: vec![],
         package_hints: vec!["asciiquarium".to_string()],
         system_packages: vec![],
         executable: None,
@@ -569,6 +617,7 @@ fn classic_snap_command_uses_cached_sudo_noninteractively() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::SnapClassic,
+        architectures: vec![],
         package_hints: vec!["yazi".to_string()],
         system_packages: vec![],
         executable: None,
@@ -589,6 +638,7 @@ fn lazyvim_uses_an_isolated_managed_configuration() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::LazyVim,
+        architectures: vec![],
         package_hints: vec!["lazyvim".to_string()],
         system_packages: vec![],
         executable: None,
@@ -653,6 +703,7 @@ fn unsafe_package_hint_is_rejected() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
+        architectures: vec![],
         package_hints: vec!["ripgrep; rm -rf /".to_string()],
         system_packages: vec![],
         executable: None,
@@ -670,6 +721,7 @@ fn non_script_installer_cannot_override_the_generated_command() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Apt,
+        architectures: vec![],
         package_hints: vec!["ripgrep".to_string()],
         system_packages: vec![],
         executable: None,
@@ -694,6 +746,7 @@ fn fastfetch_uses_the_official_architecture_specific_deb() {
     let installer = Installer {
         platform: Platform::Linux,
         method: InstallMethod::Fastfetch,
+        architectures: vec![],
         package_hints: vec!["fastfetch".to_string()],
         system_packages: vec!["curl".to_string()],
         executable: None,
@@ -715,4 +768,59 @@ fn fastfetch_uses_the_official_architecture_specific_deb() {
     assert_eq!(task.check_command.as_deref(), Some("fastfetch"));
     assert!(task.requires_privileges);
     assert!(!task.requires_confirmation);
+}
+
+#[test]
+fn i686_wrappers_use_official_pinned_assets_and_managed_paths() {
+    let cases = [
+        (
+            "glow",
+            InstallMethod::Glow,
+            vec!["curl"],
+            ["glow_2.1.2_i386.deb", "apt-get"],
+        ),
+        (
+            "yazi",
+            InstallMethod::Yazi,
+            vec![],
+            ["yazi-fm@26.5.6", "yazi-cli@26.5.6"],
+        ),
+        (
+            "asciiquarium",
+            InstallMethod::Asciiquarium,
+            vec!["curl", "perl", "cpanminus", "libcurses-perl"],
+            [
+                "8bdb7d441a36a5a9f64b853317a66f9d4a82f08f/asciiquarium",
+                "t4e/asciiquarium",
+            ],
+        ),
+    ];
+
+    for (tool_id, method, system_packages, expected_fragments) in cases {
+        let mut tool = fake_tool(vec![]);
+        tool.id = tool_id.to_string();
+        tool.run.cmd = tool_id.to_string();
+        let requires_privileges = !system_packages.is_empty();
+        let installer = Installer {
+            platform: Platform::Linux,
+            method,
+            architectures: vec![],
+            package_hints: vec![tool_id.to_string()],
+            system_packages: system_packages.into_iter().map(str::to_string).collect(),
+            executable: None,
+            install_cmd: None,
+            requires_confirm: false,
+            verified_update: None,
+        };
+
+        let task =
+            build_install_task(&tool, &installer, &InstallPolicy::default()).expect("task builds");
+        for fragment in expected_fragments {
+            assert!(
+                task.command.contains(fragment),
+                "{tool_id} command must contain {fragment}"
+            );
+        }
+        assert_eq!(task.requires_privileges, requires_privileges);
+    }
 }

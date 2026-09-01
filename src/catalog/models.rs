@@ -133,6 +133,8 @@ pub struct Installer {
     pub platform: Platform,
     pub method: InstallMethod,
     #[serde(default)]
+    pub architectures: Vec<Architecture>,
+    #[serde(default)]
     pub package_hints: Vec<String>,
     #[serde(default)]
     pub system_packages: Vec<String>,
@@ -183,18 +185,37 @@ impl Tool {
     /// Prefer a native Termux installer while retaining the legacy Linux plan
     /// until each catalog application has been migrated explicitly.
     pub fn installer_for(&self, platform: Platform) -> Option<&Installer> {
+        self.installer_for_target(platform, current_architecture())
+    }
+
+    pub fn installer_for_target(
+        &self,
+        platform: Platform,
+        architecture: Architecture,
+    ) -> Option<&Installer> {
         self.installers
             .iter()
-            .find(|installer| installer.platform == platform)
+            .find(|installer| {
+                installer.platform == platform && installer.supports_architecture(architecture)
+            })
             .or_else(|| {
                 if platform == Platform::Termux {
-                    self.installers
-                        .iter()
-                        .find(|installer| installer.platform == Platform::Linux)
+                    self.installers.iter().find(|installer| {
+                        installer.platform == Platform::Linux
+                            && installer.supports_architecture(architecture)
+                    })
                 } else {
                     None
                 }
             })
+    }
+
+    pub fn installer_for_current_target(&self) -> Option<&Installer> {
+        self.installer_for_target(Platform::current(), current_architecture())
+    }
+
+    pub fn supports_current_target(&self) -> bool {
+        self.installer_for_current_target().is_some()
     }
 
     pub fn is_launchable_app(&self) -> bool {
@@ -219,7 +240,7 @@ impl Tool {
 
     pub fn app_category(&self) -> AppCategory {
         match self.id.as_str() {
-            "ascii-camera" | "btop" | "fastfetch" => AppCategory::System,
+            "ascii-camera" | "btop" | "fastfetch" | "neofetch" => AppCategory::System,
             "shellcast" | "spotatui" | "spotify-player" | "ncspot" | "cava" | "termusic"
             | "yewtube" | "youtube-tui" | "tplay" => AppCategory::Media,
             "newsboat" | "lynx" => AppCategory::Internet,
@@ -433,6 +454,31 @@ impl Platform {
     }
 }
 
+pub fn current_architecture() -> Architecture {
+    Architecture::from_name(std::env::consts::ARCH)
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Architecture {
+    X86,
+    X86_64,
+    Aarch64,
+    #[serde(other)]
+    Other,
+}
+
+impl Architecture {
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "x86" | "i386" | "i486" | "i586" | "i686" => Self::X86,
+            "x86_64" => Self::X86_64,
+            "aarch64" => Self::Aarch64,
+            _ => Self::Other,
+        }
+    }
+}
+
 fn is_termux_runtime(target_os: &str, prefix: Option<&str>, has_termux_version: bool) -> bool {
     target_os == "android"
         || has_termux_version
@@ -507,6 +553,14 @@ pub enum InstallMethod {
     Newsboat,
     #[serde(rename = "fastfetch")]
     Fastfetch,
+    #[serde(rename = "glow")]
+    Glow,
+    #[serde(rename = "yazi")]
+    Yazi,
+    #[serde(rename = "asciiquarium")]
+    Asciiquarium,
+    #[serde(rename = "spotatui")]
+    Spotatui,
     #[serde(rename = "script")]
     Script,
     #[serde(other)]
@@ -539,8 +593,18 @@ impl InstallMethod {
             Self::AsciiCamera => "ascii_camera",
             Self::Newsboat => "newsboat",
             Self::Fastfetch => "fastfetch",
+            Self::Glow => "glow",
+            Self::Yazi => "yazi",
+            Self::Asciiquarium => "asciiquarium",
+            Self::Spotatui => "spotatui",
             Self::Script => "script",
             Self::Other => "other",
         }
+    }
+}
+
+impl Installer {
+    pub fn supports_architecture(&self, architecture: Architecture) -> bool {
+        self.architectures.is_empty() || self.architectures.contains(&architecture)
     }
 }

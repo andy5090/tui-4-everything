@@ -239,9 +239,10 @@ fn main() -> Result<()> {
                 .with_context(|| format!("tool not found: {}", tool_id))?;
 
             let installer = tool
-                .installers
-                .iter()
-                .find(|installer| installer.platform == target_platform)
+                .installer_for_target(
+                    target_platform,
+                    t4e::catalog::models::current_architecture(),
+                )
                 .with_context(|| format!("installer not found for platform {}", platform))?;
 
             let task = build_install_task(tool, installer, &InstallPolicy::default())?;
@@ -265,11 +266,10 @@ fn main() -> Result<()> {
                 if exposure != "all" && exposure != exposure_name {
                     continue;
                 }
-                let Some(installer) = tool
-                    .installers
-                    .iter()
-                    .find(|installer| installer.platform == target_platform)
-                else {
+                let Some(installer) = tool.installer_for_target(
+                    target_platform,
+                    t4e::catalog::models::current_architecture(),
+                ) else {
                     plans.push(serde_json::json!({
                         "tool_id": tool.id,
                         "name": tool.name,
@@ -324,9 +324,10 @@ fn main() -> Result<()> {
                 .find(|tool| tool.id == tool_id)
                 .with_context(|| format!("tool not found: {}", tool_id))?;
             let installer = tool
-                .installers
-                .iter()
-                .find(|installer| installer.platform == target_platform)
+                .installer_for_target(
+                    target_platform,
+                    t4e::catalog::models::current_architecture(),
+                )
                 .with_context(|| format!("installer not found for platform {}", platform_name))?;
             let task = build_install_task(tool, installer, &InstallPolicy::default())?;
             if !yes {
