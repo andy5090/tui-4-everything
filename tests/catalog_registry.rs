@@ -592,7 +592,12 @@ fn i686_catalog_uses_supported_installers_and_lightweight_spotatui() {
 
     let spotatui = installer("spotatui", Architecture::X86);
     assert_eq!(spotatui.method, InstallMethod::Spotatui);
-    assert!(spotatui.system_packages.contains(&"lld".to_string()));
+    assert!(
+        spotatui
+            .system_packages
+            .contains(&"libasound2-plugins".to_string())
+    );
+    assert_eq!(spotatui.executable.as_deref(), Some("t4e-spotatui"));
 
     let codex = installer("codex-cli", Architecture::X86);
     assert_eq!(codex.method, InstallMethod::Script);

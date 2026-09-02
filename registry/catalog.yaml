@@ -129,7 +129,8 @@ tools:
         method: spotatui
         architectures: [x86]
         package_hints: ["spotatui"]
-        system_packages: ["pkg-config", "libssl-dev", "xorg-dev", "lld"]
+        system_packages: ["pkg-config", "libssl-dev", "libasound2-dev", "libasound2-plugins", "xorg-dev"]
+        executable: "t4e-spotatui"
   - id: spotify-player
     name: "Spotify Player"
     description: "A full-featured Spotify client with library, playlist, search, and playback views."

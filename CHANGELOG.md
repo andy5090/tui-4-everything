@@ -6,6 +6,13 @@ and date are assigned.
 
 ## [Unreleased]
 
+### Fixed
+
+- Keep Spotatui's built-in Spotify Connect playback device enabled in the
+  low-memory i686 build.
+- Apply a one-time low-resource Spotatui profile on Pentium M-class i686
+  systems: Pulse output, a 100 ms animation tick, and 160 kbps streaming.
+
 ## [0.8.1] - 2026-09-01
 
 ### Added

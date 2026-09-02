@@ -1,3 +1,8 @@
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::process::Command;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use t4e::catalog::models::{
     Audience, Capability, Check, Exposure, InstallMethod, Installer, Platform, RunSpec, Tool,
     ToolCategory, VerifiedUpdate, VersionProbe,
@@ -372,12 +377,153 @@ fn i686_spotatui_uses_the_lightweight_low_memory_build() {
 
     assert!(task.command.contains("CARGO_HTTP_TIMEOUT=600"));
     assert!(task.command.contains("CARGO_HTTP_LOW_SPEED_LIMIT=1"));
+    assert!(task.command.contains("CARGO_BUILD_JOBS=1"));
     assert!(task.command.contains("CARGO_PROFILE_RELEASE_OPT_LEVEL=0"));
+    assert!(task.command.contains("rustc --print target-libdir"));
+    assert!(task.command.contains("link-arg=-B$rust_lld_dir"));
     assert!(task.command.contains("link-arg=-fuse-ld=lld"));
     assert!(
         task.command
-            .contains("--no-default-features --features telemetry")
+            .contains("--no-default-features --features telemetry,streaming")
     );
+    assert!(task.command.contains("t4e-spotatui"));
+    assert!(task.command.contains("SPOTATUI_STREAMING_AUDIO_DEVICE"));
+    assert!(
+        task.command
+            .contains("animation_tick_rate_milliseconds: 100")
+    );
+    assert!(task.command.contains("streaming_bitrate: 160"));
+    assert!(task.command.contains("*Pentium*M*"));
+    assert!(task.command.contains("_NPROCESSORS_ONLN"));
+    assert!(task.command.contains("MemTotal:"));
+    assert!(task.command.contains(".t4e-low-resource-pending"));
+    let syntax = Command::new("sh")
+        .args(["-n", "-c", &task.command])
+        .status()
+        .expect("shell is available");
+    assert!(
+        syntax.success(),
+        "generated installer must be valid POSIX shell"
+    );
+
+    let setup = task
+        .command
+        .split_once("--features telemetry,streaming && ")
+        .expect("post-install setup exists")
+        .1;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock is after epoch")
+        .as_nanos();
+    let root = std::env::temp_dir().join(format!(
+        "t4e-spotatui-profile-{}-{nonce}",
+        std::process::id()
+    ));
+    let home = root.join("home");
+    let config_dir = root.join("config").join("spotatui");
+    let fake_bin = root.join("bin");
+    fs::create_dir_all(&fake_bin).expect("temporary bin exists");
+    let fake_spotatui = fake_bin.join("spotatui");
+    fs::write(
+        &fake_spotatui,
+        "#!/bin/sh\nprintf '%s\\n' \"${SPOTATUI_STREAMING_AUDIO_DEVICE:-}\" > \"$HOME/audio-device\"\n",
+    )
+    .expect("fake spotatui is written");
+    fs::set_permissions(&fake_spotatui, fs::Permissions::from_mode(0o755))
+        .expect("fake spotatui is executable");
+    let path = format!(
+        "{}:{}",
+        fake_bin.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    let installed = Command::new("sh")
+        .args(["-c", setup])
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("PATH", &path)
+        .env("T4E_SPOTATUI_LOW_RESOURCE", "1")
+        .status()
+        .expect("low-resource setup runs");
+    assert!(installed.success());
+    assert!(config_dir.join(".t4e-low-resource").is_file());
+    assert!(config_dir.join(".t4e-low-resource-pending").is_file());
+    assert!(
+        fs::read_to_string(config_dir.join("config.yml"))
+            .expect("user config exists")
+            .contains("animation_tick_rate_milliseconds: 100")
+    );
+
+    fs::write(
+        config_dir.join("client.yml"),
+        "client_id: test\nstreaming_bitrate: 320\n",
+    )
+    .expect("client config exists");
+    let wrapper = home.join(".local/bin/t4e-spotatui");
+    let configured = Command::new(&wrapper)
+        .arg("--t4e-configure-only")
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("PATH", &path)
+        .status()
+        .expect("pending profile is applied");
+    assert!(configured.success());
+    assert!(
+        fs::read_to_string(config_dir.join("client.yml"))
+            .expect("client config remains readable")
+            .contains("streaming_bitrate: 160")
+    );
+    assert!(!config_dir.join(".t4e-low-resource-pending").exists());
+
+    let launched = Command::new(&wrapper)
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("PATH", &path)
+        .status()
+        .expect("managed launcher runs");
+    assert!(launched.success());
+    assert_eq!(
+        fs::read_to_string(home.join("audio-device")).expect("audio device was captured"),
+        "pulse\n"
+    );
+
+    fs::write(
+        config_dir.join("client.yml"),
+        "client_id: test\nstreaming_bitrate: 320\n",
+    )
+    .expect("user changes bitrate");
+    let configured_again = Command::new(&wrapper)
+        .arg("--t4e-configure-only")
+        .env("HOME", &home)
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("PATH", &path)
+        .status()
+        .expect("launcher accepts a configuration check");
+    assert!(configured_again.success());
+    assert!(
+        fs::read_to_string(config_dir.join("client.yml"))
+            .expect("client config remains readable")
+            .contains("streaming_bitrate: 320"),
+        "the one-time profile must not overwrite later user changes"
+    );
+
+    let normal_home = root.join("normal-home");
+    let normal_config_root = root.join("normal-config");
+    let normal_installed = Command::new("sh")
+        .args(["-c", setup])
+        .env("HOME", &normal_home)
+        .env("XDG_CONFIG_HOME", &normal_config_root)
+        .env("PATH", &path)
+        .env("T4E_SPOTATUI_LOW_RESOURCE", "0")
+        .status()
+        .expect("normal-resource setup runs");
+    assert!(normal_installed.success());
+    let normal_config = normal_config_root.join("spotatui");
+    assert!(!normal_config.join(".t4e-low-resource").exists());
+    assert!(!normal_config.join("config.yml").exists());
+
+    fs::remove_dir_all(&root).expect("temporary profile tree is removed");
+
     assert_eq!(task.effective_timeout_sec(600), 7_200);
     assert!(task.requires_privileges);
 }
