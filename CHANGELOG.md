@@ -6,6 +6,8 @@ and date are assigned.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-09-03
+
 ### Fixed
 
 - Keep Spotatui's built-in Spotify Connect playback device enabled in the
